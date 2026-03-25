@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -15,17 +16,19 @@ const (
 	SubjectSessionIngest = "trace.ingest.session"
 	SubjectSpanIngest    = "trace.ingest.span"
 	SubjectEventIngest   = "trace.ingest.event"
+	SubjectCounterIngest = "trace.ingest.counter"
 )
 
 // IngestService publishes trace data to NATS for async ClickHouse writing.
 type IngestService struct {
-	nc     *nats.Conn
-	logger *slog.Logger
+	nc       *nats.Conn
+	logger   *slog.Logger
+	sampling *SamplingService // can be nil if sampling not configured
 }
 
 // NewIngestService creates a new ingestion service.
-func NewIngestService(nc *nats.Conn, logger *slog.Logger) *IngestService {
-	return &IngestService{nc: nc, logger: logger}
+func NewIngestService(nc *nats.Conn, logger *slog.Logger, sampling *SamplingService) *IngestService {
+	return &IngestService{nc: nc, logger: logger, sampling: sampling}
 }
 
 // --- Ingestion Request Types ---
@@ -159,28 +162,80 @@ func (s *IngestService) IngestEvents(orgID string, events []EventIngestRequest) 
 }
 
 // IngestBatch publishes a batch of sessions, spans, and events to NATS.
-func (s *IngestService) IngestBatch(orgID string, req *BatchIngestRequest) (*BatchIngestResult, error) {
+// Sessions may be sampled out based on the org's sampling config; sampled-out
+// sessions emit a lightweight counter event instead of the full session+spans.
+func (s *IngestService) IngestBatch(ctx context.Context, orgID string, req *BatchIngestRequest) (*BatchIngestResult, error) {
 	result := &BatchIngestResult{}
 
+	// Build a set of session IDs that were sampled out so we can skip their spans/events.
+	sampledOut := make(map[string]struct{})
+
 	for i := range req.Sessions {
-		if err := s.IngestSession(orgID, &req.Sessions[i]); err != nil {
+		session := &req.Sessions[i]
+		s.fillSessionDefaults(orgID, session)
+
+		// Check sampling before publishing the full session.
+		if s.sampling != nil {
+			config, _ := s.sampling.GetEffectiveConfig(ctx, orgID, session.AgentName)
+			if config != nil && !s.sampling.ShouldSample(config, session.Status, int64(session.DurationMs)) {
+				// Publish counter event instead of full session+spans.
+				counter := map[string]interface{}{
+					"org_id":          orgID,
+					"agent_name":      session.AgentName,
+					"status":          session.Status,
+					"total_tokens":    session.TotalTokens,
+					"total_cost_cents": session.TotalCostCents,
+					"duration_ms":     session.DurationMs,
+					"span_count":      session.TotalSpans,
+					"created_at":      session.StartedAt,
+				}
+				data, _ := json.Marshal(counter)
+				s.nc.Publish(SubjectCounterIngest, data)
+
+				sampledOut[session.ID] = struct{}{}
+				s.logger.Debug("session sampled out", "id", session.ID, "org_id", orgID, "agent", session.AgentName)
+				continue
+			}
+		}
+
+		if err := s.IngestSession(orgID, session); err != nil {
 			return nil, fmt.Errorf("batch session %d: %w", i, err)
 		}
 		result.Sessions++
 	}
 
+	// Filter spans: skip spans belonging to sampled-out sessions.
 	if len(req.Spans) > 0 {
-		if err := s.IngestSpans(orgID, req.Spans); err != nil {
-			return nil, fmt.Errorf("batch spans: %w", err)
+		var kept []SpanIngestRequest
+		for _, sp := range req.Spans {
+			if _, out := sampledOut[sp.SessionID]; out {
+				continue
+			}
+			kept = append(kept, sp)
 		}
-		result.Spans = len(req.Spans)
+		if len(kept) > 0 {
+			if err := s.IngestSpans(orgID, kept); err != nil {
+				return nil, fmt.Errorf("batch spans: %w", err)
+			}
+			result.Spans = len(kept)
+		}
 	}
 
+	// Filter events: skip events belonging to sampled-out sessions.
 	if len(req.Events) > 0 {
-		if err := s.IngestEvents(orgID, req.Events); err != nil {
-			return nil, fmt.Errorf("batch events: %w", err)
+		var kept []EventIngestRequest
+		for _, ev := range req.Events {
+			if _, out := sampledOut[ev.SessionID]; out {
+				continue
+			}
+			kept = append(kept, ev)
 		}
-		result.Events = len(req.Events)
+		if len(kept) > 0 {
+			if err := s.IngestEvents(orgID, kept); err != nil {
+				return nil, fmt.Errorf("batch events: %w", err)
+			}
+			result.Events = len(kept)
+		}
 	}
 
 	return result, nil

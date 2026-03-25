@@ -25,6 +25,7 @@ import (
 	routeservice "github.com/agentstack/agentstack/internal/route/service"
 	routestore "github.com/agentstack/agentstack/internal/route/store"
 	"github.com/agentstack/agentstack/internal/server/middleware"
+	"github.com/agentstack/agentstack/internal/storage"
 	shieldhandler "github.com/agentstack/agentstack/internal/shield/handler"
 	shieldservice "github.com/agentstack/agentstack/internal/shield/service"
 	shieldstore "github.com/agentstack/agentstack/internal/shield/store"
@@ -58,7 +59,11 @@ func (s *Server) setupRoutes() {
 		chStore = store.NewClickHouseStore(s.clickhouseDB)
 	}
 
-	ingestSvc := service.NewIngestService(s.nats, s.logger)
+	// Sampling config
+	samplingStore := store.NewSamplingPGStore(s.db)
+	samplingSvc := service.NewSamplingService(samplingStore, s.logger)
+
+	ingestSvc := service.NewIngestService(s.nats, s.logger, samplingSvc)
 
 	var sessionSvc *service.SessionService
 	var analyticsSvc *service.AnalyticsService
@@ -70,12 +75,9 @@ func (s *Server) setupRoutes() {
 	patternSvc := service.NewPatternService(pgStore, s.logger)
 	alertSvc := service.NewAlertService(pgStore, s.logger)
 
-	// Sampling config
-	samplingStore := store.NewSamplingPGStore(s.db)
-	samplingSvc := service.NewSamplingService(samplingStore, s.logger)
 	samplingHandler := tracehandler.NewSamplingHandler(samplingSvc, s.logger)
 
-	ingestHandler := tracehandler.NewIngestHandler(ingestSvc, s.logger)
+	ingestHandler := tracehandler.NewIngestHandler(ingestSvc, samplingSvc, s.logger)
 	agentHandler := tracehandler.NewAgentHandler(pgStore, s.logger)
 	patternHandler := tracehandler.NewPatternHandler(patternSvc, s.logger)
 	alertHandler := tracehandler.NewAlertHandler(alertSvc, s.logger)

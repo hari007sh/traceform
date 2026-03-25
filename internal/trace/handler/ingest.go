@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -11,13 +12,14 @@ import (
 
 // IngestHandler handles trace data ingestion endpoints.
 type IngestHandler struct {
-	svc    *service.IngestService
-	logger *slog.Logger
+	svc      *service.IngestService
+	sampling *service.SamplingService
+	logger   *slog.Logger
 }
 
 // NewIngestHandler creates a new ingest handler.
-func NewIngestHandler(svc *service.IngestService, logger *slog.Logger) *IngestHandler {
-	return &IngestHandler{svc: svc, logger: logger}
+func NewIngestHandler(svc *service.IngestService, sampling *service.SamplingService, logger *slog.Logger) *IngestHandler {
+	return &IngestHandler{svc: svc, sampling: sampling, logger: logger}
 }
 
 // IngestSession handles POST /v1/ingest/sessions.
@@ -187,11 +189,19 @@ func (h *IngestHandler) IngestBatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	result, err := h.svc.IngestBatch(orgID, &req)
+	result, err := h.svc.IngestBatch(r.Context(), orgID, &req)
 	if err != nil {
 		h.logger.Error("failed to ingest batch", "org_id", orgID, "error", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "INGEST_ERROR", "failed to queue batch for ingestion")
 		return
+	}
+
+	// Set the adaptive sample-rate header so SDKs can adjust client-side sampling.
+	if h.sampling != nil {
+		config, _ := h.sampling.GetEffectiveConfig(r.Context(), orgID, "")
+		if config != nil {
+			w.Header().Set("X-AgentStack-Sample-Rate", fmt.Sprintf("%.4f", config.SampleRate))
+		}
 	}
 
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]interface{}{
