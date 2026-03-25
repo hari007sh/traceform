@@ -14,10 +14,13 @@ import {
   Monitor,
   Clock,
   Database,
+  HardDrive,
+  Flame,
   Zap,
   Activity,
   Check,
   Loader2,
+  Archive,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { fadeIn, staggerContainer, staggerItem } from "@/lib/animations";
@@ -101,7 +104,9 @@ export default function SettingsPage() {
   const [orgUsage, setOrgUsage] = useState<OrgUsage | null>(null);
   const [loading, setLoading] = useState(true);
   const [timezone, setTimezone] = useState("America/New_York");
-  const [retention, setRetention] = useState("90");
+  const [hotRetention, setHotRetention] = useState("14");
+  const [warmRetention, setWarmRetention] = useState("90");
+  const [blobRetention, setBlobRetention] = useState("30");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showDeleteOrg, setShowDeleteOrg] = useState(false);
@@ -153,9 +158,17 @@ export default function SettingsPage() {
 
     try {
       initToken();
+      // NOTE: hot_retention_days, warm_retention_days, and blob_retention_days
+      // require backend API support on PATCH /api/org. If the API does not yet
+      // accept these fields it will silently ignore them; add corresponding
+      // columns to the organizations table and update the org handler to persist
+      // them when ready.
       const updated = await api.patch<OrgData>("/api/org", {
         name: orgName.trim(),
         slug: orgSlug.trim(),
+        hot_retention_days: parseInt(hotRetention, 10),
+        warm_retention_days: parseInt(warmRetention, 10),
+        blob_retention_days: parseInt(blobRetention, 10),
       });
       setOrgData(updated);
       setOrgName(updated.name);
@@ -484,28 +497,85 @@ export default function SettingsPage() {
                 All dates and times will be displayed in this timezone
               </p>
             </div>
-            <div className="space-y-2">
-              <label className="text-xs uppercase tracking-wider text-[var(--text-tertiary)] font-medium flex items-center gap-1.5">
-                <Database className="w-3 h-3" />
-                Default Retention Period
-              </label>
-              <Select value={retention} onValueChange={setRetention}>
-                <SelectTrigger className="bg-[var(--bg-primary)] border-[var(--border-default)]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="7">7 days</SelectItem>
-                  <SelectItem value="14">14 days</SelectItem>
-                  <SelectItem value="30">30 days</SelectItem>
-                  <SelectItem value="60">60 days</SelectItem>
-                  <SelectItem value="90">90 days</SelectItem>
-                  <SelectItem value="180">180 days</SelectItem>
-                  <SelectItem value="365">365 days</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-[var(--text-tertiary)]">
-                How long trace data is kept before automatic deletion
-              </p>
+            {/* Spacer for grid alignment */}
+            <div className="hidden md:block" />
+          </div>
+
+          {/* Retention Tiers */}
+          <div className="mt-6 pt-6 border-t border-[var(--border-subtle)]">
+            <div className="flex items-center gap-2 mb-1">
+              <Database className="w-4 h-4 text-[var(--text-tertiary)]" />
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">Data Retention</h3>
+            </div>
+            <p className="text-xs text-[var(--text-tertiary)] mb-5">
+              Configure how long each data tier is retained before automatic deletion or downsampling.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {/* Hot Retention */}
+              <div className="space-y-2 p-4 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-subtle)]">
+                <label className="text-xs uppercase tracking-wider text-[var(--text-tertiary)] font-medium flex items-center gap-1.5">
+                  <Flame className="w-3 h-3 text-[var(--accent-red)]" />
+                  Hot Retention
+                </label>
+                <Select value={hotRetention} onValueChange={setHotRetention}>
+                  <SelectTrigger className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="7">7 days</SelectItem>
+                    <SelectItem value="14">14 days</SelectItem>
+                    <SelectItem value="30">30 days</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-[var(--text-tertiary)] leading-relaxed">
+                  Full-resolution data retention. All spans, events, and metrics are stored at full granularity for fast querying.
+                </p>
+              </div>
+
+              {/* Warm Retention */}
+              <div className="space-y-2 p-4 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-subtle)]">
+                <label className="text-xs uppercase tracking-wider text-[var(--text-tertiary)] font-medium flex items-center gap-1.5">
+                  <Archive className="w-3 h-3 text-[var(--accent-amber)]" />
+                  Warm Retention
+                </label>
+                <Select value={warmRetention} onValueChange={setWarmRetention}>
+                  <SelectTrigger className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="30">30 days</SelectItem>
+                    <SelectItem value="60">60 days</SelectItem>
+                    <SelectItem value="90">90 days</SelectItem>
+                    <SelectItem value="180">180 days</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-[var(--text-tertiary)] leading-relaxed">
+                  Downsampled data retention. Aggregated metrics and sampled spans are kept for trend analysis and historical queries.
+                </p>
+              </div>
+
+              {/* Blob Retention */}
+              <div className="space-y-2 p-4 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-subtle)]">
+                <label className="text-xs uppercase tracking-wider text-[var(--text-tertiary)] font-medium flex items-center gap-1.5">
+                  <HardDrive className="w-3 h-3 text-[var(--accent-blue)]" />
+                  Blob Retention
+                </label>
+                <Select value={blobRetention} onValueChange={setBlobRetention}>
+                  <SelectTrigger className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="7">7 days</SelectItem>
+                    <SelectItem value="14">14 days</SelectItem>
+                    <SelectItem value="30">30 days</SelectItem>
+                    <SelectItem value="60">60 days</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-[var(--text-tertiary)] leading-relaxed">
+                  Full payload retention. Raw request/response bodies and large payloads stored in blob storage before expiry.
+                </p>
+              </div>
             </div>
           </div>
         </motion.div>
