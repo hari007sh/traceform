@@ -12,6 +12,7 @@ import (
 
 	_ "github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/agentstack/agentstack/internal/config"
+	"github.com/agentstack/agentstack/internal/storage"
 	teststore "github.com/agentstack/agentstack/internal/test/store"
 	"github.com/agentstack/agentstack/internal/worker"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -93,8 +94,11 @@ func main() {
 	defer natsConn.Close()
 	logger.Info("connected to NATS")
 
+	// Create blob store for payload offloading
+	blobStore := storage.NewFileSystemBlobStore(cfg.BlobStorePath)
+
 	// Start ingest writer
-	ingestWriter := worker.NewIngestWriter(natsConn, chDB, logger.With("worker", "ingest_writer"))
+	ingestWriter := worker.NewIngestWriter(natsConn, chDB, blobStore, logger.With("worker", "ingest_writer"))
 	if err := ingestWriter.Start(); err != nil {
 		log.Fatalf("failed to start ingest writer: %v", err)
 	}
