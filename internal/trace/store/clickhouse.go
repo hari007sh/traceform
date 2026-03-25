@@ -410,3 +410,176 @@ func (s *ClickHouseStore) GetFailureRateOverTime(ctx context.Context, orgID stri
 	}
 	return points, nil
 }
+
+// --- Materialized View Query Methods ---
+
+// GetOverviewFromMV computes aggregate stats from the mv_sessions_hourly_data materialized view.
+func (s *ClickHouseStore) GetOverviewFromMV(ctx context.Context, orgID string, start, end time.Time) (*OverviewStats, error) {
+	query := `SELECT
+	            countMerge(session_count) AS total_sessions,
+	            countMerge(failed_count) AS total_failed,
+	            countMerge(healed_count) AS total_healed,
+	            sumMerge(total_tokens) AS total_tokens,
+	            sumMerge(total_cost_cents) AS total_cost_cents,
+	            sumMerge(sum_duration_ms) / GREATEST(countMerge(session_count), 1) AS avg_duration_ms,
+	            maxMerge(max_duration_ms) AS max_duration_ms
+	          FROM agentstack.mv_sessions_hourly_data
+	          WHERE org_id = ? AND hour >= ? AND hour <= ?`
+
+	var totalSessions, totalFailed, totalHealed int
+	var totalTokens, totalCostCents uint64
+	var avgDurationMs float64
+	var maxDurationMs uint64
+
+	err := s.db.QueryRowContext(ctx, query, orgID, start, end).Scan(
+		&totalSessions, &totalFailed, &totalHealed,
+		&totalTokens, &totalCostCents,
+		&avgDurationMs, &maxDurationMs,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get overview from MV: %w", err)
+	}
+
+	var failureRate float64
+	if totalSessions > 0 {
+		failureRate = float64(totalFailed) / float64(totalSessions)
+	}
+
+	var avgCost float64
+	if totalSessions > 0 {
+		avgCost = float64(totalCostCents) / float64(totalSessions)
+	}
+
+	return &OverviewStats{
+		TotalSessions:  totalSessions,
+		FailedSessions: totalFailed,
+		FailureRate:    failureRate,
+		AvgCostCents:   avgCost,
+		AvgDurationMs:  avgDurationMs,
+		TotalTokens:    totalTokens,
+		TotalCostCents: totalCostCents,
+		HealedSessions: totalHealed,
+	}, nil
+}
+
+// GetSessionsOverTimeFromMV returns session counts bucketed by hour from the materialized view.
+func (s *ClickHouseStore) GetSessionsOverTimeFromMV(ctx context.Context, orgID string, start, end time.Time) ([]TimeSeriesPoint, error) {
+	query := `SELECT
+	            hour AS bucket,
+	            countMerge(session_count) AS cnt
+	          FROM agentstack.mv_sessions_hourly_data
+	          WHERE org_id = ? AND hour >= ? AND hour <= ?
+	          GROUP BY hour
+	          ORDER BY hour ASC`
+
+	rows, err := s.db.QueryContext(ctx, query, orgID, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("sessions over time from MV: %w", err)
+	}
+	defer rows.Close()
+
+	var points []TimeSeriesPoint
+	for rows.Next() {
+		var p TimeSeriesPoint
+		if err := rows.Scan(&p.Timestamp, &p.Count); err != nil {
+			return nil, fmt.Errorf("scan MV time series point: %w", err)
+		}
+		points = append(points, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate MV time series: %w", err)
+	}
+
+	if points == nil {
+		points = []TimeSeriesPoint{}
+	}
+	return points, nil
+}
+
+// GetFailureRateFromMV returns failure rate bucketed by hour from the materialized view.
+func (s *ClickHouseStore) GetFailureRateFromMV(ctx context.Context, orgID string, start, end time.Time) ([]FailureRatePoint, error) {
+	query := `SELECT
+	            hour AS bucket,
+	            countMerge(session_count) AS total,
+	            countMerge(failed_count) AS failed,
+	            IF(countMerge(session_count) > 0,
+	               countMerge(failed_count) / countMerge(session_count), 0) AS rate
+	          FROM agentstack.mv_sessions_hourly_data
+	          WHERE org_id = ? AND hour >= ? AND hour <= ?
+	          GROUP BY hour
+	          ORDER BY hour ASC`
+
+	rows, err := s.db.QueryContext(ctx, query, orgID, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("failure rate from MV: %w", err)
+	}
+	defer rows.Close()
+
+	var points []FailureRatePoint
+	for rows.Next() {
+		var p FailureRatePoint
+		if err := rows.Scan(&p.Timestamp, &p.Total, &p.Failed, &p.FailureRate); err != nil {
+			return nil, fmt.Errorf("scan MV failure rate point: %w", err)
+		}
+		points = append(points, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate MV failure rate: %w", err)
+	}
+
+	if points == nil {
+		points = []FailureRatePoint{}
+	}
+	return points, nil
+}
+
+// GetOverviewWithCounters computes aggregate stats by joining the MV with session_counters.
+func (s *ClickHouseStore) GetOverviewWithCounters(ctx context.Context, orgID string, start, end time.Time) (*OverviewStats, error) {
+	query := `SELECT
+	            COALESCE(countMerge(mv.session_count), 0) + COALESCE(countMerge(c.session_count), 0) AS total_sessions,
+	            COALESCE(countMerge(mv.failed_count), 0) AS total_failed,
+	            COALESCE(countMerge(mv.healed_count), 0) AS total_healed,
+	            COALESCE(sumMerge(mv.total_tokens), 0) + COALESCE(sumMerge(c.sum_tokens), 0) AS total_tokens,
+	            COALESCE(sumMerge(mv.total_cost_cents), 0) + COALESCE(sumMerge(c.sum_cost_cents), 0) AS total_cost_cents,
+	            (COALESCE(sumMerge(mv.sum_duration_ms), 0) + COALESCE(sumMerge(c.sum_duration_ms), 0)) /
+	                GREATEST(COALESCE(countMerge(mv.session_count), 0) + COALESCE(countMerge(c.session_count), 0), 1) AS avg_duration_ms
+	          FROM agentstack.mv_sessions_hourly_data mv
+	          FULL OUTER JOIN agentstack.session_counters c
+	              ON mv.org_id = c.org_id AND mv.agent_name = c.agent_name AND mv.hour = c.hour
+	          WHERE (mv.org_id = ? AND mv.hour >= ? AND mv.hour <= ?)
+	             OR (c.org_id = ? AND c.hour >= ? AND c.hour <= ?)`
+
+	var totalSessions, totalFailed, totalHealed int
+	var totalTokens, totalCostCents uint64
+	var avgDurationMs float64
+
+	err := s.db.QueryRowContext(ctx, query, orgID, start, end, orgID, start, end).Scan(
+		&totalSessions, &totalFailed, &totalHealed,
+		&totalTokens, &totalCostCents,
+		&avgDurationMs,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get overview with counters: %w", err)
+	}
+
+	var failureRate float64
+	if totalSessions > 0 {
+		failureRate = float64(totalFailed) / float64(totalSessions)
+	}
+
+	var avgCost float64
+	if totalSessions > 0 {
+		avgCost = float64(totalCostCents) / float64(totalSessions)
+	}
+
+	return &OverviewStats{
+		TotalSessions:  totalSessions,
+		FailedSessions: totalFailed,
+		FailureRate:    failureRate,
+		AvgCostCents:   avgCost,
+		AvgDurationMs:  avgDurationMs,
+		TotalTokens:    totalTokens,
+		TotalCostCents: totalCostCents,
+		HealedSessions: totalHealed,
+	}, nil
+}

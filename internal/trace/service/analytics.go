@@ -33,11 +33,17 @@ type OverviewResponse struct {
 }
 
 // GetOverview returns overview statistics for the given time range.
+// It tries materialized view queries first, falling back to raw table queries if MVs are unavailable.
 func (s *AnalyticsService) GetOverview(ctx context.Context, orgID string, start, end time.Time) (*OverviewResponse, error) {
-	stats, err := s.ch.GetOverviewStats(ctx, orgID, start, end)
+	stats, err := s.ch.GetOverviewWithCounters(ctx, orgID, start, end)
 	if err != nil {
-		s.logger.Error("failed to get overview stats", "org_id", orgID, "error", err)
-		return nil, err
+		// Fallback to raw queries if MVs not available
+		s.logger.Warn("MV query failed, falling back to raw", "error", err)
+		stats, err = s.ch.GetOverviewStats(ctx, orgID, start, end)
+		if err != nil {
+			s.logger.Error("failed to get overview stats", "org_id", orgID, "error", err)
+			return nil, err
+		}
 	}
 
 	// Reliability score: 1.0 - failure_rate, clamped to [0, 1].
@@ -63,29 +69,41 @@ func (s *AnalyticsService) GetOverview(ctx context.Context, orgID string, start,
 }
 
 // GetSessionsOverTime returns a time series of session counts.
+// It tries the materialized view first, falling back to raw table queries if MVs are unavailable.
 func (s *AnalyticsService) GetSessionsOverTime(ctx context.Context, orgID string, start, end time.Time, intervalSec int) ([]store.TimeSeriesPoint, error) {
 	if intervalSec <= 0 {
 		intervalSec = 3600 // default 1 hour
 	}
 
-	points, err := s.ch.GetSessionsOverTime(ctx, orgID, start, end, intervalSec)
+	points, err := s.ch.GetSessionsOverTimeFromMV(ctx, orgID, start, end)
 	if err != nil {
-		s.logger.Error("failed to get sessions over time", "org_id", orgID, "error", err)
-		return nil, err
+		// Fallback to raw queries if MVs not available
+		s.logger.Warn("MV sessions-over-time query failed, falling back to raw", "error", err)
+		points, err = s.ch.GetSessionsOverTime(ctx, orgID, start, end, intervalSec)
+		if err != nil {
+			s.logger.Error("failed to get sessions over time", "org_id", orgID, "error", err)
+			return nil, err
+		}
 	}
 	return points, nil
 }
 
 // GetFailureRateOverTime returns failure rate as a time series.
+// It tries the materialized view first, falling back to raw table queries if MVs are unavailable.
 func (s *AnalyticsService) GetFailureRateOverTime(ctx context.Context, orgID string, start, end time.Time, intervalSec int) ([]store.FailureRatePoint, error) {
 	if intervalSec <= 0 {
 		intervalSec = 3600
 	}
 
-	points, err := s.ch.GetFailureRateOverTime(ctx, orgID, start, end, intervalSec)
+	points, err := s.ch.GetFailureRateFromMV(ctx, orgID, start, end)
 	if err != nil {
-		s.logger.Error("failed to get failure rate over time", "org_id", orgID, "error", err)
-		return nil, err
+		// Fallback to raw queries if MVs not available
+		s.logger.Warn("MV failure-rate query failed, falling back to raw", "error", err)
+		points, err = s.ch.GetFailureRateOverTime(ctx, orgID, start, end, intervalSec)
+		if err != nil {
+			s.logger.Error("failed to get failure rate over time", "org_id", orgID, "error", err)
+			return nil, err
+		}
 	}
 	return points, nil
 }
