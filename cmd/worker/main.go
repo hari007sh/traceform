@@ -132,6 +132,10 @@ func main() {
 		log.Fatalf("failed to start webhook sender: %v", err)
 	}
 
+	// Start retention worker (daily TTL enforcement)
+	retentionWorker := worker.NewRetentionWorker(chDB, pgDB, blobStore, logger.With("worker", "retention"), 24*time.Hour)
+	retentionWorker.Start()
+
 	logger.Info("all workers started")
 
 	// Graceful shutdown
@@ -147,6 +151,7 @@ func main() {
 	cacheCleanup.Stop()
 	testExecutor.Stop()
 	webhookSender.Stop()
+	retentionWorker.Stop()
 
 	logger.Info("all workers stopped cleanly")
 }
