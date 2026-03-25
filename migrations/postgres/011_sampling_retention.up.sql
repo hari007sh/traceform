@@ -1,5 +1,5 @@
 -- Sampling configuration per org/agent
-CREATE TABLE sampling_config (
+CREATE TABLE sampling_configs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     agent_name TEXT NOT NULL DEFAULT '*',
@@ -12,7 +12,7 @@ CREATE TABLE sampling_config (
     UNIQUE(org_id, agent_name)
 );
 
-CREATE INDEX idx_sampling_config_org ON sampling_config(org_id);
+CREATE INDEX idx_sampling_configs_org ON sampling_configs(org_id);
 
 -- Retention configuration on organizations
 ALTER TABLE organizations
