@@ -12,6 +12,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from agentstack.span import Span
+from agentstack.sampling import SamplingConfig
 
 logger = logging.getLogger("agentstack.session")
 
@@ -44,6 +45,7 @@ class Session:
         metadata: Optional[Dict[str, Any]] = None,
         tags: Optional[Dict[str, str]] = None,
         user_id: Optional[str] = None,
+        sampling_config: Optional[SamplingConfig] = None,
     ):
         """
         Args:
@@ -52,6 +54,9 @@ class Session:
             metadata: Optional metadata dict attached to the session.
             tags: Optional tags dict for filtering/grouping sessions.
             user_id: Optional end-user identifier.
+            sampling_config: Optional SamplingConfig. When rate < 1.0,
+                events are buffered in memory and a keep/drop decision
+                is made at session.end().
         """
         self.id: str = str(uuid.uuid4())
         self._client = client
@@ -73,12 +78,33 @@ class Session:
         self.total_cost_cents: int = 0
         self.error: Optional[str] = None
 
+        # Sampling support: buffer events when rate < 1.0
+        self._sampling_config: Optional[SamplingConfig] = sampling_config
+        self._event_buffer: Optional[List[Dict[str, Any]]] = (
+            [] if sampling_config and sampling_config.rate < 1.0 else None
+        )
+        self._buffer_cap: int = 1000
+
+    def _send_or_buffer(self, event: Dict[str, Any]) -> None:
+        """Send an event directly or buffer it when sampling is active."""
+        if self._event_buffer is not None:
+            if len(self._event_buffer) >= self._buffer_cap:
+                # Drop oldest events to stay within cap
+                dropped = self._event_buffer.pop(0)
+                logger.warning(
+                    "Session '%s' event buffer full (%d), dropping oldest event: %s",
+                    self.id, self._buffer_cap, dropped.get("type", "unknown"),
+                )
+            self._event_buffer.append(event)
+        else:
+            self._client.send_event(event)
+
     def start(self) -> "Session":
         """Start the session and send a session_start event."""
         self.start_time = time.time()
         self.status = "running"
 
-        self._client.send_event({
+        self._send_or_buffer({
             "type": "session_start",
             "session_id": self.id,
             "agent_name": self.agent_name,
@@ -94,6 +120,11 @@ class Session:
     def end(self, error: Optional[str] = None) -> "Session":
         """
         End the session and send a session_end event.
+
+        When sampling is active (rate < 1.0), makes a keep/drop decision:
+        - Keep: flushes all buffered events plus the session_end event.
+        - Drop: sends only a lightweight session_counter event for
+          accurate aggregate metrics.
 
         Args:
             error: Optional error message if the session failed.
@@ -114,18 +145,56 @@ class Session:
         )
         self.total_cost_cents = sum(s.cost_cents for s in self._spans)
 
-        self._client.send_event({
-            "type": "session_end",
-            "session_id": self.id,
-            "agent_name": self.agent_name,
-            "status": self.status,
-            "error": self.error,
-            "duration_ms": self.duration_ms,
-            "total_tokens": self.total_tokens,
-            "total_cost_cents": self.total_cost_cents,
-            "span_count": len(self._spans),
-            "timestamp": self.end_time,
-        })
+        if self._sampling_config and self._event_buffer is not None:
+            # Sampling path: decide whether to send full data or just a counter
+            if self._sampling_config.should_send_full(
+                self.status, self.duration_ms or 0, self.total_cost_cents
+            ):
+                # Flush all buffered events
+                for event in self._event_buffer:
+                    self._client.send_event(event)
+                # Send normal session_end event
+                self._client.send_event({
+                    "type": "session_end",
+                    "session_id": self.id,
+                    "agent_name": self.agent_name,
+                    "status": self.status,
+                    "error": self.error,
+                    "duration_ms": self.duration_ms,
+                    "total_tokens": self.total_tokens,
+                    "total_cost_cents": self.total_cost_cents,
+                    "span_count": len(self._spans),
+                    "timestamp": self.end_time,
+                })
+            else:
+                # Send lightweight counter event only
+                self._client.send_event({
+                    "type": "session_counter",
+                    "session_id": self.id,
+                    "agent_name": self.agent_name,
+                    "status": self.status,
+                    "total_tokens": self.total_tokens,
+                    "total_cost_cents": self.total_cost_cents,
+                    "duration_ms": int(self.duration_ms or 0),
+                    "span_count": len(self._spans),
+                    "timestamp": self.end_time,
+                })
+            # Clear the buffer
+            self._event_buffer = None
+        else:
+            # Normal path — send session_end directly
+            self._client.send_event({
+                "type": "session_end",
+                "session_id": self.id,
+                "agent_name": self.agent_name,
+                "status": self.status,
+                "error": self.error,
+                "duration_ms": self.duration_ms,
+                "total_tokens": self.total_tokens,
+                "total_cost_cents": self.total_cost_cents,
+                "span_count": len(self._spans),
+                "timestamp": self.end_time,
+            })
 
         # Flush to ensure all events are sent
         self._client.flush()
@@ -200,7 +269,7 @@ class Session:
             "timestamp": time.time(),
         }
         self._events.append(event)
-        self._client.send_event(event)
+        self._send_or_buffer(event)
 
     def set_metadata(self, key: str, value: Any) -> "Session":
         """

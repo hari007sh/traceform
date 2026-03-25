@@ -36,6 +36,7 @@ from agentstack.session import Session
 from agentstack.span import Span
 from agentstack.trace import trace, get_current_session, set_current_session
 from agentstack.healing import HealingConfig, HealingEngine, CostLimitExceeded
+from agentstack.sampling import SamplingConfig
 from agentstack import guard
 from agentstack import cost
 from agentstack.instruments import instrument
@@ -45,6 +46,7 @@ logger = logging.getLogger("agentstack")
 # Module-level state
 _client: Optional[AgentStackClient] = None
 _healing_config: Optional[HealingConfig] = None
+_sampling_config: Optional[SamplingConfig] = None
 _initialized: bool = False
 
 
@@ -54,6 +56,7 @@ def init(
     batch_size: int = 50,
     flush_interval: float = 5.0,
     auto_instrument: Optional[list] = None,
+    sampling: Optional[Any] = None,
     debug: bool = False,
 ) -> None:
     """
@@ -70,16 +73,28 @@ def init(
         auto_instrument: List of libraries to auto-instrument.
                          E.g., ["openai", "anthropic"]. If None, no
                          auto-instrumentation is enabled.
+        sampling: Sampling configuration. Can be a SamplingConfig instance
+                  or a dict of SamplingConfig fields (e.g., {"rate": 0.1}).
+                  When rate < 1.0, sessions are buffered in memory and a
+                  keep/drop decision is made at session.end().
         debug: Enable debug logging for the SDK.
 
     Raises:
         ValueError: If api_key is empty.
     """
-    global _client, _initialized
+    global _client, _initialized, _sampling_config
 
     if debug:
         logging.basicConfig(level=logging.DEBUG)
         logger.setLevel(logging.DEBUG)
+
+    # Parse sampling config
+    if isinstance(sampling, SamplingConfig):
+        _sampling_config = sampling
+    elif isinstance(sampling, dict):
+        _sampling_config = SamplingConfig(**sampling)
+    else:
+        _sampling_config = None
 
     _client = AgentStackClient(
         api_key=api_key,
@@ -176,6 +191,7 @@ def session(
         metadata=metadata,
         tags=tags,
         user_id=user_id,
+        sampling_config=_sampling_config,
     )
 
     # Set as current session for @trace decorator
@@ -216,6 +232,7 @@ def create_session(
         metadata=metadata,
         tags=tags,
         user_id=user_id,
+        sampling_config=_sampling_config,
     )
 
 
@@ -238,6 +255,11 @@ def get_client() -> Optional[AgentStackClient]:
 def get_healing_config() -> Optional[HealingConfig]:
     """Get the current HealingConfig, or None if Shield is not enabled."""
     return _healing_config
+
+
+def get_sampling_config() -> Optional[SamplingConfig]:
+    """Get the current SamplingConfig, or None if sampling is not configured."""
+    return _sampling_config
 
 
 def _ensure_initialized() -> None:
@@ -280,4 +302,6 @@ __all__ = [
     "HealingConfig",
     "HealingEngine",
     "CostLimitExceeded",
+    "SamplingConfig",
+    "get_sampling_config",
 ]

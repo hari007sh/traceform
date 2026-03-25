@@ -79,11 +79,17 @@ class AgentStackClient:
         )
         self._batch_sender.start()
         self._lock = threading.Lock()
+        self._server_sample_rate: Optional[float] = None
 
     @property
     def endpoint(self) -> str:
         """The base URL of the API server."""
         return self._endpoint
+
+    @property
+    def server_sample_rate(self) -> Optional[float]:
+        """Server-recommended sample rate from the last batch response, or None."""
+        return self._server_sample_rate
 
     def send_event(self, event: Dict[str, Any]) -> None:
         """
@@ -194,7 +200,23 @@ class AgentStackClient:
             payload["events"] = generic_events
 
         url = f"{self._endpoint}/v1/ingest/batch"
-        self._request_with_retry("POST", url, json_data=payload)
+        result = self._request_with_retry("POST", url, json_data=payload,
+                                          return_response=True)
+
+        # Check for server-controlled sample rate header
+        if result and isinstance(result, tuple):
+            _json_body, response_headers = result
+            sample_rate_str = response_headers.get("X-AgentStack-Sample-Rate")
+            if sample_rate_str:
+                try:
+                    rate = float(sample_rate_str)
+                    if 0.0 <= rate <= 1.0:
+                        self._server_sample_rate = rate
+                        logger.debug(
+                            "Server recommended sample rate: %.2f", rate
+                        )
+                except (ValueError, TypeError):
+                    pass
 
     @staticmethod
     def _ts_to_rfc3339(ts: Optional[float]) -> str:
@@ -309,7 +331,8 @@ class AgentStackClient:
         url: str,
         json_data: Optional[Dict[str, Any]] = None,
         params: Optional[Dict[str, Any]] = None,
-    ) -> Optional[Dict[str, Any]]:
+        return_response: bool = False,
+    ) -> Optional[Any]:
         """
         Execute an HTTP request with retry logic.
 
@@ -320,9 +343,13 @@ class AgentStackClient:
             url: Full URL.
             json_data: JSON body for POST requests.
             params: Query parameters for GET requests.
+            return_response: If True, return a (json_body, headers) tuple
+                instead of just the JSON body. Used by _send_batch to
+                read server-controlled headers like X-AgentStack-Sample-Rate.
 
         Returns:
-            Parsed JSON response, or None on failure.
+            Parsed JSON response (or (json, headers) tuple if return_response),
+            or None on failure.
         """
         last_exception: Optional[Exception] = None
 
@@ -338,9 +365,12 @@ class AgentStackClient:
 
                 if response.status_code < 300:
                     try:
-                        return response.json()
+                        json_body = response.json()
                     except (json.JSONDecodeError, ValueError):
-                        return None
+                        json_body = None
+                    if return_response:
+                        return (json_body, dict(response.headers))
+                    return json_body
 
                 if response.status_code in RETRY_STATUS_CODES:
                     wait_time = RETRY_BACKOFF_BASE * (2 ** attempt)
