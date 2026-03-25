@@ -91,6 +91,14 @@ func (s *Server) setupRoutes() {
 		analyticsHandler = tracehandler.NewAnalyticsHandler(analyticsSvc, s.logger)
 	}
 
+	// --- Build blob store for payload retrieval ---
+	blobStore := storage.NewFileSystemBlobStore(s.cfg.BlobStorePath)
+
+	var payloadHandler *tracehandler.PayloadHandler
+	if s.clickhouseDB != nil {
+		payloadHandler = tracehandler.NewPayloadHandler(s.clickhouseDB, blobStore, s.logger)
+	}
+
 	// --- Build shield module dependencies ---
 	var shieldChStore *shieldstore.ClickHouseStore
 	if s.clickhouseDB != nil {
@@ -132,6 +140,13 @@ func (s *Server) setupRoutes() {
 
 			// Shield module: Healing events per session
 			r.Get("/{id}/healing", healingHandler.GetSessionHealing)
+		})
+
+		// Trace module: Span payload retrieval
+		r.Route("/spans", func(r chi.Router) {
+			if payloadHandler != nil {
+				r.Get("/{spanID}/payload", payloadHandler.GetPayload)
+			}
 		})
 
 		// Trace module: Analytics routes
