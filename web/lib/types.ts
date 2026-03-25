@@ -38,6 +38,8 @@ export interface Span {
   total_tokens: number;
   cost_cents: number;
   duration_ms: number;
+  input_truncated?: boolean;
+  output_truncated?: boolean;
   metadata: Record<string, unknown>;
   started_at: string;
   ended_at: string;
