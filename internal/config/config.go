@@ -27,6 +27,14 @@ type Config struct {
 	FromEmail      string
 
 	EncryptionKey string
+
+	// Blob Storage
+	BlobStoreType string // "fs" or "s3"
+	BlobStorePath string // filesystem path for "fs" type
+
+	// Sampling defaults
+	DefaultSampleRate float64
+	AdaptiveThreshold int // hourly ingest count threshold for adaptive sampling
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -51,6 +59,11 @@ func Load() (*Config, error) {
 		FromEmail:      getEnv("FROM_EMAIL", "alerts@agentstack.dev"),
 
 		EncryptionKey: getEnv("ENCRYPTION_KEY", ""),
+
+		BlobStoreType:     getEnv("BLOB_STORE_TYPE", "fs"),
+		BlobStorePath:     getEnv("BLOB_STORE_PATH", "/tmp/agentstack/payloads"),
+		DefaultSampleRate: getEnvFloat("DEFAULT_SAMPLE_RATE", 1.0),
+		AdaptiveThreshold: getEnvInt("ADAPTIVE_THRESHOLD", 100000),
 	}
 
 	if cfg.JWTSecret == "" {
@@ -78,6 +91,15 @@ func (c *Config) GatewayAddr() string {
 func getEnv(key, fallback string) string {
 	if val := os.Getenv(key); val != "" {
 		return val
+	}
+	return fallback
+}
+
+func getEnvFloat(key string, fallback float64) float64 {
+	if val := os.Getenv(key); val != "" {
+		if f, err := strconv.ParseFloat(val, 64); err == nil {
+			return f
+		}
 	}
 	return fallback
 }
