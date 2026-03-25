@@ -144,6 +144,12 @@ export interface InitConfig {
 export interface SessionConfig {
   metadata?: Record<string, unknown>;
   healing?: HealingConfig;
+  sampling?: {
+    rate?: number;
+    alwaysKeepErrors?: boolean;
+    alwaysKeepSlowMs?: number;
+    alwaysKeepCostly?: number;
+  };
 }
 
 export interface TraceOptions {

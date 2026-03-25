@@ -167,6 +167,7 @@ export { instrumentOpenAI } from './instruments/openai';
 export { instrumentAnthropic } from './instruments/anthropic';
 export { runGuards, checkGuard } from './guard';
 export { estimateCost, registerModelPricing, getModelPricings } from './cost';
+export { shouldSendFull, DEFAULT_SAMPLING_CONFIG } from './sampling';
 
 // Types
 export type {
@@ -179,6 +180,8 @@ export type {
   ModelPricing,
   CostEstimate,
 } from './cost';
+
+export type { SamplingConfig } from './sampling';
 
 export {
   SpanType,

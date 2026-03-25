@@ -1,5 +1,19 @@
 import { Event, HealingEvent } from './types';
 
+// ─── Counter Payload ──────────────────────────────────────────────────────
+// Lightweight summary sent when a session is sampled-out (dropped).
+
+export interface CounterPayload {
+  sessionId: string;
+  status: string;
+  spanCount: number;
+  totalTokens: number;
+  totalCostCents: number;
+  durationMs: number;
+  droppedEventCount: number;
+  timestamp: string;
+}
+
 // ─── Backend Payload Types ─────────────────────────────────────────────────
 // These match the Go backend's service.BatchIngestRequest exactly.
 
@@ -90,10 +104,14 @@ export class AgentStackClient {
   private spanBuffer: SpanPayload[] = [];
   private eventBuffer: EventPayload[] = [];
   private healingBuffer: HealingPayload[] = [];
+  private counterBuffer: CounterPayload[] = [];
   // Legacy event buffer for backward compatibility with internal SDK events
   private legacyEventBuffer: Event[] = [];
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private isFlushing = false;
+
+  /** Server-suggested sample rate parsed from the X-AgentStack-Sample-Rate header. */
+  private _serverSampleRate: number | null = null;
 
   constructor(config: Partial<ClientConfig> & { apiKey: string; projectId: string }) {
     this.config = {
@@ -174,13 +192,31 @@ export class AgentStackClient {
     this.maybeFlush();
   }
 
+  /**
+   * Send a lightweight counter for a sampled-out (dropped) session.
+   * Counters are batched and flushed together with the normal payload.
+   */
+  sendCounter(counter: CounterPayload): void {
+    this.counterBuffer.push(counter);
+    this.maybeFlush();
+  }
+
+  /**
+   * Returns the server-suggested sample rate if one has been received,
+   * or null if the server has not yet provided a rate.
+   */
+  get serverSampleRate(): number | null {
+    return this._serverSampleRate;
+  }
+
   async flush(): Promise<void> {
     if (this.isFlushing) return;
 
     const hasBatchData = this.sessionBuffer.length > 0 || this.spanBuffer.length > 0 || this.eventBuffer.length > 0;
     const hasHealingData = this.healingBuffer.length > 0;
+    const hasCounterData = this.counterBuffer.length > 0;
 
-    if (!hasBatchData && !hasHealingData) return;
+    if (!hasBatchData && !hasHealingData && !hasCounterData) return;
 
     this.isFlushing = true;
 
@@ -189,14 +225,20 @@ export class AgentStackClient {
     const spans = this.spanBuffer.splice(0);
     const events = this.eventBuffer.splice(0);
     const healingEvents = this.healingBuffer.splice(0);
+    const counters = this.counterBuffer.splice(0);
     this.legacyEventBuffer.splice(0);
 
     try {
-      // Send batch of sessions/spans/events
-      if (sessions.length > 0 || spans.length > 0 || events.length > 0) {
-        const batchPayload: BatchPayload = { sessions, spans, events };
+      // Send batch of sessions/spans/events (+ counters when present)
+      if (sessions.length > 0 || spans.length > 0 || events.length > 0 || counters.length > 0) {
+        const batchPayload: BatchPayload & { counters?: CounterPayload[] } = { sessions, spans, events };
+        if (counters.length > 0) {
+          batchPayload.counters = counters;
+        }
         await this.sendBatchWithRetry(batchPayload);
-        this.log(`Flushed batch: ${sessions.length} sessions, ${spans.length} spans, ${events.length} events`);
+        this.log(
+          `Flushed batch: ${sessions.length} sessions, ${spans.length} spans, ${events.length} events, ${counters.length} counters`,
+        );
       }
 
       // Send healing events
@@ -212,6 +254,7 @@ export class AgentStackClient {
       this.spanBuffer.unshift(...spans);
       this.eventBuffer.unshift(...events);
       this.healingBuffer.unshift(...healingEvents);
+      this.counterBuffer.unshift(...counters);
       this.log(`Failed to flush: ${err}`);
     } finally {
       this.isFlushing = false;
@@ -287,13 +330,24 @@ export class AgentStackClient {
       const body = await response.text().catch(() => '');
       throw new Error(`HTTP ${response.status}: ${response.statusText} — ${body}`);
     }
+
+    // Parse server-provided sample rate from response headers
+    const sampleRateHeader = response.headers.get('X-AgentStack-Sample-Rate');
+    if (sampleRateHeader) {
+      const parsed = parseFloat(sampleRateHeader);
+      if (!isNaN(parsed) && parsed >= 0 && parsed <= 1) {
+        this._serverSampleRate = parsed;
+        this.log(`Server suggested sample rate: ${parsed}`);
+      }
+    }
   }
 
   // ── Internal: Timers ────────────────────────────────────────────────────
 
   private maybeFlush(): void {
     const totalPending =
-      this.sessionBuffer.length + this.spanBuffer.length + this.eventBuffer.length + this.healingBuffer.length;
+      this.sessionBuffer.length + this.spanBuffer.length + this.eventBuffer.length +
+      this.healingBuffer.length + this.counterBuffer.length;
     if (totalPending >= this.config.batchSize) {
       void this.flush();
     }
@@ -345,6 +399,10 @@ export class AgentStackClient {
 
   get pendingSpanCount(): number {
     return this.spanBuffer.length;
+  }
+
+  get pendingCounterCount(): number {
+    return this.counterBuffer.length;
   }
 
   get endpoint(): string {
