@@ -70,6 +70,11 @@ func (s *Server) setupRoutes() {
 	patternSvc := service.NewPatternService(pgStore, s.logger)
 	alertSvc := service.NewAlertService(pgStore, s.logger)
 
+	// Sampling config
+	samplingStore := store.NewSamplingPGStore(s.db)
+	samplingSvc := service.NewSamplingService(samplingStore, s.logger)
+	samplingHandler := tracehandler.NewSamplingHandler(samplingSvc, s.logger)
+
 	ingestHandler := tracehandler.NewIngestHandler(ingestSvc, s.logger)
 	agentHandler := tracehandler.NewAgentHandler(pgStore, s.logger)
 	patternHandler := tracehandler.NewPatternHandler(patternSvc, s.logger)
@@ -164,6 +169,13 @@ func (s *Server) setupRoutes() {
 			r.Get("/{id}", alertHandler.Get)
 			r.Put("/{id}", alertHandler.Update)
 			r.Delete("/{id}", alertHandler.Delete)
+		})
+
+		// Trace module: Sampling config CRUD
+		r.Route("/settings/sampling", func(r chi.Router) {
+			r.Get("/", samplingHandler.List)
+			r.Put("/", samplingHandler.Upsert)
+			r.Delete("/{id}", samplingHandler.Delete)
 		})
 
 		// --- Build test module dependencies ---
