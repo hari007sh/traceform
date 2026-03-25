@@ -21,6 +21,7 @@ import (
 func main() {
 	direction := flag.String("direction", "up", "migration direction: up or down")
 	seed := flag.Bool("seed", false, "run seed data after migrations")
+	backfill := flag.Bool("backfill", false, "backfill materialized views from existing data")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -50,6 +51,14 @@ func main() {
 			log.Fatalf("seed failed: %v", err)
 		}
 		log.Println("Seed complete")
+	}
+
+	if *backfill {
+		log.Println("Backfilling materialized views from existing data...")
+		if err := backfillMaterializedViews(); err != nil {
+			log.Fatalf("backfill failed: %v", err)
+		}
+		log.Println("Backfill complete")
 	}
 
 	log.Println("Migrations complete")
@@ -380,6 +389,82 @@ func seedModelPricing(db *sql.DB, seedDir string) error {
 		count += int(n)
 	}
 	log.Printf("  seeded %d model pricing entries (of %d)", count, len(pricing))
+	return nil
+}
+
+func backfillMaterializedViews() error {
+	backfillQueries := []struct {
+		name  string
+		query string
+	}{
+		{
+			name: "mv_sessions_hourly_data",
+			query: `INSERT INTO agentstack.mv_sessions_hourly_data
+SELECT org_id, agent_name, toStartOfHour(started_at) AS hour,
+    countState() AS session_count,
+    countIfState(status = 'failed') AS failed_count,
+    countIfState(status = 'healed') AS healed_count,
+    countIfState(status = 'completed') AS completed_count,
+    countIfState(status = 'timeout') AS timeout_count,
+    sumState(total_tokens) AS sum_tokens,
+    sumState(total_cost_cents) AS sum_cost_cents,
+    sumState(duration_ms) AS sum_duration_ms,
+    maxState(duration_ms) AS max_duration_ms,
+    minState(duration_ms) AS min_duration_ms
+FROM agentstack.sessions
+GROUP BY org_id, agent_name, hour`,
+		},
+		{
+			name: "mv_spans_hourly_data",
+			query: `INSERT INTO agentstack.mv_spans_hourly_data
+SELECT org_id, model, provider, toString(span_type) AS span_type,
+    toStartOfHour(started_at) AS hour,
+    countState() AS span_count,
+    countIfState(status = 'failed') AS failed_count,
+    sumState(input_tokens) AS sum_input_tokens,
+    sumState(output_tokens) AS sum_output_tokens,
+    sumState(total_tokens) AS sum_total_tokens,
+    sumState(cost_cents) AS sum_cost_cents,
+    sumState(duration_ms) AS sum_duration_ms,
+    maxState(duration_ms) AS max_duration_ms
+FROM agentstack.spans
+GROUP BY org_id, model, provider, span_type, hour`,
+		},
+		{
+			name: "mv_healing_hourly_data",
+			query: `INSERT INTO agentstack.mv_healing_hourly_data
+SELECT org_id, toString(healing_type) AS healing_type,
+    toStartOfHour(created_at) AS hour,
+    countState() AS total_count,
+    countIfState(success = 1) AS success_count,
+    sumState(latency_ms) AS sum_latency_ms
+FROM agentstack.healing_events
+GROUP BY org_id, healing_type, hour`,
+		},
+		{
+			name: "mv_cost_daily_data",
+			query: `INSERT INTO agentstack.mv_cost_daily_data
+SELECT org_id, model, provider,
+    toDate(started_at) AS day,
+    countState() AS span_count,
+    sumState(input_tokens) AS sum_input_tokens,
+    sumState(output_tokens) AS sum_output_tokens,
+    sumState(cost_cents) AS sum_cost_cents,
+    avgState(cost_cents) AS avg_cost_cents
+FROM agentstack.spans
+WHERE cost_cents > 0
+GROUP BY org_id, model, provider, day`,
+		},
+	}
+
+	for _, bq := range backfillQueries {
+		log.Printf("  backfilling %s...", bq.name)
+		if err := executeClickHouseHTTP(bq.query); err != nil {
+			return fmt.Errorf("backfill %s failed: %w", bq.name, err)
+		}
+		log.Printf("  backfilled %s", bq.name)
+	}
+
 	return nil
 }
 
