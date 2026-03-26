@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -19,6 +20,16 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
 )
+
+// envInt reads an integer from an environment variable or returns the fallback.
+func envInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return fallback
+}
 
 func main() {
 	cfg, err := config.Load()
@@ -39,8 +50,8 @@ func main() {
 	}
 	defer pgDB.Close()
 
-	pgDB.SetMaxOpenConns(10)
-	pgDB.SetMaxIdleConns(5)
+	pgDB.SetMaxOpenConns(envInt("PG_MAX_OPEN_CONNS", 10))
+	pgDB.SetMaxIdleConns(envInt("PG_MAX_IDLE_CONNS", 5))
 	pgDB.SetConnMaxLifetime(5 * time.Minute)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -57,8 +68,9 @@ func main() {
 	}
 	defer chDB.Close()
 
-	chDB.SetMaxOpenConns(10)
-	chDB.SetMaxIdleConns(5)
+	chDB.SetMaxOpenConns(envInt("CH_MAX_OPEN_CONNS", 25))
+	chDB.SetMaxIdleConns(envInt("CH_MAX_IDLE_CONNS", 15))
+	chDB.SetConnMaxLifetime(5 * time.Minute)
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel2()
