@@ -1,18 +1,22 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Activity,
   Search,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   RefreshCw,
   AlertTriangle,
   Copy,
   Check,
   ExternalLink,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 import { fadeIn, staggerContainer, staggerItem } from "@/lib/animations";
 import { SkeletonTable } from "@/components/skeleton";
@@ -22,17 +26,25 @@ import { api, ApiError } from "@/lib/api";
 import type { Session } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
-// API response shape from GET /v1/sessions
+// API response shape from GET /v1/sessions (with meta)
 // ---------------------------------------------------------------------------
+interface SessionsMeta {
+  page: number;
+  per_page: number;
+  total: number;
+  total_pages: number;
+}
+
 interface SessionsAPIResponse {
   sessions: Session[];
   total: number;
   limit: number;
   offset: number;
+  meta: SessionsMeta;
 }
 
 // ---------------------------------------------------------------------------
-// Display type — the Session plus a computed time_ago string
+// Display type -- the Session plus a computed time_ago string
 // ---------------------------------------------------------------------------
 type DisplaySession = Session & { time_ago: string };
 
@@ -59,7 +71,6 @@ function formatTimeAgo(iso: string): string {
 function toDisplaySessions(sessions: Session[]): DisplaySession[] {
   return sessions.map((s) => ({
     ...s,
-    // Ensure tags is always an array (Go may serialize null as null)
     tags: s.tags ?? [],
     time_ago: formatTimeAgo(s.started_at),
   }));
@@ -218,25 +229,161 @@ function EmptySessionsState() {
 }
 
 // ---------------------------------------------------------------------------
+// Debounce hook
+// ---------------------------------------------------------------------------
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
+// ---------------------------------------------------------------------------
+// Sortable column header definitions
+// ---------------------------------------------------------------------------
+
+interface ColumnDef {
+  label: string;
+  sortKey?: string; // undefined = not sortable
+}
+
+const columns: ColumnDef[] = [
+  { label: "Session" },
+  { label: "Agent", sortKey: "agent_name" },
+  { label: "Status", sortKey: "status" },
+  { label: "Duration", sortKey: "duration_ms" },
+  { label: "Tokens", sortKey: "total_tokens" },
+  { label: "Cost", sortKey: "total_cost_cents" },
+  { label: "Time", sortKey: "started_at" },
+];
+
+// ---------------------------------------------------------------------------
+// Compact paginator with ellipsis
+// ---------------------------------------------------------------------------
+
+function getPageNumbers(current: number, total: number): (number | "ellipsis")[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+
+  const pages: (number | "ellipsis")[] = [];
+
+  // Always show first page
+  pages.push(1);
+
+  if (current <= 3) {
+    // Near the start: 1 2 3 4 ... last
+    pages.push(2, 3, 4, "ellipsis", total);
+  } else if (current >= total - 2) {
+    // Near the end: 1 ... last-3 last-2 last-1 last
+    pages.push("ellipsis", total - 3, total - 2, total - 1, total);
+  } else {
+    // Middle: 1 ... curr-1 curr curr+1 ... last
+    pages.push("ellipsis", current - 1, current, current + 1, "ellipsis", total);
+  }
+
+  return pages;
+}
+
+// ---------------------------------------------------------------------------
+// Page size options
+// ---------------------------------------------------------------------------
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
+
+// ---------------------------------------------------------------------------
 // Page component
 // ---------------------------------------------------------------------------
 
-export default function SessionsPage() {
+function SessionsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // ---------------------------------------------------------------------------
+  // Derive state from URL search params (single source of truth)
+  // ---------------------------------------------------------------------------
+  const page = parseInt(searchParams.get("page") || "1", 10) || 1;
+  const perPage = parseInt(searchParams.get("per_page") || "50", 10) || 50;
+  const statusFilter = searchParams.get("status") || "all";
+  const sortBy = searchParams.get("sort_by") || "started_at";
+  const sortDir = searchParams.get("sort_dir") || "desc";
+  const searchParam = searchParams.get("search") || "";
+
+  // Local search input value (not yet debounced)
+  const [searchInput, setSearchInput] = useState(searchParam);
+  const debouncedSearch = useDebounce(searchInput, 300);
+
+  // API data
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [sessions, setSessions] = useState<DisplaySession[]>([]);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [meta, setMeta] = useState<SessionsMeta>({
+    page: 1,
+    per_page: 50,
+    total: 0,
+    total_pages: 1,
+  });
   const [refreshing, setRefreshing] = useState(false);
-  const pageSize = 10;
 
-  // Abort controller ref so we can cancel in-flight requests on unmount / re-fetch
+  // Abort controller ref
   const abortRef = useRef<AbortController | null>(null);
 
+  // ---------------------------------------------------------------------------
+  // URL param update helper -- replaces searchParams without full navigation
+  // ---------------------------------------------------------------------------
+  const updateParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(updates)) {
+        if (value === null || value === "" || value === "all") {
+          params.delete(key);
+        } else {
+          params.set(key, value);
+        }
+      }
+      // Reset to page 1 unless page is explicitly in the update
+      if (!("page" in updates)) {
+        params.delete("page");
+      }
+      const qs = params.toString();
+      router.replace(`/dashboard/sessions${qs ? `?${qs}` : ""}`, { scroll: false });
+    },
+    [searchParams, router]
+  );
+
+  // ---------------------------------------------------------------------------
+  // Sync debounced search -> URL params
+  // ---------------------------------------------------------------------------
+  const prevDebouncedSearch = useRef(searchParam);
+  useEffect(() => {
+    if (debouncedSearch !== prevDebouncedSearch.current) {
+      prevDebouncedSearch.current = debouncedSearch;
+      updateParams({ search: debouncedSearch || null });
+    }
+  }, [debouncedSearch, updateParams]);
+
+  // ---------------------------------------------------------------------------
+  // Build API URL from search params
+  // ---------------------------------------------------------------------------
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("per_page", String(perPage));
+    if (searchParam) params.set("search", searchParam);
+    if (statusFilter && statusFilter !== "all") params.set("status", statusFilter);
+    if (sortBy) params.set("sort_by", sortBy);
+    if (sortDir) params.set("sort_dir", sortDir);
+    return `/v1/sessions?${params.toString()}`;
+  }, [page, perPage, searchParam, statusFilter, sortBy, sortDir]);
+
+  // ---------------------------------------------------------------------------
+  // Fetch sessions from API
+  // ---------------------------------------------------------------------------
   const fetchSessions = useCallback(async () => {
-    // Cancel any in-flight request
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -245,22 +392,27 @@ export default function SessionsPage() {
     setFetchError(null);
 
     try {
-      // Ensure the API client has the JWT token from localStorage
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
       if (token) {
         api.setToken(token);
       }
 
-      const data = await api.get<SessionsAPIResponse>("/v1/sessions?limit=200");
+      const data = await api.get<SessionsAPIResponse>(apiUrl);
 
-      // If the component unmounted or a newer fetch started, bail out
       if (controller.signal.aborted) return;
 
       const displaySessions = toDisplaySessions(data.sessions ?? []);
       setSessions(displaySessions);
+      setMeta(
+        data.meta || {
+          page: 1,
+          per_page: perPage,
+          total: data.total || 0,
+          total_pages: Math.max(1, Math.ceil((data.total || 0) / perPage)),
+        }
+      );
       setLoading(false);
     } catch (err) {
-      // If aborted (unmount / newer fetch), do nothing
       if (controller.signal.aborted) return;
 
       const message =
@@ -271,11 +423,10 @@ export default function SessionsPage() {
             : "Failed to load sessions";
 
       console.error("[AgentStack] SessionsPage: API fetch failed:", message);
-
       setFetchError(message);
       setLoading(false);
     }
-  }, []);
+  }, [apiUrl, perPage]);
 
   useEffect(() => {
     fetchSessions();
@@ -284,6 +435,9 @@ export default function SessionsPage() {
     };
   }, [fetchSessions]);
 
+  // ---------------------------------------------------------------------------
+  // Event handlers
+  // ---------------------------------------------------------------------------
   const handleRefresh = () => {
     setRefreshing(true);
     fetchSessions().finally(() => {
@@ -291,24 +445,40 @@ export default function SessionsPage() {
     });
   };
 
-  const filtered = sessions.filter((s) => {
-    const matchesSearch =
-      search === "" ||
-      s.agent_name.toLowerCase().includes(search.toLowerCase()) ||
-      s.id.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus =
-      statusFilter === "all" || s.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const handleStatusChange = (status: string) => {
+    updateParams({ status: status === "all" ? null : status });
+  };
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paginated = filtered.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
-  );
+  const handleSort = (column: string) => {
+    if (column === sortBy) {
+      // Toggle direction
+      updateParams({
+        sort_by: column,
+        sort_dir: sortDir === "desc" ? "asc" : "desc",
+        page: String(page), // preserve current page on sort
+      });
+    } else {
+      updateParams({ sort_by: column, sort_dir: "desc" });
+    }
+  };
 
-  const isEmptyState = !loading && !fetchError && sessions.length === 0;
-  const isNoResults = !loading && !fetchError && sessions.length > 0 && filtered.length === 0;
+  const handlePageChange = (newPage: number) => {
+    updateParams({ page: String(newPage) });
+  };
+
+  const handlePerPageChange = (newPerPage: number) => {
+    updateParams({ per_page: String(newPerPage) });
+    // page resets to 1 automatically since "page" is not in updates
+  };
+
+  // ---------------------------------------------------------------------------
+  // Derived state
+  // ---------------------------------------------------------------------------
+  const totalPages = meta.total_pages;
+  const isEmptyState = !loading && !fetchError && meta.total === 0 && !searchParam && statusFilter === "all";
+  const isNoResults = !loading && !fetchError && sessions.length === 0 && !isEmptyState;
+
+  const pageNumbers = getPageNumbers(page, totalPages);
 
   return (
     <motion.div
@@ -325,18 +495,15 @@ export default function SessionsPage() {
         </p>
       </div>
 
-      {/* Search / Filter Bar — shown always, dimmed when empty */}
+      {/* Search / Filter Bar */}
       <div className={`flex flex-col sm:flex-row gap-3 ${isEmptyState ? "opacity-50 pointer-events-none" : ""}`}>
         <div className="relative flex-1 flex gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
             <Input
               placeholder="Search by agent name or session ID..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setCurrentPage(1);
-              }}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="pl-10 bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-sm"
               disabled={isEmptyState}
             />
@@ -361,10 +528,7 @@ export default function SessionsPage() {
               return (
                 <button
                   key={status}
-                  onClick={() => {
-                    setStatusFilter(status);
-                    setCurrentPage(1);
-                  }}
+                  onClick={() => handleStatusChange(status)}
                   disabled={isEmptyState}
                   className={`px-3 py-1.5 text-xs rounded-lg border transition-all duration-150 capitalize ${
                     isActive
@@ -415,10 +579,10 @@ export default function SessionsPage() {
         </div>
       )}
 
-      {/* Empty State — no sessions at all */}
+      {/* Empty State -- no sessions at all */}
       {isEmptyState && <EmptySessionsState />}
 
-      {/* No Results — sessions exist but filter/search matches nothing */}
+      {/* No Results -- sessions exist but filter/search matches nothing */}
       {isNoResults && (
         <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-16 text-center">
           <div className="w-12 h-12 rounded-xl bg-[var(--bg-hover)] flex items-center justify-center mx-auto mb-4">
@@ -432,7 +596,7 @@ export default function SessionsPage() {
       )}
 
       {/* Table */}
-      {!loading && !fetchError && paginated.length > 0 && (
+      {!loading && !fetchError && sessions.length > 0 && (
         <motion.div
           variants={staggerContainer}
           initial="hidden"
@@ -443,26 +607,30 @@ export default function SessionsPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-[var(--border-subtle)]">
-                  {[
-                    "Session",
-                    "Agent",
-                    "Status",
-                    "Duration",
-                    "Tokens",
-                    "Cost",
-                    "Time",
-                  ].map((header) => (
+                  {columns.map((col) => (
                     <th
-                      key={header}
-                      className="text-left px-5 py-3 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium"
+                      key={col.label}
+                      className={`text-left px-5 py-3 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium ${
+                        col.sortKey ? "cursor-pointer select-none hover:text-[var(--text-secondary)] transition-colors" : ""
+                      }`}
+                      onClick={col.sortKey ? () => handleSort(col.sortKey!) : undefined}
                     >
-                      {header}
+                      <span className="inline-flex items-center gap-1">
+                        {col.label}
+                        {col.sortKey && sortBy === col.sortKey && (
+                          sortDir === "asc" ? (
+                            <ChevronUp className="w-3 h-3 text-[var(--accent-blue)]" />
+                          ) : (
+                            <ChevronDown className="w-3 h-3 text-[var(--accent-blue)]" />
+                          )
+                        )}
+                      </span>
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {paginated.map((session) => {
+                {sessions.map((session) => {
                   const sc = statusConfig[session.status] || statusConfig.completed;
                   return (
                     <motion.tr
@@ -509,54 +677,119 @@ export default function SessionsPage() {
             </table>
           </div>
 
-          {/* Pagination */}
-          <div className="flex items-center justify-between px-5 py-3 border-t border-[var(--border-subtle)]">
-            <p className="text-xs text-[var(--text-tertiary)]">
-              Showing {(currentPage - 1) * pageSize + 1}
-              {"\u2013"}
-              {Math.min(currentPage * pageSize, filtered.length)} of{" "}
-              {filtered.length} sessions
-            </p>
-            <div className="flex items-center gap-2">
+          {/* Pagination Footer */}
+          <div className="flex flex-col sm:flex-row items-center justify-between px-5 py-3 border-t border-[var(--border-subtle)] gap-3">
+            {/* Left: showing count + page size selector */}
+            <div className="flex items-center gap-3">
+              <p className="text-xs text-[var(--text-tertiary)]">
+                Showing {(page - 1) * perPage + 1}
+                {"\u2013"}
+                {Math.min(page * perPage, meta.total)} of{" "}
+                {meta.total} sessions
+              </p>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-[var(--text-tertiary)]">Per page:</span>
+                <div className="flex gap-1">
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <button
+                      key={size}
+                      onClick={() => handlePerPageChange(size)}
+                      className={`px-2 py-0.5 rounded text-xs transition-colors ${
+                        perPage === size
+                          ? "bg-[var(--accent-blue)]/10 text-[var(--accent-blue)] border border-[var(--accent-blue)]/20"
+                          : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Right: page navigation */}
+            <div className="flex items-center gap-1">
+              {/* First page */}
               <button
-                onClick={() =>
-                  setCurrentPage((p) => Math.max(1, p - 1))
-                }
-                disabled={currentPage === 1}
+                onClick={() => handlePageChange(1)}
+                disabled={page === 1}
+                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="First page"
+              >
+                <ChevronsLeft className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Previous */}
+              <button
+                onClick={() => handlePageChange(page - 1)}
+                disabled={page === 1}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-[var(--text-secondary)] border border-[var(--border-subtle)] bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] hover:border-[var(--border-default)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-[var(--bg-elevated)] transition-colors"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
-                Previous
+                Prev
               </button>
+
+              {/* Page numbers */}
               <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }).map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setCurrentPage(i + 1)}
-                    className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors ${
-                      currentPage === i + 1
-                        ? "bg-[var(--accent-blue)]/10 text-[var(--accent-blue)] border border-[var(--accent-blue)]/20"
-                        : "hover:bg-[var(--bg-hover)] text-[var(--text-secondary)]"
-                    }`}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
+                {pageNumbers.map((p, idx) =>
+                  p === "ellipsis" ? (
+                    <span
+                      key={`ellipsis-${idx}`}
+                      className="w-8 h-8 flex items-center justify-center text-xs text-[var(--text-tertiary)]"
+                    >
+                      ...
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => handlePageChange(p)}
+                      className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors ${
+                        page === p
+                          ? "bg-[var(--accent-blue)]/10 text-[var(--accent-blue)] border border-[var(--accent-blue)]/20"
+                          : "hover:bg-[var(--bg-hover)] text-[var(--text-secondary)]"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
               </div>
+
+              {/* Next */}
               <button
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
-                }
-                disabled={currentPage === totalPages}
+                onClick={() => handlePageChange(page + 1)}
+                disabled={page === totalPages}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-[var(--text-secondary)] border border-[var(--border-subtle)] bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] hover:border-[var(--border-default)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-[var(--bg-elevated)] transition-colors"
               >
                 Next
                 <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Last page */}
+              <button
+                onClick={() => handlePageChange(totalPages)}
+                disabled={page === totalPages}
+                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Last page"
+              >
+                <ChevronsRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
         </motion.div>
       )}
     </motion.div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Default export wraps in Suspense for useSearchParams compatibility
+// ---------------------------------------------------------------------------
+
+export default function SessionsPage() {
+  return (
+    <Suspense fallback={<SkeletonTable rows={6} cols={7} />}>
+      <SessionsContent />
+    </Suspense>
   );
 }

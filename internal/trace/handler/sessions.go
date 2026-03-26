@@ -2,6 +2,7 @@ package handler
 
 import (
 	"log/slog"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -36,8 +37,23 @@ func (h *SessionHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	filter := store.SessionFilter{
 		AgentName: q.Get("agent_name"),
 		Status:    q.Get("status"),
+		Search:    q.Get("search"),
+		SortBy:    q.Get("sort_by"),
+		SortDir:   q.Get("sort_dir"),
 	}
 
+	// Support both page/per_page and legacy limit/offset
+	if v := q.Get("page"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			filter.Page = n
+		}
+	}
+	if v := q.Get("per_page"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			filter.PerPage = n
+		}
+	}
+	// Legacy params — still supported for backwards compatibility
 	if v := q.Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			filter.Limit = n
@@ -48,12 +64,22 @@ func (h *SessionHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 			filter.Offset = n
 		}
 	}
-	if v := q.Get("start_date"); v != "" {
+
+	// Time range filters — support both "start"/"end" and legacy "start_date"/"end_date"
+	if v := q.Get("start"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			filter.StartDate = &t
+		}
+	} else if v := q.Get("start_date"); v != "" {
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
 			filter.StartDate = &t
 		}
 	}
-	if v := q.Get("end_date"); v != "" {
+	if v := q.Get("end"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			filter.EndDate = &t
+		}
+	} else if v := q.Get("end_date"); v != "" {
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
 			filter.EndDate = &t
 		}
@@ -66,6 +92,9 @@ func (h *SessionHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Normalize filter before passing to service so we can use the values in the response
+	filter.Normalize()
+
 	sessions, total, err := h.svc.ListSessions(r.Context(), orgID, filter)
 	if err != nil {
 		h.logger.Error("failed to list sessions", "org_id", orgID, "error", err)
@@ -73,11 +102,22 @@ func (h *SessionHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	totalPages := int(math.Ceil(float64(total) / float64(filter.PerPage)))
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
 	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"sessions": sessions,
 		"total":    total,
 		"limit":    filter.Limit,
 		"offset":   filter.Offset,
+		"meta": map[string]interface{}{
+			"page":        filter.Page,
+			"per_page":    filter.PerPage,
+			"total":       total,
+			"total_pages": totalPages,
+		},
 	})
 }
 

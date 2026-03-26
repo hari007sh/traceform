@@ -85,26 +85,89 @@ type Event struct {
 type SessionFilter struct {
 	AgentName string
 	Status    string
+	Search    string
 	StartDate *time.Time
 	EndDate   *time.Time
 	Limit     int
 	Offset    int
+	SortBy    string
+	SortDir   string
+	Page      int
+	PerPage   int
+}
+
+// allowedSortColumns is a whitelist of columns that can be used for ORDER BY.
+var allowedSortColumns = map[string]bool{
+	"started_at":       true,
+	"ended_at":         true,
+	"duration_ms":      true,
+	"total_tokens":     true,
+	"total_cost_cents": true,
+	"agent_name":       true,
+	"status":           true,
+	"created_at":       true,
+}
+
+// allowedSortDirs is a whitelist of allowed sort directions.
+var allowedSortDirs = map[string]bool{
+	"asc":  true,
+	"desc": true,
+}
+
+// Normalize applies defaults and clamps pagination parameters.
+func (f *SessionFilter) Normalize() {
+	// Page/PerPage based pagination takes precedence over raw Limit/Offset
+	if f.Page > 0 || f.PerPage > 0 {
+		if f.Page <= 0 {
+			f.Page = 1
+		}
+		if f.PerPage <= 0 {
+			f.PerPage = 50
+		}
+		if f.PerPage > 100 {
+			f.PerPage = 100
+		}
+		f.Limit = f.PerPage
+		f.Offset = (f.Page - 1) * f.PerPage
+	} else {
+		// Legacy limit/offset mode
+		if f.Limit <= 0 {
+			f.Limit = 50
+		}
+		if f.Limit > 200 {
+			f.Limit = 200
+		}
+		// Derive page/perPage for response meta
+		f.PerPage = f.Limit
+		if f.Offset > 0 {
+			f.Page = (f.Offset / f.Limit) + 1
+		} else {
+			f.Page = 1
+		}
+	}
+
+	// Sort defaults
+	if f.SortBy == "" || !allowedSortColumns[f.SortBy] {
+		f.SortBy = "started_at"
+	}
+	if f.SortDir == "" || !allowedSortDirs[f.SortDir] {
+		f.SortDir = "desc"
+	}
 }
 
 // --- Query Methods ---
 
 // ListSessions returns sessions matching the given filter.
 func (s *ClickHouseStore) ListSessions(ctx context.Context, orgID string, f SessionFilter) ([]Session, int, error) {
-	if f.Limit <= 0 {
-		f.Limit = 50
-	}
-	if f.Limit > 200 {
-		f.Limit = 200
-	}
+	f.Normalize()
 
 	where := []string{"org_id = ?"}
 	args := []interface{}{orgID}
 
+	if f.Search != "" {
+		where = append(where, "(positionCaseInsensitive(agent_name, ?) > 0 OR positionCaseInsensitive(id, ?) > 0)")
+		args = append(args, f.Search, f.Search)
+	}
 	if f.AgentName != "" {
 		where = append(where, "agent_name = ?")
 		args = append(args, f.AgentName)
@@ -131,15 +194,16 @@ func (s *ClickHouseStore) ListSessions(ctx context.Context, orgID string, f Sess
 		return nil, 0, fmt.Errorf("count sessions: %w", err)
 	}
 
-	// Data query
+	// Data query — sort column and direction are whitelisted in Normalize()
+	orderClause := fmt.Sprintf("%s %s", f.SortBy, strings.ToUpper(f.SortDir))
 	query := fmt.Sprintf(
 		`SELECT id, org_id, agent_name, agent_id, status, input, output, error,
 		        metadata, total_tokens, total_cost_cents, total_spans, duration_ms,
 		        has_healing, tags, started_at, ended_at, created_at
 		 FROM agentstack.sessions
 		 WHERE %s
-		 ORDER BY started_at DESC
-		 LIMIT ? OFFSET ?`, whereClause)
+		 ORDER BY %s
+		 LIMIT ? OFFSET ?`, whereClause, orderClause)
 
 	args = append(args, f.Limit, f.Offset)
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -220,7 +284,8 @@ func (s *ClickHouseStore) GetSessionSpans(ctx context.Context, orgID, sessionID 
 	                 duration_ms, metadata, started_at, ended_at, created_at
 	          FROM agentstack.spans
 	          WHERE org_id = ? AND session_id = ?
-	          ORDER BY started_at ASC`
+	          ORDER BY started_at ASC
+	          LIMIT 1000`
 
 	rows, err := s.db.QueryContext(ctx, query, orgID, sessionID)
 	if err != nil {
@@ -419,8 +484,8 @@ func (s *ClickHouseStore) GetOverviewFromMV(ctx context.Context, orgID string, s
 	            countMerge(session_count) AS total_sessions,
 	            countMerge(failed_count) AS total_failed,
 	            countMerge(healed_count) AS total_healed,
-	            sumMerge(total_tokens) AS total_tokens,
-	            sumMerge(total_cost_cents) AS total_cost_cents,
+	            sumMerge(sum_tokens) AS total_tokens,
+	            sumMerge(sum_cost_cents) AS total_cost_cents,
 	            sumMerge(sum_duration_ms) / GREATEST(countMerge(session_count), 1) AS avg_duration_ms,
 	            maxMerge(max_duration_ms) AS max_duration_ms
 	          FROM agentstack.mv_sessions_hourly_data
@@ -539,8 +604,8 @@ func (s *ClickHouseStore) GetOverviewWithCounters(ctx context.Context, orgID str
 	            COALESCE(countMerge(mv.session_count), 0) + COALESCE(countMerge(c.session_count), 0) AS total_sessions,
 	            COALESCE(countMerge(mv.failed_count), 0) AS total_failed,
 	            COALESCE(countMerge(mv.healed_count), 0) AS total_healed,
-	            COALESCE(sumMerge(mv.total_tokens), 0) + COALESCE(sumMerge(c.sum_tokens), 0) AS total_tokens,
-	            COALESCE(sumMerge(mv.total_cost_cents), 0) + COALESCE(sumMerge(c.sum_cost_cents), 0) AS total_cost_cents,
+	            COALESCE(sumMerge(mv.sum_tokens), 0) + COALESCE(sumMerge(c.sum_tokens), 0) AS total_tokens,
+	            COALESCE(sumMerge(mv.sum_cost_cents), 0) + COALESCE(sumMerge(c.sum_cost_cents), 0) AS total_cost_cents,
 	            (COALESCE(sumMerge(mv.sum_duration_ms), 0) + COALESCE(sumMerge(c.sum_duration_ms), 0)) /
 	                GREATEST(COALESCE(countMerge(mv.session_count), 0) + COALESCE(countMerge(c.session_count), 0), 1) AS avg_duration_ms
 	          FROM agentstack.mv_sessions_hourly_data mv
