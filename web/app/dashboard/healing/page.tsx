@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
 import type { HealingEvent } from "@/lib/types";
 import { useTimeRange } from "@/hooks/use-time-range";
+import { TimeRangePicker } from "@/components/time-range-picker";
 
 // Default zero metrics for initial state and empty data
 const zeroMetrics = {
@@ -180,11 +181,14 @@ export default function HealingPage() {
       className="space-y-6"
     >
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold">Healing Interventions</h1>
-        <p className="text-sm text-[var(--text-secondary)] mt-1">
-          Self-healing actions taken by Shield to recover agent failures
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Healing Interventions</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-1">
+            Self-healing actions taken by Shield to recover agent failures
+          </p>
+        </div>
+        <TimeRangePicker />
       </div>
 
       {/* Metric Cards */}

@@ -25,6 +25,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
 import { downloadExport } from "@/lib/export";
+import { useTimeRange } from "@/hooks/use-time-range";
+import { TimeRangePicker } from "@/components/time-range-picker";
+import { SessionDetailSheet } from "@/components/session-detail-sheet";
 import type { Session } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -304,6 +307,10 @@ const PAGE_SIZE_OPTIONS = [25, 50, 100];
 function SessionsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { start, end } = useTimeRange();
+
+  // Session detail sheet state
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
   // ---------------------------------------------------------------------------
   // Derive state from URL search params (single source of truth)
@@ -380,8 +387,10 @@ function SessionsContent() {
     if (statusFilter && statusFilter !== "all") params.set("status", statusFilter);
     if (sortBy) params.set("sort_by", sortBy);
     if (sortDir) params.set("sort_dir", sortDir);
+    if (start) params.set("start", start);
+    if (end) params.set("end", end);
     return `/v1/sessions?${params.toString()}`;
-  }, [page, perPage, searchParam, statusFilter, sortBy, sortDir]);
+  }, [page, perPage, searchParam, statusFilter, sortBy, sortDir, start, end]);
 
   // ---------------------------------------------------------------------------
   // Fetch sessions from API
@@ -507,11 +516,14 @@ function SessionsContent() {
       className="space-y-6"
     >
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold">Sessions</h1>
-        <p className="text-sm text-[var(--text-secondary)] mt-1">
-          Browse and inspect agent execution sessions
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Sessions</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-1">
+            Browse and inspect agent execution sessions
+          </p>
+        </div>
+        <TimeRangePicker />
       </div>
 
       {/* Search / Filter Bar */}
@@ -666,7 +678,7 @@ function SessionsContent() {
                       key={session.id}
                       variants={staggerItem}
                       onClick={() =>
-                        router.push(`/dashboard/sessions/${session.id}`)
+                        setSelectedSessionId(session.id)
                       }
                       className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--bg-hover)] transition-colors cursor-pointer group"
                     >
@@ -807,6 +819,11 @@ function SessionsContent() {
           </div>
         </motion.div>
       )}
+      {/* Session Detail Sheet */}
+      <SessionDetailSheet
+        sessionId={selectedSessionId}
+        onClose={() => setSelectedSessionId(null)}
+      />
     </motion.div>
   );
 }

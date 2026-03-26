@@ -24,6 +24,7 @@ import { AreaChart, LineChart } from "@/components/charts";
 import { fadeIn, staggerContainer } from "@/lib/animations";
 import { api, ApiError } from "@/lib/api";
 import { useTimeRange } from "@/hooks/use-time-range";
+import { TimeRangePicker } from "@/components/time-range-picker";
 
 // ---------------------------------------------------------------------------
 // Types matching the backend response shapes
@@ -642,6 +643,7 @@ export default function OverviewPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <TimeRangePicker />
           {/* Auto-refresh controls */}
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg px-1 py-0.5">

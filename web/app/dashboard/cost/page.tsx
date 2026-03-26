@@ -27,6 +27,7 @@ import {
 import { api } from "@/lib/api";
 import { downloadExport } from "@/lib/export";
 import { useTimeRange } from "@/hooks/use-time-range";
+import { TimeRangePicker } from "@/components/time-range-picker";
 
 // ---------------------------------------------------------------------------
 // Types matching backend response shapes
@@ -288,7 +289,9 @@ export default function CostOverviewPage() {
             Track spend, analyze cost efficiency, and manage budgets
           </p>
         </div>
-        <motion.button
+        <div className="flex items-center gap-3">
+          <TimeRangePicker />
+          <motion.button
           whileTap={{ scale: 0.95 }}
           onClick={handleExportCSV}
           disabled={exporting}
@@ -298,6 +301,7 @@ export default function CostOverviewPage() {
           <Download className={`w-4 h-4 ${exporting ? "animate-bounce" : ""}`} />
           <span className="hidden sm:inline">{exporting ? "Exporting..." : "Export CSV"}</span>
         </motion.button>
+        </div>
       </div>
 
       {/* Error State */}

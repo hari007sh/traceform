@@ -26,6 +26,7 @@ import {
 } from "@/components/skeleton";
 import { api } from "@/lib/api";
 import { useTimeRange } from "@/hooks/use-time-range";
+import { TimeRangePicker } from "@/components/time-range-picker";
 
 // ---------------------------------------------------------------------------
 // Types matching backend response shape for /v1/analytics/overview
@@ -221,11 +222,14 @@ export default function AnalyticsPage() {
       className="space-y-6"
     >
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold">Analytics</h1>
-        <p className="text-sm text-[var(--text-secondary)] mt-1">
-          Aggregate performance and cost analytics across agents
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Analytics</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-1">
+            Aggregate performance and cost analytics across agents
+          </p>
+        </div>
+        <TimeRangePicker />
       </div>
 
       {/* Error State */}

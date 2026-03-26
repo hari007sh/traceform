@@ -22,6 +22,7 @@ import { SkeletonMetricCards, SkeletonTable } from "@/components/skeleton";
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
 import { useTimeRange } from "@/hooks/use-time-range";
+import { TimeRangePicker } from "@/components/time-range-picker";
 
 // ---------------------------------------------------------------------------
 // Guard type display names — maps backend guard_type to human-readable name
@@ -281,6 +282,7 @@ export default function GuardOverviewPage() {
             Monitor content safety checks and guard rule activity
           </p>
         </div>
+        <TimeRangePicker />
       </div>
 
       {/* Metric Cards */}
