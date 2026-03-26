@@ -24,6 +24,7 @@ import {
   SkeletonTable,
 } from "@/components/skeleton";
 import { api } from "@/lib/api";
+import { useTimeRange } from "@/hooks/use-time-range";
 
 // ---------------------------------------------------------------------------
 // Types matching backend response shapes
@@ -117,6 +118,7 @@ function formatCostLarge(cents: number): string {
 // ---------------------------------------------------------------------------
 
 export default function CostOverviewPage() {
+  const { start, end } = useTimeRange();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -143,10 +145,11 @@ export default function CostOverviewPage() {
 
     try {
       // Fetch cost summary + trend, by-model breakdown, top spenders, and budgets in parallel
+      const timeParams = `start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
       const [summaryRes, byModelRes, topSpendersRes, budgetsRes] = await Promise.all([
-        api.get<CostSummaryResponse>("/v1/cost/analytics/summary"),
-        api.get<{ models: ModelCostBreakdown[] }>("/v1/cost/analytics/by-model"),
-        api.get<{ spenders: TopSpender[] }>("/v1/cost/analytics/top-spenders?limit=10"),
+        api.get<CostSummaryResponse>(`/v1/cost/analytics/summary?${timeParams}`),
+        api.get<{ models: ModelCostBreakdown[] }>(`/v1/cost/analytics/by-model?${timeParams}`),
+        api.get<{ spenders: TopSpender[] }>(`/v1/cost/analytics/top-spenders?limit=10&${timeParams}`),
         api.get<{ budgets: BudgetWithUtil[] }>("/v1/cost/budgets"),
       ]);
 
@@ -241,7 +244,7 @@ export default function CostOverviewPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [start, end]);
 
   useEffect(() => {
     fetchData();

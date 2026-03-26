@@ -23,6 +23,7 @@ import { ReliabilityScore } from "@/components/reliability-score";
 import { AreaChart, LineChart } from "@/components/charts";
 import { fadeIn, staggerContainer } from "@/lib/animations";
 import { api, ApiError } from "@/lib/api";
+import { useTimeRange } from "@/hooks/use-time-range";
 
 // ---------------------------------------------------------------------------
 // Types matching the backend response shapes
@@ -153,16 +154,7 @@ function apiSessionToRecentSession(s: APISession): RecentSession {
   };
 }
 
-// Build the time range query params for the last 7 days
-function buildTimeRangeParams(): { start: string; end: string } {
-  const end = new Date();
-  const start = new Date();
-  start.setDate(start.getDate() - 7);
-  return {
-    start: start.toISOString(),
-    end: end.toISOString(),
-  };
-}
+// buildTimeRangeParams removed — now uses useTimeRange hook
 
 // ---------------------------------------------------------------------------
 // Stats shape
@@ -192,7 +184,7 @@ interface DashboardData {
 
 type LoadState = "loading" | "loaded" | "error";
 
-function useDashboardData() {
+function useDashboardData(start: string, end: string) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -209,7 +201,6 @@ function useDashboardData() {
       }
     }
 
-    const { start, end } = buildTimeRangeParams();
     // Daily interval = 86400 seconds
     const interval = 86400;
 
@@ -280,7 +271,7 @@ function useDashboardData() {
 
       setLoadState("error");
     }
-  }, []);
+  }, [start, end]);
 
   useEffect(() => {
     fetchData();
@@ -506,8 +497,34 @@ function EmptyRecentSessions() {
 // Page component
 // ---------------------------------------------------------------------------
 
+type RefreshInterval = 0 | 10000 | 30000 | 60000;
+const REFRESH_OPTIONS: { label: string; value: RefreshInterval }[] = [
+  { label: "Off", value: 0 },
+  { label: "10s", value: 10000 },
+  { label: "30s", value: 30000 },
+  { label: "1m", value: 60000 },
+];
+
 export default function OverviewPage() {
-  const { data, loadState, error, retry } = useDashboardData();
+  const { start, end } = useTimeRange();
+  const { data, loadState, error, retry } = useDashboardData(start, end);
+
+  const [refreshInterval, setRefreshInterval] = useState<RefreshInterval>(0);
+  const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
+
+  // Auto-refresh interval
+  useEffect(() => {
+    if (refreshInterval === 0) return;
+
+    const id = setInterval(async () => {
+      setIsAutoRefreshing(true);
+      await retry();
+      // Small delay so the indicator is visible
+      setTimeout(() => setIsAutoRefreshing(false), 600);
+    }, refreshInterval);
+
+    return () => clearInterval(id);
+  }, [refreshInterval, retry]);
 
   // Full loading state: show skeleton layout
   if (loadState === "loading" && !data) {
@@ -625,6 +642,28 @@ export default function OverviewPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Auto-refresh controls */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg px-1 py-0.5">
+              {REFRESH_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setRefreshInterval(opt.value)}
+                  className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                    refreshInterval === opt.value
+                      ? "bg-[var(--accent-blue)]/15 text-[var(--accent-blue)]"
+                      : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {isAutoRefreshing && (
+              <RefreshCw className="w-3.5 h-3.5 text-[var(--accent-blue)] animate-spin" />
+            )}
+          </div>
+
           <div className="text-right mr-2 hidden sm:block">
             <p className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium">
               Reliability

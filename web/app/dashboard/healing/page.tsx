@@ -20,6 +20,7 @@ import { SkeletonMetricCards, SkeletonTable } from "@/components/skeleton";
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
 import type { HealingEvent } from "@/lib/types";
+import { useTimeRange } from "@/hooks/use-time-range";
 
 // Default zero metrics for initial state and empty data
 const zeroMetrics = {
@@ -74,33 +75,7 @@ const healingTypeConfig: Record<
   },
 };
 
-const timeRanges = [
-  { label: "Last 24h", value: "24h" },
-  { label: "7d", value: "7d" },
-  { label: "30d", value: "30d" },
-];
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Map a time range selector value to {start, end} ISO strings. */
-function rangeToParams(range: string): { start: string; end: string } {
-  const now = new Date();
-  const end = now.toISOString();
-  let start: Date;
-  switch (range) {
-    case "7d":
-      start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      break;
-    case "30d":
-      start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      break;
-    default:
-      start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  }
-  return { start: start.toISOString(), end };
-}
+// rangeToParams and local timeRanges removed — now uses global useTimeRange hook
 
 // ---------------------------------------------------------------------------
 // API response shapes (match Go backend exactly)
@@ -118,14 +93,14 @@ interface HealingAnalyticsResponse {
 // ---------------------------------------------------------------------------
 
 export default function HealingPage() {
+  const { start, end } = useTimeRange();
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [events, setEvents] = useState<(HealingEvent & { time_ago: string })[]>([]);
   const [metrics, setMetrics] = useState(zeroMetrics);
-  const [selectedRange, setSelectedRange] = useState("24h");
 
   const fetchHealingData = useCallback(
-    async (range: string) => {
+    async () => {
       setLoading(true);
       setFetchError(null);
 
@@ -134,8 +109,6 @@ export default function HealingPage() {
       if (token) {
         api.setToken(token);
       }
-
-      const { start, end } = rangeToParams(range);
 
       try {
         // Fetch analytics and recent events in parallel
@@ -190,12 +163,12 @@ export default function HealingPage() {
         setLoading(false);
       }
     },
-    []
+    [start, end]
   );
 
   useEffect(() => {
-    fetchHealingData(selectedRange);
-  }, [fetchHealingData, selectedRange]);
+    fetchHealingData();
+  }, [fetchHealingData]);
 
   const isEmpty = !loading && !fetchError && events.length === 0 && metrics.total_interventions === 0;
 
@@ -207,31 +180,11 @@ export default function HealingPage() {
       className="space-y-6"
     >
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">Healing Interventions</h1>
-          <p className="text-sm text-[var(--text-secondary)] mt-1">
-            Self-healing actions taken by Shield to recover agent failures
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Time Range Selector */}
-          <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-subtle)]">
-            {timeRanges.map((range) => (
-              <button
-                key={range.value}
-                onClick={() => setSelectedRange(range.value)}
-                className={`px-3 py-1.5 text-xs rounded-md font-medium transition-all duration-150 ${
-                  selectedRange === range.value
-                    ? "bg-[var(--bg-elevated)] text-[var(--text-primary)] shadow-sm border border-[var(--border-subtle)]"
-                    : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-                }`}
-              >
-                {range.label}
-              </button>
-            ))}
-          </div>
-        </div>
+      <div>
+        <h1 className="text-xl font-semibold">Healing Interventions</h1>
+        <p className="text-sm text-[var(--text-secondary)] mt-1">
+          Self-healing actions taken by Shield to recover agent failures
+        </p>
       </div>
 
       {/* Metric Cards */}
@@ -290,7 +243,7 @@ export default function HealingPage() {
             {fetchError}
           </p>
           <Button
-            onClick={() => fetchHealingData(selectedRange)}
+            onClick={() => fetchHealingData()}
             variant="outline"
             size="sm"
             className="gap-1.5 border-[var(--border-default)] bg-[var(--bg-primary)] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"

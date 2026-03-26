@@ -21,6 +21,7 @@ import {
 import { SkeletonMetricCards, SkeletonTable } from "@/components/skeleton";
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
+import { useTimeRange } from "@/hooks/use-time-range";
 
 // ---------------------------------------------------------------------------
 // Guard type display names — maps backend guard_type to human-readable name
@@ -179,6 +180,7 @@ function mapApiEventToUI(
 // Component
 // ---------------------------------------------------------------------------
 export default function GuardOverviewPage() {
+  const { start, end } = useTimeRange();
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [events, setEvents] = useState<GuardEventUI[]>([]);
@@ -197,9 +199,10 @@ export default function GuardOverviewPage() {
 
     try {
       // Fetch analytics, events, and rules in parallel
+      const timeParams = `start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
       const [analyticsData, eventsData, rulesData] = await Promise.all([
-        api.get<GuardAnalyticsResponse>("/v1/guard/analytics"),
-        api.get<GuardEventsListResponse>("/v1/guard/events?limit=50"),
+        api.get<GuardAnalyticsResponse>(`/v1/guard/analytics?${timeParams}`),
+        api.get<GuardEventsListResponse>(`/v1/guard/events?limit=50&${timeParams}`),
         api.get<GuardRulesListResponse>("/v1/guard/rules"),
       ]);
 
@@ -251,7 +254,7 @@ export default function GuardOverviewPage() {
       setEvents([]);
       setLoading(false);
     }
-  }, []);
+  }, [start, end]);
 
   useEffect(() => {
     fetchGuardData();

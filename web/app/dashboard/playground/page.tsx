@@ -160,21 +160,35 @@ const KNOWN_MODELS: Record<string, { id: string; name: string; badge: string }[]
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 // --- Helper: build model catalog from providers ---
-function buildModelCatalog(providers: ProviderRecord[]): ModelConfig[] {
+function buildModelCatalog(providers: ProviderRecord[], routeModels?: Map<string, string[]>): ModelConfig[] {
   const models: ModelConfig[] = [];
   for (const p of providers) {
     if (!p.is_enabled) continue;
     const known = KNOWN_MODELS[p.name] || [];
     if (known.length === 0) {
-      // Unknown provider — add a single generic entry
-      models.push({
-        id: `${p.name}:default`,
-        name: p.display_name || p.name,
-        provider: p.name,
-        providerDisplay: p.display_name || PROVIDER_DISPLAY_NAMES[p.name] || p.name,
-        providerColor: PROVIDER_COLORS[p.name] || "#666",
-        badge: "",
-      });
+      // Unknown provider — check route models first, then add a generic entry
+      const fromRoutes = routeModels?.get(p.id) || [];
+      if (fromRoutes.length > 0) {
+        for (const modelId of fromRoutes) {
+          models.push({
+            id: modelId,
+            name: modelId,
+            provider: p.name,
+            providerDisplay: p.display_name || PROVIDER_DISPLAY_NAMES[p.name] || p.name,
+            providerColor: PROVIDER_COLORS[p.name] || "#666",
+            badge: "",
+          });
+        }
+      } else {
+        models.push({
+          id: `${p.name}:default`,
+          name: p.display_name || p.name,
+          provider: p.name,
+          providerDisplay: p.display_name || PROVIDER_DISPLAY_NAMES[p.name] || p.name,
+          providerColor: PROVIDER_COLORS[p.name] || "#666",
+          badge: "",
+        });
+      }
     } else {
       for (const m of known) {
         models.push({
@@ -448,13 +462,32 @@ export default function PlaygroundPage() {
 
     async function loadProviders() {
       try {
-        const data = await api.get<ProviderRecord[]>("/v1/gateway/providers");
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        if (token) {
+          api.setToken(token);
+        }
+        const [data, routesData] = await Promise.all([
+          api.get<ProviderRecord[]>("/v1/gateway/providers"),
+          api.get<{ id: string; name: string; provider_id: string; target_model: string; enabled: boolean }[]>("/v1/gateway/routes"),
+        ]);
         if (cancelled) return;
 
         const list = Array.isArray(data) ? data : [];
         setProviders(list);
 
-        const catalog = buildModelCatalog(list);
+        // Build a map of provider_id → target_models from routes
+        const routeModels = new Map<string, string[]>();
+        const routes = Array.isArray(routesData) ? routesData : [];
+        for (const rt of routes) {
+          if (!rt.enabled || !rt.target_model) continue;
+          const existing = routeModels.get(rt.provider_id) || [];
+          if (!existing.includes(rt.target_model)) {
+            existing.push(rt.target_model);
+          }
+          routeModels.set(rt.provider_id, existing);
+        }
+
+        const catalog = buildModelCatalog(list, routeModels);
         setModels(catalog);
 
         // Set default selections
@@ -536,7 +569,7 @@ export default function PlaygroundPage() {
       // Try to get auth token from cookie or localStorage
       const token =
         typeof window !== "undefined"
-          ? localStorage.getItem("auth_token") || ""
+          ? localStorage.getItem("token") || ""
           : "";
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
