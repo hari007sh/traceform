@@ -1,0 +1,25 @@
+CREATE TABLE IF NOT EXISTS sso_configs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    provider_type TEXT NOT NULL CHECK (provider_type IN ('saml', 'oidc')),
+    display_name TEXT NOT NULL DEFAULT '',
+    idp_metadata_xml TEXT,
+    idp_entity_id TEXT,
+    idp_sso_url TEXT,
+    idp_certificate TEXT,
+    sp_entity_id TEXT,
+    sp_acs_url TEXT,
+    oidc_issuer_url TEXT,
+    oidc_client_id TEXT,
+    oidc_client_secret_encrypted TEXT,
+    oidc_client_secret_nonce TEXT,
+    oidc_scopes TEXT[] DEFAULT '{openid,profile,email}',
+    email_domain TEXT NOT NULL,
+    default_role TEXT NOT NULL DEFAULT 'viewer',
+    enforce_sso BOOLEAN NOT NULL DEFAULT false,
+    is_enabled BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(org_id, email_domain)
+);
+CREATE INDEX idx_sso_configs_domain ON sso_configs(email_domain) WHERE is_enabled = true;
