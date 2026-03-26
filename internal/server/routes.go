@@ -119,8 +119,11 @@ func (s *Server) setupRoutes() {
 			r.Use(limiter.Middleware())
 		}
 
-		// Trace module: Ingestion routes
+		// Trace module: Ingestion routes (higher rate limit for ingest)
 		r.Route("/ingest", func(r chi.Router) {
+			if s.redis != nil {
+				r.Use(middleware.RateLimit(s.redis, 10000))
+			}
 			r.Post("/sessions", ingestHandler.IngestSession)
 			r.Post("/spans", ingestHandler.IngestSpans)
 			r.Post("/events", ingestHandler.IngestEvents)

@@ -8,22 +8,36 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/time/rate"
 )
 
-// RateLimiter provides Redis-based sliding window rate limiting.
+// RateLimiter provides Redis-based sliding window rate limiting
+// with an in-memory fallback when Redis is unavailable.
 type RateLimiter struct {
-	client *redis.Client
-	limit  int
-	window time.Duration
+	client     *redis.Client
+	localLimit *rate.Limiter // fallback when Redis is down
+	limit      int
+	window     time.Duration
 }
 
 // NewRateLimiter creates a new rate limiter.
 func NewRateLimiter(client *redis.Client, limit int, window time.Duration) *RateLimiter {
+	// Configure the in-memory fallback limiter.
+	// rate.Limit converts requests-per-window to a per-second rate.
+	perSecond := rate.Limit(float64(limit) / window.Seconds())
 	return &RateLimiter{
-		client: client,
-		limit:  limit,
-		window: window,
+		client:     client,
+		localLimit: rate.NewLimiter(perSecond, limit),
+		limit:      limit,
+		window:     window,
 	}
+}
+
+// RateLimit is a convenience constructor that returns chi-compatible middleware.
+// Use it to apply different limits to different route groups.
+func RateLimit(rdb *redis.Client, requestsPerMinute int) func(http.Handler) http.Handler {
+	rl := NewRateLimiter(rdb, requestsPerMinute, time.Minute)
+	return rl.Middleware()
 }
 
 // Middleware returns an HTTP middleware that enforces rate limiting.
@@ -42,7 +56,11 @@ func (rl *RateLimiter) Middleware() func(http.Handler) http.Handler {
 			ctx := r.Context()
 			allowed, remaining, err := rl.check(ctx, key, now)
 			if err != nil {
-				// If Redis is down, allow the request (fail open)
+				// Redis is down — fail closed using in-memory limiter
+				if !rl.localLimit.Allow() {
+					writeRateLimited(w)
+					return
+				}
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -52,7 +70,7 @@ func (rl *RateLimiter) Middleware() func(http.Handler) http.Handler {
 			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(now.Add(rl.window).Unix(), 10))
 
 			if !allowed {
-				writeError(w, http.StatusTooManyRequests, "RATE_LIMITED", "too many requests, please try again later")
+				writeRateLimited(w)
 				return
 			}
 
@@ -86,4 +104,9 @@ func (rl *RateLimiter) check(ctx context.Context, key string, now time.Time) (bo
 	}
 
 	return count < rl.limit, remaining, nil
+}
+
+// writeRateLimited sends a 429 response.
+func writeRateLimited(w http.ResponseWriter) {
+	writeError(w, http.StatusTooManyRequests, "RATE_LIMITED", "too many requests, please try again later")
 }
