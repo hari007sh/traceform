@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/agentstack/agentstack/internal/route/provider"
 	"github.com/agentstack/agentstack/internal/route/service"
 	"github.com/agentstack/agentstack/internal/route/store"
@@ -28,6 +30,9 @@ type Router struct {
 	logger        *slog.Logger
 	refreshTicker *time.Ticker
 	done          chan struct{}
+	sfGroup       singleflight.Group           // dedup concurrent loads per org
+	lastLoaded    map[string]time.Time         // orgID -> last DB load time
+	orgTTL        time.Duration                // freshness window per org
 }
 
 // RoutingResult contains the outcome of a routing decision.
@@ -47,6 +52,8 @@ func NewRouter(s *store.Store, encSvc *service.Encryption, logger *slog.Logger) 
 		routes:        make(map[string][]store.Route),
 		providers:     make(map[string][]store.Provider),
 		adapters:      make(map[string]provider.Provider),
+		lastLoaded:    make(map[string]time.Time),
+		orgTTL:        60 * time.Second,
 		logger:        logger,
 		refreshTicker: time.NewTicker(30 * time.Second),
 		done:          make(chan struct{}),
@@ -65,10 +72,16 @@ func (r *Router) refreshLoop() {
 	for {
 		select {
 		case <-r.refreshTicker.C:
-			// Periodic refresh is lazy per-org; we just clear stale data
+			// Only evict orgs whose data is older than the TTL
+			now := time.Now()
 			r.mu.Lock()
-			r.routes = make(map[string][]store.Route)
-			r.providers = make(map[string][]store.Provider)
+			for orgID, loadedAt := range r.lastLoaded {
+				if now.Sub(loadedAt) >= r.orgTTL {
+					delete(r.routes, orgID)
+					delete(r.providers, orgID)
+					delete(r.lastLoaded, orgID)
+				}
+			}
 			r.mu.Unlock()
 		case <-r.done:
 			return
@@ -76,17 +89,27 @@ func (r *Router) refreshLoop() {
 	}
 }
 
-// loadOrg ensures the in-memory cache has data for the given org.
+// loadOrg ensures the in-memory cache has fresh data for the given org.
+// It uses per-org TTL staleness checks and singleflight to prevent
+// concurrent DB loads for the same org (thundering herd).
 func (r *Router) loadOrg(ctx context.Context, orgID string) error {
 	r.mu.RLock()
-	_, hasRoutes := r.routes[orgID]
-	_, hasProviders := r.providers[orgID]
-	r.mu.RUnlock()
-
-	if hasRoutes && hasProviders {
+	if t, ok := r.lastLoaded[orgID]; ok && time.Since(t) < r.orgTTL {
+		r.mu.RUnlock()
 		return nil
 	}
+	r.mu.RUnlock()
 
+	_, err, _ := r.sfGroup.Do("load:"+orgID, func() (interface{}, error) {
+		return nil, r.loadOrgFromDB(ctx, orgID)
+	})
+	return err
+}
+
+// loadOrgFromDB fetches routes and providers from the database and updates
+// the in-memory cache. Called via singleflight so only one goroutine per org
+// hits the DB at a time.
+func (r *Router) loadOrgFromDB(ctx context.Context, orgID string) error {
 	routes, err := r.store.ListEnabledRoutes(ctx, orgID)
 	if err != nil {
 		return fmt.Errorf("load routes: %w", err)
@@ -100,6 +123,7 @@ func (r *Router) loadOrg(ctx context.Context, orgID string) error {
 	r.mu.Lock()
 	r.routes[orgID] = routes
 	r.providers[orgID] = providers
+	r.lastLoaded[orgID] = time.Now()
 
 	// Build adapters for providers not yet registered
 	for _, p := range providers {
