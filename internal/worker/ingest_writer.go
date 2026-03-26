@@ -8,7 +8,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	shieldservice "github.com/agentstack/agentstack/internal/shield/service"
@@ -18,13 +22,36 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-const (
-	batchSize     = 100
-	flushInterval = 2 * time.Second
+var (
+	batchSize      = envInt("INGEST_BATCH_SIZE", 10000)
+	flushInterval  = envDuration("INGEST_FLUSH_INTERVAL_MS", 5*time.Second)
+	maxBufferSize  = envInt("INGEST_MAX_BUFFER_SIZE", 50000)
 	maxPayloadSize = 4096
 
 	SubjectCounterIngest = "trace.ingest.counter"
+
+	queueGroup = "ingest-workers"
 )
+
+// envInt reads an integer from an environment variable or returns the fallback.
+func envInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return fallback
+}
+
+// envDuration reads a millisecond duration from an environment variable or returns the fallback.
+func envDuration(key string, fallback time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if ms, err := strconv.Atoi(v); err == nil && ms > 0 {
+			return time.Duration(ms) * time.Millisecond
+		}
+	}
+	return fallback
+}
 
 // SessionCounter represents an aggregated session counter event.
 type SessionCounter struct {
@@ -51,7 +78,14 @@ type IngestWriter struct {
 	healingBuf []shieldservice.HealingIngestRequest
 	counterBuf []SessionCounter
 
-	mu         sync.Mutex
+	sessionMu  sync.Mutex
+	spanMu     sync.Mutex
+	eventMu    sync.Mutex
+	healingMu  sync.Mutex
+	counterMu  sync.Mutex
+
+	droppedCount atomic.Int64
+
 	done       chan struct{}
 	subs       []*nats.Subscription
 	counterSub *nats.Subscription
@@ -86,27 +120,27 @@ func (w *IngestWriter) truncatePayload(ctx context.Context, payload string) (tru
 
 // Start begins subscribing to NATS subjects and periodically flushing buffers.
 func (w *IngestWriter) Start() error {
-	subSession, err := w.nc.Subscribe(service.SubjectSessionIngest, w.handleSession)
+	subSession, err := w.nc.QueueSubscribe(service.SubjectSessionIngest, queueGroup, w.handleSession)
 	if err != nil {
 		return fmt.Errorf("subscribe session: %w", err)
 	}
 
-	subSpan, err := w.nc.Subscribe(service.SubjectSpanIngest, w.handleSpan)
+	subSpan, err := w.nc.QueueSubscribe(service.SubjectSpanIngest, queueGroup, w.handleSpan)
 	if err != nil {
 		return fmt.Errorf("subscribe span: %w", err)
 	}
 
-	subEvent, err := w.nc.Subscribe(service.SubjectEventIngest, w.handleEvent)
+	subEvent, err := w.nc.QueueSubscribe(service.SubjectEventIngest, queueGroup, w.handleEvent)
 	if err != nil {
 		return fmt.Errorf("subscribe event: %w", err)
 	}
 
-	subHealing, err := w.nc.Subscribe(shieldservice.SubjectHealingIngest, w.handleHealing)
+	subHealing, err := w.nc.QueueSubscribe(shieldservice.SubjectHealingIngest, queueGroup, w.handleHealing)
 	if err != nil {
 		return fmt.Errorf("subscribe healing: %w", err)
 	}
 
-	subCounter, err := w.nc.Subscribe(SubjectCounterIngest, w.handleCounter)
+	subCounter, err := w.nc.QueueSubscribe(SubjectCounterIngest, queueGroup, w.handleCounter)
 	if err != nil {
 		return fmt.Errorf("subscribe counter: %w", err)
 	}
@@ -118,6 +152,7 @@ func (w *IngestWriter) Start() error {
 		"subjects", []string{service.SubjectSessionIngest, service.SubjectSpanIngest, service.SubjectEventIngest, shieldservice.SubjectHealingIngest, SubjectCounterIngest},
 		"batch_size", batchSize,
 		"flush_interval", flushInterval,
+		"max_buffer_size", maxBufferSize,
 	)
 
 	go w.flushLoop()
@@ -149,10 +184,15 @@ func (w *IngestWriter) handleSession(msg *nats.Msg) {
 		return
 	}
 
-	w.mu.Lock()
+	w.sessionMu.Lock()
+	if len(w.sessionBuf) >= maxBufferSize {
+		w.sessionMu.Unlock()
+		w.droppedCount.Add(1)
+		return
+	}
 	w.sessionBuf = append(w.sessionBuf, req)
 	shouldFlush := len(w.sessionBuf) >= batchSize
-	w.mu.Unlock()
+	w.sessionMu.Unlock()
 
 	if shouldFlush {
 		w.flushSessions()
@@ -166,10 +206,15 @@ func (w *IngestWriter) handleSpan(msg *nats.Msg) {
 		return
 	}
 
-	w.mu.Lock()
+	w.spanMu.Lock()
+	if len(w.spanBuf) >= maxBufferSize {
+		w.spanMu.Unlock()
+		w.droppedCount.Add(1)
+		return
+	}
 	w.spanBuf = append(w.spanBuf, req)
 	shouldFlush := len(w.spanBuf) >= batchSize
-	w.mu.Unlock()
+	w.spanMu.Unlock()
 
 	if shouldFlush {
 		w.flushSpans()
@@ -183,10 +228,15 @@ func (w *IngestWriter) handleEvent(msg *nats.Msg) {
 		return
 	}
 
-	w.mu.Lock()
+	w.eventMu.Lock()
+	if len(w.eventBuf) >= maxBufferSize {
+		w.eventMu.Unlock()
+		w.droppedCount.Add(1)
+		return
+	}
 	w.eventBuf = append(w.eventBuf, req)
 	shouldFlush := len(w.eventBuf) >= batchSize
-	w.mu.Unlock()
+	w.eventMu.Unlock()
 
 	if shouldFlush {
 		w.flushEvents()
@@ -200,13 +250,39 @@ func (w *IngestWriter) handleHealing(msg *nats.Msg) {
 		return
 	}
 
-	w.mu.Lock()
+	w.healingMu.Lock()
+	if len(w.healingBuf) >= maxBufferSize {
+		w.healingMu.Unlock()
+		w.droppedCount.Add(1)
+		return
+	}
 	w.healingBuf = append(w.healingBuf, req)
 	shouldFlush := len(w.healingBuf) >= batchSize
-	w.mu.Unlock()
+	w.healingMu.Unlock()
 
 	if shouldFlush {
 		w.flushHealing()
+	}
+}
+
+func (w *IngestWriter) handleCounter(msg *nats.Msg) {
+	var counter SessionCounter
+	if err := json.Unmarshal(msg.Data, &counter); err != nil {
+		w.logger.Error("unmarshal counter", "error", err)
+		return
+	}
+	w.counterMu.Lock()
+	if len(w.counterBuf) >= maxBufferSize {
+		w.counterMu.Unlock()
+		w.droppedCount.Add(1)
+		return
+	}
+	w.counterBuf = append(w.counterBuf, counter)
+	shouldFlush := len(w.counterBuf) >= batchSize
+	w.counterMu.Unlock()
+
+	if shouldFlush {
+		w.flushCounters()
 	}
 }
 
@@ -225,32 +301,36 @@ func (w *IngestWriter) flushLoop() {
 }
 
 func (w *IngestWriter) flush() {
-	w.flushSessions()
-	w.flushSpans()
-	w.flushEvents()
-	w.flushHealing()
-	w.flushCounters()
+	var wg sync.WaitGroup
+	wg.Add(5)
+	go func() { defer wg.Done(); w.flushSessions() }()
+	go func() { defer wg.Done(); w.flushSpans() }()
+	go func() { defer wg.Done(); w.flushEvents() }()
+	go func() { defer wg.Done(); w.flushHealing() }()
+	go func() { defer wg.Done(); w.flushCounters() }()
+	wg.Wait()
+
+	if dropped := w.droppedCount.Swap(0); dropped > 0 {
+		w.logger.Warn("dropped messages due to full buffers", "dropped", dropped)
+	}
 }
 
 func (w *IngestWriter) flushSessions() {
-	w.mu.Lock()
+	w.sessionMu.Lock()
 	if len(w.sessionBuf) == 0 {
-		w.mu.Unlock()
+		w.sessionMu.Unlock()
 		return
 	}
 	batch := w.sessionBuf
 	w.sessionBuf = nil
-	w.mu.Unlock()
+	w.sessionMu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := w.writeSessions(ctx, batch); err != nil {
 		w.logger.Error("failed to write sessions batch", "count", len(batch), "error", err)
-		// Re-queue on failure
-		w.mu.Lock()
-		w.sessionBuf = append(batch, w.sessionBuf...)
-		w.mu.Unlock()
+		w.writeDeadLetter("sessions", batch)
 		return
 	}
 
@@ -258,23 +338,21 @@ func (w *IngestWriter) flushSessions() {
 }
 
 func (w *IngestWriter) flushSpans() {
-	w.mu.Lock()
+	w.spanMu.Lock()
 	if len(w.spanBuf) == 0 {
-		w.mu.Unlock()
+		w.spanMu.Unlock()
 		return
 	}
 	batch := w.spanBuf
 	w.spanBuf = nil
-	w.mu.Unlock()
+	w.spanMu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := w.writeSpans(ctx, batch); err != nil {
 		w.logger.Error("failed to write spans batch", "count", len(batch), "error", err)
-		w.mu.Lock()
-		w.spanBuf = append(batch, w.spanBuf...)
-		w.mu.Unlock()
+		w.writeDeadLetter("spans", batch)
 		return
 	}
 
@@ -282,27 +360,100 @@ func (w *IngestWriter) flushSpans() {
 }
 
 func (w *IngestWriter) flushEvents() {
-	w.mu.Lock()
+	w.eventMu.Lock()
 	if len(w.eventBuf) == 0 {
-		w.mu.Unlock()
+		w.eventMu.Unlock()
 		return
 	}
 	batch := w.eventBuf
 	w.eventBuf = nil
-	w.mu.Unlock()
+	w.eventMu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := w.writeEvents(ctx, batch); err != nil {
 		w.logger.Error("failed to write events batch", "count", len(batch), "error", err)
-		w.mu.Lock()
-		w.eventBuf = append(batch, w.eventBuf...)
-		w.mu.Unlock()
+		w.writeDeadLetter("events", batch)
 		return
 	}
 
 	w.logger.Debug("flushed events", "count", len(batch))
+}
+
+func (w *IngestWriter) flushHealing() {
+	w.healingMu.Lock()
+	if len(w.healingBuf) == 0 {
+		w.healingMu.Unlock()
+		return
+	}
+	batch := w.healingBuf
+	w.healingBuf = nil
+	w.healingMu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := w.writeHealing(ctx, batch); err != nil {
+		w.logger.Error("failed to write healing events batch", "count", len(batch), "error", err)
+		w.writeDeadLetter("healing", batch)
+		return
+	}
+
+	w.logger.Debug("flushed healing events", "count", len(batch))
+}
+
+func (w *IngestWriter) flushCounters() {
+	w.counterMu.Lock()
+	if len(w.counterBuf) == 0 {
+		w.counterMu.Unlock()
+		return
+	}
+	batch := w.counterBuf
+	w.counterBuf = nil
+	w.counterMu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := w.writeCounters(ctx, batch); err != nil {
+		w.logger.Error("write counters failed", "error", err, "count", len(batch))
+		w.writeDeadLetter("counters", batch)
+	}
+}
+
+// writeDeadLetter persists a failed batch to disk so it can be replayed later.
+// Files are written to /tmp/agentstack/deadletter/TYPE-YYYY-MM-DD-HH.jsonl.
+func (w *IngestWriter) writeDeadLetter(typ string, data interface{}) {
+	dir := "/tmp/agentstack/deadletter"
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		w.logger.Error("failed to create dead-letter dir", "error", err)
+		return
+	}
+
+	now := time.Now().UTC()
+	filename := fmt.Sprintf("%s-%s.jsonl", typ, now.Format("2006-01-02-15"))
+	path := filepath.Join(dir, filename)
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		w.logger.Error("failed to open dead-letter file", "path", path, "error", err)
+		return
+	}
+	defer f.Close()
+
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		w.logger.Error("failed to marshal dead-letter data", "error", err)
+		return
+	}
+	encoded = append(encoded, '\n')
+
+	if _, err := f.Write(encoded); err != nil {
+		w.logger.Error("failed to write dead-letter data", "path", path, "error", err)
+		return
+	}
+
+	w.logger.Warn("wrote failed batch to dead-letter file", "type", typ, "path", path)
 }
 
 func (w *IngestWriter) writeSessions(ctx context.Context, sessions []service.SessionIngestRequest) error {
@@ -426,30 +577,6 @@ func (w *IngestWriter) writeEvents(ctx context.Context, events []service.EventIn
 	return nil
 }
 
-func (w *IngestWriter) flushHealing() {
-	w.mu.Lock()
-	if len(w.healingBuf) == 0 {
-		w.mu.Unlock()
-		return
-	}
-	batch := w.healingBuf
-	w.healingBuf = nil
-	w.mu.Unlock()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if err := w.writeHealing(ctx, batch); err != nil {
-		w.logger.Error("failed to write healing events batch", "count", len(batch), "error", err)
-		w.mu.Lock()
-		w.healingBuf = append(batch, w.healingBuf...)
-		w.mu.Unlock()
-		return
-	}
-
-	w.logger.Debug("flushed healing events", "count", len(batch))
-}
-
 func (w *IngestWriter) writeHealing(ctx context.Context, events []shieldservice.HealingIngestRequest) error {
 	// Convert ingest requests to store events and delegate to the shield store.
 	storeEvents := make([]shieldstore.HealingEvent, len(events))
@@ -476,42 +603,6 @@ func (w *IngestWriter) writeHealing(ctx context.Context, events []shieldservice.
 
 	chStore := shieldstore.NewClickHouseStore(w.chDB)
 	return chStore.InsertHealingEvents(ctx, storeEvents)
-}
-
-func (w *IngestWriter) handleCounter(msg *nats.Msg) {
-	var counter SessionCounter
-	if err := json.Unmarshal(msg.Data, &counter); err != nil {
-		w.logger.Error("unmarshal counter", "error", err)
-		return
-	}
-	w.mu.Lock()
-	w.counterBuf = append(w.counterBuf, counter)
-	if len(w.counterBuf) >= batchSize {
-		w.mu.Unlock()
-		w.flushCounters()
-		return
-	}
-	w.mu.Unlock()
-}
-
-func (w *IngestWriter) flushCounters() {
-	w.mu.Lock()
-	if len(w.counterBuf) == 0 {
-		w.mu.Unlock()
-		return
-	}
-	batch := w.counterBuf
-	w.counterBuf = nil
-	w.mu.Unlock()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := w.writeCounters(ctx, batch); err != nil {
-		w.logger.Error("write counters failed", "error", err, "count", len(batch))
-		w.mu.Lock()
-		w.counterBuf = append(batch, w.counterBuf...)
-		w.mu.Unlock()
-	}
 }
 
 func (w *IngestWriter) writeCounters(ctx context.Context, counters []SessionCounter) error {
