@@ -1,0 +1,3441 @@
+openapi: 3.0.3
+info:
+  title: AgentStack API
+  description: |
+    Open-source AI agent production platform API.
+
+    AgentStack replaces 5-6 separate tools with one unified platform covering
+    observability (Trace), self-healing (Shield), evaluation (Test), guardrails (Guard),
+    gateway routing (Route), and cost intelligence (Cost).
+
+    ## Authentication
+
+    All `/v1/*` endpoints accept either:
+    - **JWT Bearer token** (issued via GitHub OAuth, for dashboard use)
+    - **API key** (prefixed `as_sk_...`, for SDK/programmatic use)
+
+    All `/api/*` endpoints require a JWT Bearer token (dashboard only).
+
+    Pass credentials via the `Authorization: Bearer <token>` header.
+
+    ## Error Format
+
+    All errors follow a consistent JSON structure:
+    ```json
+    {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "name is required"
+      }
+    }
+    ```
+  version: 1.0.0
+  contact:
+    name: AgentStack
+    url: https://agentstack.dev
+
+servers:
+  - url: http://localhost:8080
+    description: Local development (API server)
+  - url: http://localhost:8090
+    description: Gateway proxy (OpenAI-compatible)
+
+tags:
+  - name: System
+    description: Health checks and readiness probes
+  - name: Auth
+    description: GitHub OAuth and SSO authentication
+  - name: Sessions
+    description: Session queries and detail views
+  - name: Ingestion
+    description: Trace data ingestion (sessions, spans, events)
+  - name: Analytics
+    description: Overview and time-series analytics
+  - name: Shield
+    description: Self-healing events and analytics
+  - name: Agents
+    description: Agent definition CRUD
+  - name: Patterns
+    description: Failure pattern management
+  - name: Alerts
+    description: Alert rule management
+  - name: Sampling
+    description: Sampling configuration
+  - name: Test
+    description: Test suites, cases, runs, and evaluators
+  - name: Guard
+    description: Guardrail rules, checks, and events
+  - name: Cost
+    description: Cost events, analytics, budgets, and model pricing
+  - name: Gateway
+    description: Provider, route, fallback, and cache management
+  - name: Prompts
+    description: Prompt management and versioning
+  - name: Playground
+    description: Prompt playground execution
+  - name: Datasets
+    description: Dataset management and items
+  - name: Webhooks
+    description: Webhook endpoint management and deliveries
+  - name: OTLP
+    description: OpenTelemetry trace ingestion
+  - name: Settings
+    description: Organization, API keys, team, SSO, and audit logs
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token from OAuth login or API key (as_sk_...)
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      schema: { type: integer, default: 1, minimum: 1 }
+      description: Page number
+    PerPageParam:
+      name: per_page
+      in: query
+      schema: { type: integer, default: 50, maximum: 200 }
+      description: Items per page
+    LimitParam:
+      name: limit
+      in: query
+      schema: { type: integer, default: 50, maximum: 1000 }
+      description: Maximum number of items to return
+    OffsetParam:
+      name: offset
+      in: query
+      schema: { type: integer, default: 0, minimum: 0 }
+      description: Number of items to skip
+    StartParam:
+      name: start
+      in: query
+      schema: { type: string, format: date-time }
+      description: Start of time range (RFC3339)
+    EndParam:
+      name: end
+      in: query
+      schema: { type: string, format: date-time }
+      description: End of time range (RFC3339)
+    IntervalParam:
+      name: interval
+      in: query
+      schema: { type: integer, default: 3600 }
+      description: Interval in seconds for time-series bucketing
+    FromParam:
+      name: from
+      in: query
+      schema: { type: string, format: date-time }
+      description: Start of date range (RFC3339), defaults to 30 days ago
+    ToParam:
+      name: to
+      in: query
+      schema: { type: string, format: date-time }
+      description: End of date range (RFC3339), defaults to now
+    IDParam:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+      description: Resource UUID
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+              example: name is required
+
+    PaginationMeta:
+      type: object
+      properties:
+        page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer }
+        total_pages: { type: integer }
+
+    Session:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        agent_name: { type: string }
+        agent_id: { type: string }
+        status:
+          type: string
+          enum: [completed, failed, running, timeout, healed]
+        total_tokens: { type: integer }
+        total_cost_cents: { type: integer }
+        duration_ms: { type: integer }
+        span_count: { type: integer }
+        error_message: { type: string }
+        metadata: { type: object }
+        created_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time }
+
+    Span:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        session_id: { type: string, format: uuid }
+        parent_span_id: { type: string, format: uuid }
+        span_type:
+          type: string
+          enum: [llm_call, tool_call, retrieval, chain, agent, custom]
+        name: { type: string }
+        model: { type: string }
+        input_tokens: { type: integer }
+        output_tokens: { type: integer }
+        duration_ms: { type: integer }
+        status: { type: string }
+        error: { type: string }
+        metadata: { type: object }
+        created_at: { type: string, format: date-time }
+
+    HealingEvent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        session_id: { type: string, format: uuid }
+        healing_type:
+          type: string
+          enum: [loop_breaker, hallucination_fix, cost_circuit_breaker, timeout_handler, error_recovery, custom]
+        trigger: { type: string }
+        action_taken: { type: string }
+        original_state: { type: object }
+        healed_state: { type: object }
+        metadata: { type: object }
+        created_at: { type: string, format: date-time }
+
+    Agent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        framework: { type: string }
+        metadata: { type: object }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Pattern:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        pattern: { type: string }
+        severity: { type: string }
+        category: { type: string }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    AlertRule:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        condition: { type: object }
+        threshold: { type: number }
+        window_seconds: { type: integer }
+        channels: { type: array, items: { type: string } }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    TestSuite:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        agent_id: { type: string, format: uuid }
+        tags: { type: array, items: { type: string } }
+        case_count: { type: integer }
+        last_run_status: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    TestCase:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        suite_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        input: { type: object }
+        expected_output: { type: object }
+        evaluator_ids: { type: array, items: { type: string } }
+        metadata: { type: object }
+        created_at: { type: string, format: date-time }
+
+    TestRun:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        suite_id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        total_cases: { type: integer }
+        passed: { type: integer }
+        failed: { type: integer }
+        score: { type: number }
+        started_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time }
+
+    Evaluator:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        type: { type: string }
+        config: { type: object }
+        is_builtin: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    GuardRule:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        type:
+          type: string
+          enum: [pii, toxicity, injection, hallucination, topic, code_exec, length, custom]
+        mode:
+          type: string
+          enum: [block, warn, log]
+        apply_to:
+          type: string
+          enum: [input, output, both]
+        config: { type: object }
+        enabled: { type: boolean }
+        priority: { type: integer }
+        is_builtin: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    GuardCheckRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          description: Text content to check against guardrails
+        direction:
+          type: string
+          enum: [input, output]
+          default: input
+        guardrail_ids:
+          type: array
+          items: { type: string }
+          description: Specific guardrail IDs to run (omit for all active)
+        session_id:
+          type: string
+          description: Optional session ID for event correlation
+
+    GuardCheckResponse:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [allow, block, warn]
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              guardrail_id: { type: string }
+              name: { type: string }
+              type: { type: string }
+              action: { type: string }
+              findings: { type: array, items: { type: string } }
+              latency_ms: { type: number }
+
+    GuardEvent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        guardrail_id: { type: string, format: uuid }
+        session_id: { type: string, format: uuid }
+        action: { type: string }
+        guard_type: { type: string }
+        input_text: { type: string }
+        findings: { type: array, items: { type: string } }
+        latency_ms: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    CostEvent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        session_id: { type: string }
+        span_id: { type: string }
+        agent_name: { type: string }
+        model: { type: string }
+        provider: { type: string }
+        input_tokens: { type: integer }
+        output_tokens: { type: integer }
+        total_tokens: { type: integer }
+        cost_cents: { type: integer }
+        outcome: { type: string }
+        metadata: { type: object }
+        created_at: { type: string, format: date-time }
+
+    Budget:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        scope:
+          type: string
+          enum: [org, agent, model]
+        scope_value: { type: string }
+        limit_cents: { type: integer }
+        current_spend_cents: { type: integer }
+        period:
+          type: string
+          enum: [daily, weekly, monthly]
+        action:
+          type: string
+          enum: [alert, throttle, block]
+        alert_threshold_pct: { type: integer }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ModelPricing:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        provider: { type: string }
+        model: { type: string }
+        input_cost_per_1m: { type: integer, description: Cost in cents per 1M input tokens }
+        output_cost_per_1m: { type: integer, description: Cost in cents per 1M output tokens }
+        updated_at: { type: string, format: date-time }
+
+    Provider:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        name: { type: string }
+        display_name: { type: string }
+        base_url: { type: string }
+        is_enabled: { type: boolean }
+        config: { type: object }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Route:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        model_pattern: { type: string }
+        strategy:
+          type: string
+          enum: [priority, round_robin, weighted, cost_optimized]
+        provider_id: { type: string, format: uuid }
+        target_model: { type: string }
+        priority: { type: integer }
+        weight: { type: number }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    FallbackChain:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              provider_id: { type: string }
+              model: { type: string }
+              timeout_ms: { type: integer }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Prompt:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        description: { type: string }
+        body: { type: string }
+        model: { type: string }
+        system_prompt: { type: string }
+        variables: { type: object }
+        config: { type: object }
+        tags: { type: array, items: { type: string } }
+        metadata: { type: object }
+        active_version: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    PromptVersion:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        prompt_id: { type: string, format: uuid }
+        version: { type: integer }
+        body: { type: string }
+        model: { type: string }
+        system_prompt: { type: string }
+        variables: { type: object }
+        config: { type: object }
+        is_active: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    Dataset:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        schema: { type: object }
+        tags: { type: array, items: { type: string } }
+        source: { type: string }
+        item_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    DatasetItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        dataset_id: { type: string, format: uuid }
+        data: { type: object }
+        metadata: { type: object }
+        created_at: { type: string, format: date-time }
+
+    Webhook:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        name: { type: string }
+        type:
+          type: string
+          enum: [generic, slack, pagerduty]
+        url: { type: string, format: uri }
+        events:
+          type: array
+          items:
+            type: string
+            enum:
+              - alert.fired
+              - alert.resolved
+              - shield.healing
+              - shield.circuit_break
+              - guard.blocked
+              - guard.flagged
+              - cost.budget_warning
+              - cost.budget_exceeded
+              - test.run_completed
+              - test.run_failed
+              - session.failed
+        headers: { type: object }
+        is_active: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    WebhookDelivery:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        endpoint_id: { type: string, format: uuid }
+        event_type: { type: string }
+        payload: { type: object }
+        status_code: { type: integer }
+        response_body: { type: string }
+        success: { type: boolean }
+        attempt: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    SamplingConfig:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        agent_name: { type: string }
+        sample_rate: { type: number }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    AuditLog:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        org_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        action: { type: string }
+        resource_type: { type: string }
+        resource_id: { type: string }
+        details: { type: object }
+        ip_address: { type: string }
+        created_at: { type: string, format: date-time }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    BadRequest:
+      description: Invalid request body or parameters
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+paths:
+  # ==================== System ====================
+  /health:
+    get:
+      summary: Health check
+      tags: [System]
+      security: []
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: healthy }
+                  version: { type: string, example: 0.1.0 }
+                  time: { type: string, format: date-time }
+
+  /ready:
+    get:
+      summary: Readiness check
+      description: Checks connectivity to PostgreSQL, Redis, and NATS
+      tags: [System]
+      security: []
+      responses:
+        '200':
+          description: All dependencies healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ready }
+                  checks:
+                    type: object
+                    properties:
+                      postgres: { type: string }
+                      redis: { type: string }
+                      nats: { type: string }
+        '503':
+          description: One or more dependencies unhealthy
+
+  # ==================== Auth ====================
+  /auth/github:
+    post:
+      summary: Initiate GitHub OAuth login
+      tags: [Auth]
+      security: []
+      responses:
+        '200':
+          description: OAuth authorization URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url: { type: string, format: uri }
+        '501':
+          description: GitHub OAuth not configured
+
+  /auth/github/callback:
+    get:
+      summary: GitHub OAuth callback
+      tags: [Auth]
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema: { type: string }
+          description: Authorization code from GitHub
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  user:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      email: { type: string }
+                      name: { type: string }
+                      avatar_url: { type: string }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/sso/lookup:
+    get:
+      summary: Look up SSO configuration for an org
+      tags: [Auth]
+      security: []
+      parameters:
+        - name: email
+          in: query
+          schema: { type: string }
+        - name: domain
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: SSO configuration found
+
+  /auth/saml/acs:
+    post:
+      summary: SAML Assertion Consumer Service endpoint
+      tags: [Auth]
+      security: []
+      responses:
+        '200':
+          description: SAML authentication processed
+
+  /auth/oidc/{orgID}/login:
+    get:
+      summary: Initiate OIDC login for an organization
+      tags: [Auth]
+      security: []
+      parameters:
+        - name: orgID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '302':
+          description: Redirect to OIDC provider
+
+  /auth/oidc/callback:
+    get:
+      summary: OIDC callback
+      tags: [Auth]
+      security: []
+      responses:
+        '302':
+          description: Redirect to frontend with auth token
+
+  # ==================== Ingestion ====================
+  /v1/ingest/sessions:
+    post:
+      summary: Ingest a session
+      description: Accepts a session for async ingestion via NATS
+      tags: [Ingestion]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_name]
+              properties:
+                id: { type: string, format: uuid }
+                agent_name: { type: string }
+                agent_id: { type: string }
+                status: { type: string, enum: [completed, failed, running, timeout, healed] }
+                total_tokens: { type: integer }
+                total_cost_cents: { type: integer }
+                duration_ms: { type: integer }
+                error_message: { type: string }
+                metadata: { type: object }
+      responses:
+        '202':
+          description: Session accepted for ingestion
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: accepted }
+                  session_id: { type: string }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/ingest/spans:
+    post:
+      summary: Ingest spans
+      description: Accepts an array of spans for async ingestion
+      tags: [Ingestion]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                required: [session_id, span_type]
+                properties:
+                  id: { type: string, format: uuid }
+                  session_id: { type: string, format: uuid }
+                  parent_span_id: { type: string }
+                  span_type: { type: string, enum: [llm_call, tool_call, retrieval, chain, agent, custom] }
+                  name: { type: string }
+                  model: { type: string }
+                  input: { type: object }
+                  output: { type: object }
+                  input_tokens: { type: integer }
+                  output_tokens: { type: integer }
+                  duration_ms: { type: integer }
+                  status: { type: string }
+                  error: { type: string }
+                  metadata: { type: object }
+      responses:
+        '202':
+          description: Spans accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: accepted }
+                  count: { type: integer }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /v1/ingest/events:
+    post:
+      summary: Ingest events
+      description: Accepts an array of session events for async ingestion
+      tags: [Ingestion]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                required: [session_id]
+                properties:
+                  session_id: { type: string, format: uuid }
+                  type: { type: string }
+                  data: { type: object }
+                  timestamp: { type: string, format: date-time }
+      responses:
+        '202':
+          description: Events accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: accepted }
+                  count: { type: integer }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /v1/ingest/batch:
+    post:
+      summary: Batch ingest sessions, spans, and events
+      description: Accepts a batch of sessions, spans, and events in one request. Returns adaptive sample rate header.
+      tags: [Ingestion]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sessions:
+                  type: array
+                  items: { type: object }
+                spans:
+                  type: array
+                  items: { type: object }
+                events:
+                  type: array
+                  items: { type: object }
+      responses:
+        '202':
+          description: Batch accepted
+          headers:
+            X-AgentStack-Sample-Rate:
+              schema: { type: string }
+              description: Adaptive sample rate for SDK-side sampling
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: accepted }
+                  sessions: { type: integer }
+                  spans: { type: integer }
+                  events: { type: integer }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /v1/ingest/healing:
+    post:
+      summary: Ingest healing events
+      description: Accepts an array of Shield healing events for async ingestion
+      tags: [Shield]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                required: [session_id, healing_type]
+                properties:
+                  session_id: { type: string, format: uuid }
+                  healing_type:
+                    type: string
+                    enum: [loop_breaker, hallucination_fix, cost_circuit_breaker, timeout_handler, error_recovery, custom]
+                  trigger: { type: string }
+                  action_taken: { type: string }
+                  original_state: { type: object }
+                  healed_state: { type: object }
+                  metadata: { type: object }
+      responses:
+        '202':
+          description: Healing events accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: accepted }
+                  count: { type: integer }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ==================== Sessions ====================
+  /v1/sessions:
+    get:
+      summary: List sessions
+      description: Returns a paginated list of sessions with filtering and sorting
+      tags: [Sessions]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: search
+          in: query
+          schema: { type: string }
+          description: Full-text search across session fields
+        - name: status
+          in: query
+          schema: { type: string, enum: [completed, failed, running, timeout, healed] }
+        - name: agent_name
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - name: sort_by
+          in: query
+          schema: { type: string }
+          description: Field to sort by
+        - name: sort_dir
+          in: query
+          schema: { type: string, enum: [asc, desc] }
+      responses:
+        '200':
+          description: Paginated list of sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: '#/components/schemas/Session' }
+                  total: { type: integer }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/sessions/{id}:
+    get:
+      summary: Get session detail
+      tags: [Sessions]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Session detail with spans and events
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/sessions/{id}/spans:
+    get:
+      summary: Get session spans
+      tags: [Sessions]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: List of spans for the session
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  spans:
+                    type: array
+                    items: { $ref: '#/components/schemas/Span' }
+
+  /v1/sessions/{id}/events:
+    get:
+      summary: Get session events
+      tags: [Sessions]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: List of events for the session
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items: { type: object }
+
+  /v1/sessions/{id}/healing:
+    get:
+      summary: Get session healing events
+      tags: [Shield]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: List of healing events for the session
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  healing_events:
+                    type: array
+                    items: { $ref: '#/components/schemas/HealingEvent' }
+
+  # ==================== Spans ====================
+  /v1/spans/{spanID}/payload:
+    get:
+      summary: Get span payload
+      description: Retrieves the full input/output payload for a span
+      tags: [Sessions]
+      parameters:
+        - name: spanID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Span payload data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  input: { type: object }
+                  output: { type: object }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==================== Analytics ====================
+  /v1/analytics/overview:
+    get:
+      summary: Get analytics overview
+      description: Returns key metrics (total sessions, failure rate, avg duration, costs, etc.)
+      tags: [Analytics]
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+      responses:
+        '200':
+          description: Overview metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_sessions: { type: integer }
+                  failure_rate: { type: number }
+                  avg_duration_ms: { type: number }
+                  total_cost_cents: { type: integer }
+                  total_tokens: { type: integer }
+                  healing_rate: { type: number }
+
+  /v1/analytics/sessions-over-time:
+    get:
+      summary: Sessions over time
+      description: Returns time-bucketed session counts
+      tags: [Analytics]
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - $ref: '#/components/parameters/IntervalParam'
+      responses:
+        '200':
+          description: Time-series data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        time: { type: string, format: date-time }
+                        count: { type: integer }
+                  start: { type: string, format: date-time }
+                  end: { type: string, format: date-time }
+                  interval: { type: integer }
+
+  /v1/analytics/failure-rate:
+    get:
+      summary: Failure rate over time
+      tags: [Analytics]
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - $ref: '#/components/parameters/IntervalParam'
+      responses:
+        '200':
+          description: Time-series failure rate data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        time: { type: string, format: date-time }
+                        rate: { type: number }
+                  start: { type: string, format: date-time }
+                  end: { type: string, format: date-time }
+                  interval: { type: integer }
+
+  /v1/analytics/healing:
+    get:
+      summary: Healing analytics
+      description: Returns healing event metrics and time-series data
+      tags: [Shield]
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - $ref: '#/components/parameters/IntervalParam'
+      responses:
+        '200':
+          description: Healing analytics data
+
+  # ==================== Agents ====================
+  /v1/agents:
+    get:
+      summary: List agents
+      tags: [Agents]
+      responses:
+        '200':
+          description: List of agent definitions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agents:
+                    type: array
+                    items: { $ref: '#/components/schemas/Agent' }
+    post:
+      summary: Create agent
+      tags: [Agents]
+      description: Requires admin role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                framework: { type: string }
+                metadata: { type: object }
+      responses:
+        '201':
+          description: Agent created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Agent' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /v1/agents/{id}:
+    get:
+      summary: Get agent
+      tags: [Agents]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Agent detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Agent' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: Update agent
+      tags: [Agents]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                framework: { type: string }
+                metadata: { type: object }
+      responses:
+        '200':
+          description: Agent updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Agent' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Delete agent
+      tags: [Agents]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Agent deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: deleted }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==================== Patterns ====================
+  /v1/patterns:
+    get:
+      summary: List failure patterns
+      tags: [Patterns]
+      responses:
+        '200':
+          description: List of failure patterns
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  patterns:
+                    type: array
+                    items: { $ref: '#/components/schemas/Pattern' }
+    post:
+      summary: Create failure pattern
+      tags: [Patterns]
+      description: Requires admin role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                pattern: { type: string }
+                severity: { type: string }
+                category: { type: string }
+                enabled: { type: boolean }
+      responses:
+        '201':
+          description: Pattern created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pattern' }
+
+  /v1/patterns/{id}:
+    get:
+      summary: Get failure pattern
+      tags: [Patterns]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Pattern detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pattern' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: Update failure pattern
+      tags: [Patterns]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200':
+          description: Pattern updated
+    delete:
+      summary: Delete failure pattern
+      tags: [Patterns]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Pattern deleted
+
+  # ==================== Alerts ====================
+  /v1/alerts:
+    get:
+      summary: List alert rules
+      tags: [Alerts]
+      responses:
+        '200':
+          description: List of alert rules
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  alerts:
+                    type: array
+                    items: { $ref: '#/components/schemas/AlertRule' }
+    post:
+      summary: Create alert rule
+      tags: [Alerts]
+      description: Requires admin role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                condition: { type: object }
+                threshold: { type: number }
+                window_seconds: { type: integer }
+                channels: { type: array, items: { type: string } }
+                enabled: { type: boolean }
+      responses:
+        '201':
+          description: Alert rule created
+
+  /v1/alerts/{id}:
+    get:
+      summary: Get alert rule
+      tags: [Alerts]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Alert rule detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlertRule' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: Update alert rule
+      tags: [Alerts]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200':
+          description: Alert rule updated
+    delete:
+      summary: Delete alert rule
+      tags: [Alerts]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Alert rule deleted
+
+  # ==================== Sampling ====================
+  /v1/settings/sampling:
+    get:
+      summary: List sampling configs
+      tags: [Sampling]
+      responses:
+        '200':
+          description: List of sampling configurations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configs:
+                    type: array
+                    items: { $ref: '#/components/schemas/SamplingConfig' }
+    put:
+      summary: Upsert sampling config
+      tags: [Sampling]
+      description: Requires admin role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                agent_name: { type: string }
+                sample_rate: { type: number, minimum: 0, maximum: 1 }
+      responses:
+        '200':
+          description: Sampling config updated
+
+  /v1/settings/sampling/{id}:
+    delete:
+      summary: Delete sampling config
+      tags: [Sampling]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Sampling config deleted
+
+  # ==================== Test ====================
+  /v1/test/suites:
+    get:
+      summary: List test suites
+      tags: [Test]
+      responses:
+        '200':
+          description: List of test suites
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suites:
+                    type: array
+                    items: { $ref: '#/components/schemas/TestSuite' }
+    post:
+      summary: Create test suite
+      tags: [Test]
+      description: Requires admin role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                agent_id: { type: string, format: uuid }
+                tags: { type: array, items: { type: string } }
+      responses:
+        '201':
+          description: Test suite created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestSuite' }
+
+  /v1/test/suites/{id}:
+    get:
+      summary: Get test suite
+      tags: [Test]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Test suite detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestSuite' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: Update test suite
+      tags: [Test]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                agent_id: { type: string }
+                tags: { type: array, items: { type: string } }
+      responses:
+        '200':
+          description: Test suite updated
+    delete:
+      summary: Delete test suite
+      tags: [Test]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Test suite deleted
+
+  /v1/test/suites/{suiteId}/cases:
+    get:
+      summary: List test cases for a suite
+      tags: [Test]
+      parameters:
+        - name: suiteId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: List of test cases
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cases:
+                    type: array
+                    items: { $ref: '#/components/schemas/TestCase' }
+    post:
+      summary: Create test case
+      tags: [Test]
+      description: Requires admin role
+      parameters:
+        - name: suiteId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                input: { type: object }
+                expected_output: { type: object }
+                evaluator_ids: { type: array, items: { type: string } }
+                metadata: { type: object }
+      responses:
+        '201':
+          description: Test case created
+
+  /v1/test/suites/{suiteId}/run:
+    post:
+      summary: Start a test run for a suite
+      tags: [Test]
+      description: Requires admin role. Execution is async.
+      parameters:
+        - name: suiteId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '202':
+          description: Test run started
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestRun' }
+
+  /v1/test/cases/{id}:
+    get:
+      summary: Get test case
+      tags: [Test]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Test case detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestCase' }
+    put:
+      summary: Update test case
+      tags: [Test]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200':
+          description: Test case updated
+    delete:
+      summary: Delete test case
+      tags: [Test]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Test case deleted
+
+  /v1/test/runs:
+    get:
+      summary: List test runs
+      tags: [Test]
+      responses:
+        '200':
+          description: List of test runs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  runs:
+                    type: array
+                    items: { $ref: '#/components/schemas/TestRun' }
+
+  /v1/test/runs/{id}:
+    get:
+      summary: Get test run detail
+      tags: [Test]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Test run detail with results
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestRun' }
+
+  /v1/test/evaluators:
+    get:
+      summary: List evaluators
+      tags: [Test]
+      responses:
+        '200':
+          description: List of evaluators
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  evaluators:
+                    type: array
+                    items: { $ref: '#/components/schemas/Evaluator' }
+    post:
+      summary: Create evaluator
+      tags: [Test]
+      description: Requires admin role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                type: { type: string }
+                config: { type: object }
+      responses:
+        '201':
+          description: Evaluator created
+
+  /v1/test/evaluators/{id}:
+    get:
+      summary: Get evaluator
+      tags: [Test]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Evaluator detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Evaluator' }
+    put:
+      summary: Update evaluator
+      tags: [Test]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200':
+          description: Evaluator updated
+    delete:
+      summary: Delete evaluator
+      tags: [Test]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Evaluator deleted
+
+  /v1/test/ci/run:
+    post:
+      summary: CI/CD test run
+      description: Trigger a test run from CI/CD pipeline. Requires admin role.
+      tags: [Test]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                suite_id: { type: string, format: uuid }
+                suite_ids: { type: array, items: { type: string } }
+                wait: { type: boolean, description: Whether to wait for completion }
+      responses:
+        '202':
+          description: CI test run started
+
+  # ==================== Guard ====================
+  /v1/guard/rules:
+    get:
+      summary: List guardrail rules
+      tags: [Guard]
+      responses:
+        '200':
+          description: List of guardrail rules
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  guardrails:
+                    type: array
+                    items: { $ref: '#/components/schemas/GuardRule' }
+    post:
+      summary: Create guardrail rule
+      tags: [Guard]
+      description: Requires admin role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                type:
+                  type: string
+                  enum: [pii, toxicity, injection, hallucination, topic, code_exec, length, custom]
+                mode:
+                  type: string
+                  enum: [block, warn, log]
+                  default: block
+                apply_to:
+                  type: string
+                  enum: [input, output, both]
+                  default: both
+                config: { type: object }
+                enabled: { type: boolean, default: true }
+                priority: { type: integer, default: 0 }
+      responses:
+        '201':
+          description: Guardrail created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GuardRule' }
+
+  /v1/guard/rules/{id}:
+    get:
+      summary: Get guardrail rule
+      tags: [Guard]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Guardrail detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GuardRule' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: Update guardrail rule
+      tags: [Guard]
+      description: Requires admin role. Supports partial updates.
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                type: { type: string }
+                mode: { type: string }
+                apply_to: { type: string }
+                config: { type: object }
+                enabled: { type: boolean }
+                priority: { type: integer }
+      responses:
+        '200':
+          description: Guardrail updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GuardRule' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Delete guardrail rule
+      tags: [Guard]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Guardrail deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/guard/check:
+    post:
+      summary: Run guard check
+      description: |
+        Runs specified (or all active) guardrails against the content in parallel.
+        Short-circuits on first block if mode=block. Requires admin role.
+      tags: [Guard]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GuardCheckRequest' }
+      responses:
+        '200':
+          description: Guard check results
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GuardCheckResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /v1/guard/events:
+    get:
+      summary: List guard events
+      tags: [Guard]
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+        - name: action
+          in: query
+          schema: { type: string, enum: [allow, block, warn] }
+        - name: guard_type
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated list of guard events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items: { $ref: '#/components/schemas/GuardEvent' }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+
+  /v1/guard/analytics:
+    get:
+      summary: Guard analytics
+      tags: [Guard]
+      responses:
+        '200':
+          description: Guard analytics data (block rates, top triggers, etc.)
+
+  # ==================== Cost ====================
+  /v1/cost/events:
+    get:
+      summary: List cost events
+      tags: [Cost]
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+        - name: agent_name
+          in: query
+          schema: { type: string }
+        - name: model
+          in: query
+          schema: { type: string }
+        - name: provider
+          in: query
+          schema: { type: string }
+        - name: outcome
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/FromParam'
+        - $ref: '#/components/parameters/ToParam'
+      responses:
+        '200':
+          description: Paginated list of cost events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items: { $ref: '#/components/schemas/CostEvent' }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+    post:
+      summary: Record cost event(s)
+      description: Supports single event or batch via `events` array. Requires admin role.
+      tags: [Cost]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                session_id: { type: string }
+                span_id: { type: string }
+                agent_name: { type: string }
+                model: { type: string, description: Required for single event }
+                provider: { type: string, description: Required for single event }
+                input_tokens: { type: integer }
+                output_tokens: { type: integer }
+                total_tokens: { type: integer }
+                cost_cents: { type: integer }
+                outcome: { type: string }
+                metadata: { type: object }
+                events:
+                  type: array
+                  items:
+                    type: object
+                    required: [model, provider]
+                    properties:
+                      session_id: { type: string }
+                      span_id: { type: string }
+                      agent_name: { type: string }
+                      model: { type: string }
+                      provider: { type: string }
+                      input_tokens: { type: integer }
+                      output_tokens: { type: integer }
+                      total_tokens: { type: integer }
+                      cost_cents: { type: integer }
+                      outcome: { type: string }
+                  description: Batch events (max 1000)
+      responses:
+        '201':
+          description: Cost event(s) recorded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CostEvent' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /v1/cost/analytics/summary:
+    get:
+      summary: Cost summary
+      tags: [Cost]
+      parameters:
+        - $ref: '#/components/parameters/FromParam'
+        - $ref: '#/components/parameters/ToParam'
+      responses:
+        '200':
+          description: Cost summary data
+
+  /v1/cost/analytics/by-model:
+    get:
+      summary: Cost breakdown by model
+      tags: [Cost]
+      parameters:
+        - $ref: '#/components/parameters/FromParam'
+        - $ref: '#/components/parameters/ToParam'
+      responses:
+        '200':
+          description: Cost grouped by model
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  models: { type: array, items: { type: object } }
+
+  /v1/cost/analytics/by-agent:
+    get:
+      summary: Cost breakdown by agent
+      tags: [Cost]
+      parameters:
+        - $ref: '#/components/parameters/FromParam'
+        - $ref: '#/components/parameters/ToParam'
+      responses:
+        '200':
+          description: Cost grouped by agent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agents: { type: array, items: { type: object } }
+
+  /v1/cost/analytics/top-spenders:
+    get:
+      summary: Top cost spenders
+      tags: [Cost]
+      parameters:
+        - $ref: '#/components/parameters/FromParam'
+        - $ref: '#/components/parameters/ToParam'
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10, maximum: 100 }
+      responses:
+        '200':
+          description: Top spenders
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  spenders: { type: array, items: { type: object } }
+
+  /v1/cost/analytics/compare:
+    get:
+      summary: Compare model costs
+      tags: [Cost]
+      parameters:
+        - $ref: '#/components/parameters/FromParam'
+        - $ref: '#/components/parameters/ToParam'
+      responses:
+        '200':
+          description: Model cost comparison
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  comparisons: { type: array, items: { type: object } }
+
+  /v1/cost/budgets:
+    get:
+      summary: List budget policies
+      tags: [Cost]
+      responses:
+        '200':
+          description: List of budgets with utilization
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  budgets:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/Budget'
+                        - type: object
+                          properties:
+                            utilization_pct: { type: integer }
+    post:
+      summary: Create budget policy
+      tags: [Cost]
+      description: Requires admin role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, limit_cents]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                scope: { type: string, enum: [org, agent, model], default: org }
+                scope_value: { type: string }
+                limit_cents: { type: integer, minimum: 1 }
+                period: { type: string, enum: [daily, weekly, monthly], default: monthly }
+                action: { type: string, enum: [alert, throttle, block], default: alert }
+                alert_threshold_pct: { type: integer, minimum: 1, maximum: 100, default: 80 }
+                enabled: { type: boolean, default: true }
+      responses:
+        '201':
+          description: Budget created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Budget' }
+
+  /v1/cost/budgets/{id}:
+    get:
+      summary: Get budget with utilization
+      tags: [Cost]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Budget detail with utilization
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  budget: { $ref: '#/components/schemas/Budget' }
+                  utilization_pct: { type: integer }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: Update budget policy
+      tags: [Cost]
+      description: Requires admin role. Supports partial updates.
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                scope: { type: string }
+                scope_value: { type: string }
+                limit_cents: { type: integer }
+                period: { type: string }
+                action: { type: string }
+                alert_threshold_pct: { type: integer }
+                enabled: { type: boolean }
+      responses:
+        '200':
+          description: Budget updated
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Delete budget policy
+      tags: [Cost]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Budget deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/cost/models:
+    get:
+      summary: List model pricing
+      tags: [Cost]
+      responses:
+        '200':
+          description: List of model pricing entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pricing:
+                    type: array
+                    items: { $ref: '#/components/schemas/ModelPricing' }
+    put:
+      summary: Upsert model pricing
+      description: Create or update model pricing. Supports single or batch via `pricing` array. Requires admin role.
+      tags: [Cost]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider: { type: string }
+                model: { type: string }
+                input_cost_per_1m: { type: integer }
+                output_cost_per_1m: { type: integer }
+                pricing:
+                  type: array
+                  items:
+                    type: object
+                    required: [provider, model]
+                    properties:
+                      provider: { type: string }
+                      model: { type: string }
+                      input_cost_per_1m: { type: integer }
+                      output_cost_per_1m: { type: integer }
+      responses:
+        '200':
+          description: Pricing updated
+
+  # ==================== Gateway ====================
+  /v1/gateway/providers:
+    get:
+      summary: List providers
+      tags: [Gateway]
+      responses:
+        '200':
+          description: List of configured LLM providers
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Provider' }
+    post:
+      summary: Create provider
+      tags: [Gateway]
+      description: Requires admin role. API key is encrypted at rest.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, api_key]
+              properties:
+                name: { type: string }
+                display_name: { type: string }
+                api_key: { type: string, description: Provider API key (encrypted at rest) }
+                base_url: { type: string }
+                is_enabled: { type: boolean, default: true }
+                config: { type: object }
+      responses:
+        '201':
+          description: Provider created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Provider' }
+
+  /v1/gateway/providers/{id}:
+    get:
+      summary: Get provider
+      tags: [Gateway]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Provider detail (API key excluded)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Provider' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: Update provider
+      tags: [Gateway]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                display_name: { type: string }
+                api_key: { type: string, description: New API key (re-encrypted) }
+                base_url: { type: string }
+                is_enabled: { type: boolean }
+                config: { type: object }
+      responses:
+        '200':
+          description: Provider updated
+    delete:
+      summary: Delete provider
+      tags: [Gateway]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Provider deleted
+
+  /v1/gateway/routes:
+    get:
+      summary: List routing rules
+      tags: [Gateway]
+      responses:
+        '200':
+          description: List of routing rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Route' }
+    post:
+      summary: Create routing rule
+      tags: [Gateway]
+      description: Requires admin role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, provider_id, target_model]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                model_pattern: { type: string, default: '*' }
+                strategy: { type: string, default: priority }
+                provider_id: { type: string, format: uuid }
+                target_model: { type: string }
+                priority: { type: integer }
+                weight: { type: number, default: 1.0 }
+                enabled: { type: boolean, default: true }
+      responses:
+        '201':
+          description: Route created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Route' }
+
+  /v1/gateway/routes/{id}:
+    put:
+      summary: Update routing rule
+      tags: [Gateway]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                model_pattern: { type: string }
+                strategy: { type: string }
+                provider_id: { type: string }
+                target_model: { type: string }
+                priority: { type: integer }
+                weight: { type: number }
+                enabled: { type: boolean }
+      responses:
+        '200':
+          description: Route updated
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Delete routing rule
+      tags: [Gateway]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Route deleted
+
+  /v1/gateway/fallbacks:
+    get:
+      summary: List fallback chains
+      tags: [Gateway]
+      responses:
+        '200':
+          description: List of fallback chains
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/FallbackChain' }
+    post:
+      summary: Create fallback chain
+      tags: [Gateway]
+      description: Requires admin role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                steps:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      provider_id: { type: string }
+                      model: { type: string }
+                      timeout_ms: { type: integer }
+                enabled: { type: boolean, default: true }
+      responses:
+        '201':
+          description: Fallback chain created
+
+  /v1/gateway/fallbacks/{id}:
+    get:
+      summary: Get fallback chain
+      tags: [Gateway]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Fallback chain detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FallbackChain' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: Update fallback chain
+      tags: [Gateway]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200':
+          description: Fallback chain updated
+    delete:
+      summary: Delete fallback chain
+      tags: [Gateway]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Fallback chain deleted
+
+  /v1/gateway/cache/stats:
+    get:
+      summary: Get cache statistics
+      tags: [Gateway]
+      responses:
+        '200':
+          description: Cache hit/miss stats
+
+  /v1/gateway/cache/purge:
+    post:
+      summary: Purge cache
+      tags: [Gateway]
+      description: Requires admin role
+      responses:
+        '200':
+          description: Cache purged
+
+  /v1/gateway/analytics:
+    get:
+      summary: Gateway analytics
+      tags: [Gateway]
+      responses:
+        '200':
+          description: Gateway request analytics
+
+  # ==================== Prompts ====================
+  /v1/prompts:
+    get:
+      summary: List prompts
+      tags: [Prompts]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: tag
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated list of prompts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Prompt' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+    post:
+      summary: Create prompt
+      tags: [Prompts]
+      description: Requires admin role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, name, body]
+              properties:
+                slug: { type: string }
+                name: { type: string }
+                description: { type: string }
+                body: { type: string }
+                model: { type: string }
+                system_prompt: { type: string }
+                variables: { type: object }
+                config: { type: object }
+                tags: { type: array, items: { type: string } }
+                metadata: { type: object }
+      responses:
+        '201':
+          description: Prompt created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Prompt' }
+        '409':
+          description: Slug already exists
+
+  /v1/prompts/{id}:
+    get:
+      summary: Get prompt
+      tags: [Prompts]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Prompt detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Prompt' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update prompt
+      tags: [Prompts]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                tags: { type: array, items: { type: string } }
+                metadata: { type: object }
+      responses:
+        '200':
+          description: Prompt updated
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Delete prompt
+      tags: [Prompts]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '204':
+          description: Prompt deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/prompts/slug/{slug}:
+    get:
+      summary: Get prompt by slug
+      tags: [Prompts]
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Prompt detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Prompt' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/prompts/{id}/versions:
+    get:
+      summary: List prompt versions
+      tags: [Prompts]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: List of prompt versions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  versions:
+                    type: array
+                    items: { $ref: '#/components/schemas/PromptVersion' }
+    post:
+      summary: Create prompt version
+      tags: [Prompts]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                body: { type: string }
+                model: { type: string }
+                system_prompt: { type: string }
+                variables: { type: object }
+                config: { type: object }
+      responses:
+        '201':
+          description: Version created
+
+  /v1/prompts/{id}/versions/{version}:
+    get:
+      summary: Get specific prompt version
+      tags: [Prompts]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+        - name: version
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Prompt version detail
+
+  /v1/prompts/{id}/deploy/{version}:
+    post:
+      summary: Deploy prompt version
+      tags: [Prompts]
+      description: Makes a specific version the active version. Requires admin role.
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+        - name: version
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Version deployed
+
+  /v1/prompts/{id}/rollback:
+    post:
+      summary: Rollback prompt to previous version
+      tags: [Prompts]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Prompt rolled back
+
+  # ==================== Playground ====================
+  /v1/playground/execute:
+    post:
+      summary: Execute prompt in playground
+      tags: [Playground]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prompt_id: { type: string }
+                body: { type: string }
+                model: { type: string }
+                system_prompt: { type: string }
+                variables: { type: object }
+                config: { type: object }
+      responses:
+        '200':
+          description: Execution result
+
+  /v1/playground/compare:
+    post:
+      summary: Compare prompt executions
+      tags: [Playground]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                executions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      prompt_id: { type: string }
+                      body: { type: string }
+                      model: { type: string }
+      responses:
+        '200':
+          description: Comparison results
+
+  # ==================== Datasets ====================
+  /v1/datasets:
+    get:
+      summary: List datasets
+      tags: [Datasets]
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Paginated list of datasets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Dataset' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+    post:
+      summary: Create dataset
+      tags: [Datasets]
+      description: Requires admin role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                schema: { type: object }
+                tags: { type: array, items: { type: string } }
+                source: { type: string }
+      responses:
+        '201':
+          description: Dataset created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Dataset' }
+        '409':
+          description: Dataset name already exists
+
+  /v1/datasets/{id}:
+    get:
+      summary: Get dataset
+      tags: [Datasets]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Dataset detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Dataset' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update dataset
+      tags: [Datasets]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                schema: { type: object }
+                tags: { type: array, items: { type: string } }
+      responses:
+        '200':
+          description: Dataset updated
+    delete:
+      summary: Delete dataset
+      tags: [Datasets]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '204':
+          description: Dataset deleted
+
+  /v1/datasets/{id}/items:
+    get:
+      summary: List dataset items
+      tags: [Datasets]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: List of dataset items
+    post:
+      summary: Create dataset item
+      tags: [Datasets]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data: { type: object }
+                metadata: { type: object }
+      responses:
+        '201':
+          description: Item created
+
+  /v1/datasets/{id}/items/batch:
+    post:
+      summary: Batch create dataset items
+      tags: [Datasets]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      data: { type: object }
+                      metadata: { type: object }
+      responses:
+        '201':
+          description: Items created
+
+  /v1/datasets/{id}/items/{itemID}:
+    get:
+      summary: Get dataset item
+      tags: [Datasets]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+        - name: itemID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Item detail
+    delete:
+      summary: Delete dataset item
+      tags: [Datasets]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+        - name: itemID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Item deleted
+
+  /v1/datasets/{id}/export:
+    get:
+      summary: Export dataset
+      tags: [Datasets]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Exported dataset data
+
+  /v1/datasets/{id}/import:
+    post:
+      summary: Import data into dataset
+      tags: [Datasets]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Data imported
+
+  /v1/datasets/{id}/link/{suiteID}:
+    post:
+      summary: Link dataset to test suite
+      tags: [Datasets]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+        - name: suiteID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Link created
+        '409':
+          description: Already linked
+    delete:
+      summary: Unlink dataset from test suite
+      tags: [Datasets]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+        - name: suiteID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Link removed
+
+  /v1/datasets/from-session/{sessionID}:
+    post:
+      summary: Create dataset item from session
+      tags: [Datasets]
+      description: Captures a production session as a dataset item. Requires admin role.
+      parameters:
+        - name: sessionID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dataset_id]
+              properties:
+                dataset_id: { type: string, format: uuid }
+                include_input: { type: boolean }
+                include_output: { type: boolean }
+                include_context: { type: boolean }
+                label: { type: string }
+      responses:
+        '201':
+          description: Dataset item created from session
+
+  # ==================== OTLP ====================
+  /v1/otlp/v1/traces:
+    post:
+      summary: Receive OpenTelemetry traces
+      description: OTLP/HTTP receiver for ingesting OpenTelemetry trace data
+      tags: [OTLP]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: OTLP ExportTraceServiceRequest
+          application/x-protobuf:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Traces accepted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ==================== Webhooks ====================
+  /v1/webhooks:
+    get:
+      summary: List webhooks
+      tags: [Webhooks]
+      responses:
+        '200':
+          description: List of webhook endpoints (secrets masked)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Webhook' }
+    post:
+      summary: Create webhook
+      tags: [Webhooks]
+      description: Requires admin role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, url, events]
+              properties:
+                name: { type: string }
+                type: { type: string, enum: [generic, slack, pagerduty], default: generic }
+                url: { type: string, format: uri }
+                secret: { type: string }
+                events:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - alert.fired
+                      - alert.resolved
+                      - shield.healing
+                      - shield.circuit_break
+                      - guard.blocked
+                      - guard.flagged
+                      - cost.budget_warning
+                      - cost.budget_exceeded
+                      - test.run_completed
+                      - test.run_failed
+                      - session.failed
+                headers: { type: object }
+      responses:
+        '201':
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Webhook' }
+
+  /v1/webhooks/{id}:
+    get:
+      summary: Get webhook
+      tags: [Webhooks]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Webhook detail (secret masked)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Webhook' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update webhook
+      tags: [Webhooks]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                type: { type: string }
+                url: { type: string }
+                secret: { type: string }
+                events: { type: array, items: { type: string } }
+                headers: { type: object }
+                is_active: { type: boolean }
+      responses:
+        '200':
+          description: Webhook updated
+    delete:
+      summary: Delete webhook
+      tags: [Webhooks]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '204':
+          description: Webhook deleted
+
+  /v1/webhooks/{id}/test:
+    post:
+      summary: Send test webhook delivery
+      tags: [Webhooks]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Test delivery result
+
+  /v1/webhooks/{id}/deliveries:
+    get:
+      summary: List webhook deliveries
+      tags: [Webhooks]
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: List of deliveries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deliveries:
+                    type: array
+                    items: { $ref: '#/components/schemas/WebhookDelivery' }
+
+  /v1/webhooks/{id}/deliveries/{deliveryID}/retry:
+    post:
+      summary: Retry webhook delivery
+      tags: [Webhooks]
+      description: Requires admin role
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+        - name: deliveryID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Delivery retried
+
+  # ==================== Settings / Dashboard API ====================
+  /api/org:
+    get:
+      summary: Get organization
+      tags: [Settings]
+      description: Requires owner role (JWT only)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Organization detail
+    patch:
+      summary: Update organization
+      tags: [Settings]
+      description: Requires owner role
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                slug: { type: string }
+      responses:
+        '200':
+          description: Organization updated
+    delete:
+      summary: Delete organization
+      tags: [Settings]
+      description: Requires owner role. Permanently deletes the organization and all data.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Organization deleted
+
+  /api/org/usage:
+    get:
+      summary: Get organization usage
+      tags: [Settings]
+      description: Requires owner role
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Usage statistics
+
+  /api/api-keys:
+    get:
+      summary: List API keys
+      tags: [Settings]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of API keys (values not shown)
+    post:
+      summary: Create API key
+      tags: [Settings]
+      description: Requires admin role
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '201':
+          description: API key created (key shown once)
+
+  /api/api-keys/{id}:
+    delete:
+      summary: Delete API key
+      tags: [Settings]
+      description: Requires admin role
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: API key deleted
+
+  /api/team:
+    get:
+      summary: List team members
+      tags: [Settings]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of team members
+
+  /api/team/invite:
+    post:
+      summary: Invite team member
+      tags: [Settings]
+      description: Requires owner role
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+                role: { type: string, enum: [admin, member] }
+      responses:
+        '201':
+          description: Invitation sent
+
+  /api/team/{id}/role:
+    patch:
+      summary: Update team member role
+      tags: [Settings]
+      description: Requires owner role
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { type: string, enum: [owner, admin, member] }
+      responses:
+        '200':
+          description: Role updated
+
+  /api/team/{id}:
+    delete:
+      summary: Remove team member
+      tags: [Settings]
+      description: Requires owner role
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: Team member removed
+
+  /api/audit-logs:
+    get:
+      summary: List audit logs
+      tags: [Settings]
+      description: Requires admin role
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Paginated audit logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditLog' }
+
+  /api/sso:
+    get:
+      summary: Get SSO configuration
+      tags: [Settings]
+      description: Requires owner role
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: SSO configuration
+    post:
+      summary: Create or update SSO configuration
+      tags: [Settings]
+      description: Requires owner role
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider: { type: string, enum: [saml, oidc] }
+                issuer_url: { type: string }
+                client_id: { type: string }
+                client_secret: { type: string }
+                metadata_url: { type: string }
+                certificate: { type: string }
+      responses:
+        '200':
+          description: SSO configuration saved
+    delete:
+      summary: Delete SSO configuration
+      tags: [Settings]
+      description: Requires owner role
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: SSO configuration deleted

@@ -10,6 +10,7 @@ import {
   AlertCircle,
   RefreshCw,
   ArrowRight,
+  Download,
 } from "lucide-react";
 import { MetricCard } from "@/components/metric-card";
 import { StackedAreaChart } from "@/components/charts";
@@ -24,6 +25,7 @@ import {
   SkeletonTable,
 } from "@/components/skeleton";
 import { api } from "@/lib/api";
+import { downloadExport } from "@/lib/export";
 import { useTimeRange } from "@/hooks/use-time-range";
 
 // ---------------------------------------------------------------------------
@@ -132,6 +134,24 @@ export default function CostOverviewPage() {
   const [spenders, setSpenders] = useState<SpenderRow[]>([]);
   const [costLabels, setCostLabels] = useState<string[]>([]);
   const [costSeries, setCostSeries] = useState<{ name: string; color: string; data: number[] }[]>([]);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportCSV = useCallback(async () => {
+    setExporting(true);
+    try {
+      await downloadExport({
+        path: "/v1/export/cost",
+        filename: "cost_events.csv",
+        format: "csv",
+        start,
+        end,
+      });
+    } catch (err) {
+      console.error("Export failed:", err);
+    } finally {
+      setExporting(false);
+    }
+  }, [start, end]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -261,11 +281,23 @@ export default function CostOverviewPage() {
       className="space-y-6"
     >
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold">Cost Intelligence</h1>
-        <p className="text-sm text-[var(--text-secondary)] mt-1">
-          Track spend, analyze cost efficiency, and manage budgets
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Cost Intelligence</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-1">
+            Track spend, analyze cost efficiency, and manage budgets
+          </p>
+        </div>
+        <motion.button
+          whileTap={{ scale: 0.95 }}
+          onClick={handleExportCSV}
+          disabled={exporting}
+          className="flex items-center gap-1.5 px-3 h-9 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-default)] hover:bg-[var(--bg-hover)] transition-colors flex-shrink-0 text-sm"
+          title="Export cost data as CSV"
+        >
+          <Download className={`w-4 h-4 ${exporting ? "animate-bounce" : ""}`} />
+          <span className="hidden sm:inline">{exporting ? "Exporting..." : "Export CSV"}</span>
+        </motion.button>
       </div>
 
       {/* Error State */}

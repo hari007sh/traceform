@@ -17,12 +17,14 @@ import {
   ExternalLink,
   ChevronsLeft,
   ChevronsRight,
+  Download,
 } from "lucide-react";
 import { fadeIn, staggerContainer, staggerItem } from "@/lib/animations";
 import { SkeletonTable } from "@/components/skeleton";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
+import { downloadExport } from "@/lib/export";
 import type { Session } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -328,6 +330,7 @@ function SessionsContent() {
     total_pages: 1,
   });
   const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Abort controller ref
   const abortRef = useRef<AbortController | null>(null);
@@ -445,6 +448,22 @@ function SessionsContent() {
     });
   };
 
+  const handleExportCSV = useCallback(async () => {
+    setExporting(true);
+    try {
+      await downloadExport({
+        path: "/v1/export/sessions",
+        filename: "sessions.csv",
+        format: "csv",
+      });
+    } catch (err) {
+      // Silently log — the user will see the download fail in the browser
+      console.error("Export failed:", err);
+    } finally {
+      setExporting(false);
+    }
+  }, []);
+
   const handleStatusChange = (status: string) => {
     updateParams({ status: status === "all" ? null : status });
   };
@@ -518,6 +537,16 @@ function SessionsContent() {
             <RefreshCw
               className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
             />
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={handleExportCSV}
+            className="flex items-center gap-1.5 px-3 h-9 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-default)] hover:bg-[var(--bg-hover)] transition-colors flex-shrink-0 text-sm"
+            title="Export CSV"
+            disabled={isEmptyState || exporting}
+          >
+            <Download className={`w-4 h-4 ${exporting ? "animate-bounce" : ""}`} />
+            <span className="hidden sm:inline">{exporting ? "Exporting..." : "Export CSV"}</span>
           </motion.button>
         </div>
         <div className="flex gap-2 flex-wrap">

@@ -47,6 +47,17 @@ func (s *Server) setupRoutes() {
 	s.router.Get("/health", s.handleHealth)
 	s.router.Get("/ready", s.handleReady)
 
+	// API Documentation — serve OpenAPI spec and Swagger UI
+	s.router.Get("/docs/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		http.ServeFile(w, r, "docs/api/openapi.yaml")
+	})
+	s.router.Get("/docs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(swaggerUIHTML))
+	})
+
 	// --- Build SSO handler ---
 	ssoStore := auth.NewSSOStore(s.db)
 	encSvcSSO, _ := routeservice.NewEncryption(s.cfg.EncryptionKey)
@@ -469,6 +480,15 @@ func (s *Server) setupRoutes() {
 			r.With(middleware.RequireRole("admin")).Post("/{id}/test", whHandler.Test)
 			r.With(middleware.RequireRole("admin")).Post("/{id}/deliveries/{deliveryID}/retry", whDeliveryHandler.Retry)
 		})
+
+		// --- Data export routes (admin only) ---
+		r.Route("/export", func(r chi.Router) {
+			r.Use(middleware.RequireRole("admin"))
+			r.Get("/", s.handleExportFormats)
+			r.Get("/sessions", s.handleExportSessions)
+			r.Get("/cost", s.handleExportCostEvents)
+			r.Get("/audit", s.handleExportAuditLogs)
+		})
 	})
 
 	// Dashboard API — authenticated via JWT
@@ -721,3 +741,34 @@ func (s *Server) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 // Ensure packages are used
 var _ = auth.HashAPIKey
+
+// swaggerUIHTML is the HTML page that loads Swagger UI from a CDN.
+const swaggerUIHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentStack API Documentation</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+  <style>
+    body { margin: 0; background: #1a1a2e; }
+    .swagger-ui .topbar { display: none; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    SwaggerUIBundle({
+      url: "/docs/openapi.yaml",
+      dom_id: '#swagger-ui',
+      deepLinking: true,
+      presets: [
+        SwaggerUIBundle.presets.apis,
+        SwaggerUIBundle.SwaggerUIStandalonePreset
+      ],
+      layout: "BaseLayout"
+    });
+  </script>
+</body>
+</html>`

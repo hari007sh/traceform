@@ -97,7 +97,7 @@ const navigation: NavSection[] = [
   {
     title: "Resources",
     items: [
-      { label: "Documentation", href: "http://localhost:3001/docs", icon: BookOpen, external: true },
+      { label: "Documentation", href: "http://localhost:8080/docs", icon: BookOpen, external: true },
     ],
   },
 ];
