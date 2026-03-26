@@ -99,6 +99,8 @@ interface ClientConfig {
 // ─── AgentStackClient ───────────────────────────────────────────────────────
 
 export class AgentStackClient {
+  private static readonly MAX_BUFFER_SIZE = 10_000;
+
   private config: ClientConfig;
   private sessionBuffer: SessionPayload[] = [];
   private spanBuffer: SpanPayload[] = [];
@@ -124,6 +126,27 @@ export class AgentStackClient {
     };
 
     this.startFlushInterval();
+
+    // Flush remaining events when the process exits (Node.js only).
+    if (typeof process !== 'undefined' && typeof process.on === 'function') {
+      process.on('beforeExit', () => {
+        void this.flush();
+      });
+    }
+  }
+
+  // ── Buffer helpers ──────────────────────────────────────────────────────
+
+  /**
+   * Push an item to a buffer, dropping the oldest entry when the buffer
+   * exceeds MAX_BUFFER_SIZE.
+   */
+  private boundedPush<T>(buffer: T[], item: T): void {
+    if (buffer.length >= AgentStackClient.MAX_BUFFER_SIZE) {
+      buffer.shift();
+      this.log(`Buffer at capacity (${AgentStackClient.MAX_BUFFER_SIZE}), oldest entry dropped`);
+    }
+    buffer.push(item);
   }
 
   // ── Public API ──────────────────────────────────────────────────────────
@@ -132,7 +155,7 @@ export class AgentStackClient {
    * Add a session payload for ingestion.
    */
   addSession(session: SessionPayload): void {
-    this.sessionBuffer.push(session);
+    this.boundedPush(this.sessionBuffer, session);
     this.maybeFlush();
   }
 
@@ -140,7 +163,7 @@ export class AgentStackClient {
    * Add a span payload for ingestion.
    */
   addSpan(span: SpanPayload): void {
-    this.spanBuffer.push(span);
+    this.boundedPush(this.spanBuffer, span);
     this.maybeFlush();
   }
 
@@ -148,7 +171,7 @@ export class AgentStackClient {
    * Add an event payload for ingestion.
    */
   addEventPayload(event: EventPayload): void {
-    this.eventBuffer.push(event);
+    this.boundedPush(this.eventBuffer, event);
     this.maybeFlush();
   }
 
@@ -157,7 +180,7 @@ export class AgentStackClient {
    * These are translated to EventPayload and buffered for batch ingestion.
    */
   addEvent(event: Event): void {
-    this.legacyEventBuffer.push(event);
+    this.boundedPush(this.legacyEventBuffer, event);
 
     // Also buffer as a proper EventPayload for the backend
     const payload: EventPayload = {
@@ -169,7 +192,7 @@ export class AgentStackClient {
       data: typeof event.data === 'string' ? event.data : JSON.stringify(event.data),
       created_at: event.timestamp,
     };
-    this.eventBuffer.push(payload);
+    this.boundedPush(this.eventBuffer, payload);
     this.maybeFlush();
   }
 
@@ -188,7 +211,7 @@ export class AgentStackClient {
       resolved: event.resolved,
       timestamp: event.timestamp,
     };
-    this.healingBuffer.push(payload);
+    this.boundedPush(this.healingBuffer, payload);
     this.maybeFlush();
   }
 
@@ -197,7 +220,7 @@ export class AgentStackClient {
    * Counters are batched and flushed together with the normal payload.
    */
   sendCounter(counter: CounterPayload): void {
-    this.counterBuffer.push(counter);
+    this.boundedPush(this.counterBuffer, counter);
     this.maybeFlush();
   }
 
@@ -249,12 +272,15 @@ export class AgentStackClient {
         this.log(`Flushed ${healingEvents.length} healing events`);
       }
     } catch (err) {
-      // Put data back in the buffers on failure
-      this.sessionBuffer.unshift(...sessions);
-      this.spanBuffer.unshift(...spans);
-      this.eventBuffer.unshift(...events);
-      this.healingBuffer.unshift(...healingEvents);
-      this.counterBuffer.unshift(...counters);
+      // Put data back in the buffers on failure.
+      // Avoid .unshift(...arr) with spread — large arrays blow the call stack.
+      // Concat and slice to respect MAX_BUFFER_SIZE.
+      const max = AgentStackClient.MAX_BUFFER_SIZE;
+      this.sessionBuffer = sessions.concat(this.sessionBuffer).slice(0, max);
+      this.spanBuffer = spans.concat(this.spanBuffer).slice(0, max);
+      this.eventBuffer = events.concat(this.eventBuffer).slice(0, max);
+      this.healingBuffer = healingEvents.concat(this.healingBuffer).slice(0, max);
+      this.counterBuffer = counters.concat(this.counterBuffer).slice(0, max);
       this.log(`Failed to flush: ${err}`);
     } finally {
       this.isFlushing = false;
@@ -316,7 +342,10 @@ export class AgentStackClient {
       return;
     }
 
-    const response = await fetchFn(url, {
+    // Build fetch options with a 10-second timeout when the runtime supports
+    // AbortSignal.timeout (Node 18.x+, modern browsers).  Fall back to no
+    // timeout so we don't crash in older environments.
+    const fetchOptions: RequestInit = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -324,7 +353,13 @@ export class AgentStackClient {
         'X-Project-Id': this.config.projectId,
       },
       body: JSON.stringify(payload),
-    });
+    };
+
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      fetchOptions.signal = AbortSignal.timeout(10_000);
+    }
+
+    const response = await fetchFn(url, fetchOptions);
 
     if (!response.ok) {
       const body = await response.text().catch(() => '');
