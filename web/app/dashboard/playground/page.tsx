@@ -437,6 +437,7 @@ export default function PlaygroundPage() {
   const [compareModelB, setCompareModelB] = useState("");
 
   // Provider data from API
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [providers, setProviders] = useState<ProviderRecord[]>([]);
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [providersError, setProvidersError] = useState<string | null>(null);
@@ -672,6 +673,7 @@ export default function PlaygroundPage() {
   );
 
   // --- Execute single run (non-streaming fallback) ---
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const executeNonStreaming = useCallback(
     async (modelId: string, providerName: string): Promise<OutputData> => {
       const resp = await api.post<{
