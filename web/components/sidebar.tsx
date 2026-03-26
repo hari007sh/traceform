@@ -27,6 +27,7 @@ import {
   Bell,
   BookOpen,
   ExternalLink,
+  KeyRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -89,6 +90,8 @@ const navigation: NavSection[] = [
       { label: "Team", href: "/dashboard/settings/team", icon: Users },
       { label: "Billing", href: "/dashboard/settings/billing", icon: CreditCard },
       { label: "Webhooks", href: "/dashboard/settings/webhooks", icon: Bell },
+      { label: "SSO", href: "/dashboard/settings/sso", icon: KeyRound },
+      { label: "Audit Log", href: "/dashboard/settings/audit", icon: FileText },
     ],
   },
   {
