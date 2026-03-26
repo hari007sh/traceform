@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useChartTheme } from "./use-chart-theme";
+import { lttb, labelInterval, type Point } from "@/lib/downsample";
 
 interface DataPoint {
   label: string;
@@ -124,9 +125,20 @@ export function LineChart({
   const chartWidth = svgWidth - padding.left - padding.right;
   const chartHeight = svgHeight - padding.top - padding.bottom;
 
+  // Downsample data for rendering (preserves visual shape)
+  const downsampled = useMemo(() => {
+    if (data.length <= 500) return data;
+    const points: (Point & { label: string; value: number })[] = data.map((d, i) => ({
+      ...d,
+      x: i,
+      y: d.value,
+    }));
+    return lttb(points, 500);
+  }, [data]);
+
   const { points, minVal, maxVal, yTicks } = useMemo(() => {
-    if (data.length === 0) return { points: [], minVal: 0, maxVal: 100, yTicks: [] };
-    const values = data.map((d) => d.value);
+    if (downsampled.length === 0) return { points: [], minVal: 0, maxVal: 100, yTicks: [] };
+    const values = downsampled.map((d) => d.value);
     const min = Math.min(...values);
     const max = Math.max(...values);
     const range = max - min || 1;
@@ -134,8 +146,8 @@ export function LineChart({
     const yMin = Math.max(0, min - yPad);
     const yMax = max + yPad;
 
-    const pts = data.map((d, i) => ({
-      x: padding.left + (i / (data.length - 1)) * chartWidth,
+    const pts = downsampled.map((d, i) => ({
+      x: padding.left + (i / (downsampled.length - 1)) * chartWidth,
       y: padding.top + (1 - (d.value - yMin) / (yMax - yMin)) * chartHeight,
     }));
 
@@ -145,7 +157,9 @@ export function LineChart({
     }
 
     return { points: pts, minVal: yMin, maxVal: yMax, yTicks: ticks };
-  }, [data, chartWidth, chartHeight, padding.left, padding.top]);
+  }, [downsampled, chartWidth, chartHeight, padding.left, padding.top]);
+
+  const xLabelInterval = useMemo(() => labelInterval(downsampled.length), [downsampled.length]);
 
   const linePath = useMemo(() => monotoneCubic(points), [points]);
 
@@ -206,9 +220,10 @@ export function LineChart({
             );
           })}
 
-        {/* X-axis labels */}
-        {data.map((d, i) => {
-          const x = padding.left + (i / (data.length - 1)) * chartWidth;
+        {/* X-axis labels (thinned to prevent overlap) */}
+        {downsampled.map((d, i) => {
+          if (i % xLabelInterval !== 0 && i !== downsampled.length - 1) return null;
+          const x = padding.left + (i / (downsampled.length - 1)) * chartWidth;
           return (
             <text
               key={i}
@@ -249,13 +264,13 @@ export function LineChart({
 
         {/* Hover areas & dots */}
         {points.map((pt, i) => {
-          const stepW = chartWidth / (data.length - 1);
+          const stepW = chartWidth / (downsampled.length - 1);
           return (
             <g key={i}>
               <rect
                 x={i === 0 ? padding.left : pt.x - stepW / 2}
                 y={padding.top}
-                width={i === 0 || i === data.length - 1 ? stepW / 2 + (i === 0 ? 0 : stepW / 2) : stepW}
+                width={i === 0 || i === downsampled.length - 1 ? stepW / 2 + (i === 0 ? 0 : stepW / 2) : stepW}
                 height={chartHeight}
                 fill="transparent"
                 onMouseEnter={() => setHoveredIndex(i)}
@@ -321,7 +336,7 @@ export function LineChart({
               marginBottom: 2,
             }}
           >
-            {data[hoveredIndex].label}
+            {downsampled[hoveredIndex].label}
           </div>
           <div
             style={{
@@ -331,7 +346,7 @@ export function LineChart({
               fontVariantNumeric: "tabular-nums",
             }}
           >
-            {displayValue(data[hoveredIndex].value)}
+            {displayValue(downsampled[hoveredIndex].value)}
           </div>
         </motion.div>
       )}

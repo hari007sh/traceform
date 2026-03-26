@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useChartTheme } from "./use-chart-theme";
+import { lttbIndices, labelInterval } from "@/lib/downsample";
 
 interface Series {
   name: string;
@@ -122,17 +123,35 @@ export function StackedAreaChart({
   const chartHeight = svgHeight - padding.top - padding.bottom;
   const n = labels.length;
 
+  // Downsample: pick shared x-indices using total stack as signal for LTTB
+  const TARGET_POINTS = 500;
+  const dsIndices = useMemo(() => {
+    if (n <= TARGET_POINTS || series.length === 0) return labels.map((_, i) => i);
+    // Use the sum of all series at each point as the signal for LTTB selection
+    const totals = labels.map((_, i) => series.reduce((sum, s) => sum + s.data[i], 0));
+    return lttbIndices(totals, TARGET_POINTS);
+  }, [labels, series, n]);
+
+  const dsLabels = useMemo(() => dsIndices.map((i) => labels[i]), [dsIndices, labels]);
+  const dsSeries = useMemo(
+    () => series.map((s) => ({ ...s, data: dsIndices.map((i) => s.data[i]) })),
+    [dsIndices, series]
+  );
+  const dsN = dsLabels.length;
+
+  const xLabelInterval = useMemo(() => labelInterval(dsN), [dsN]);
+
   // Compute cumulative stacks
   const { stacks, maxVal, yTicks } = useMemo(() => {
-    if (n === 0) return { stacks: [], maxVal: 100, yTicks: [] };
+    if (dsN === 0) return { stacks: [], maxVal: 100, yTicks: [] };
 
     // stacks[seriesIndex][pointIndex] = { bottom, top }
     const stackData: { bottom: number; top: number }[][] = [];
-    for (let s = 0; s < series.length; s++) {
+    for (let s = 0; s < dsSeries.length; s++) {
       const layer: { bottom: number; top: number }[] = [];
-      for (let i = 0; i < n; i++) {
+      for (let i = 0; i < dsN; i++) {
         const bottom = s === 0 ? 0 : stackData[s - 1][i].top;
-        const top = bottom + series[s].data[i];
+        const top = bottom + dsSeries[s].data[i];
         layer.push({ bottom, top });
       }
       stackData.push(layer);
@@ -147,9 +166,9 @@ export function StackedAreaChart({
     }
 
     return { stacks: stackData, maxVal: yMax, yTicks: ticks };
-  }, [series, n]);
+  }, [dsSeries, dsN]);
 
-  const xScale = (i: number) => padding.left + (i / (n - 1)) * chartWidth;
+  const xScale = (i: number) => padding.left + (i / (dsN - 1)) * chartWidth;
   const yScale = (v: number) => padding.top + (1 - v / maxVal) * chartHeight;
 
   const displayValue = (val: number) => {
@@ -214,20 +233,23 @@ export function StackedAreaChart({
           );
         })}
 
-        {/* X-axis labels */}
-        {labels.map((label, i) => (
-          <text
-            key={i}
-            x={xScale(i)}
-            y={svgHeight - 4}
-            textAnchor="middle"
-            fill={theme.textColorFaint}
-            fontSize={10}
-            fontFamily="var(--font-inter), sans-serif"
-          >
-            {label}
-          </text>
-        ))}
+        {/* X-axis labels (thinned to prevent overlap) */}
+        {dsLabels.map((label, i) => {
+          if (i % xLabelInterval !== 0 && i !== dsLabels.length - 1) return null;
+          return (
+            <text
+              key={i}
+              x={xScale(i)}
+              y={svgHeight - 4}
+              textAnchor="middle"
+              fill={theme.textColorFaint}
+              fontSize={10}
+              fontFamily="var(--font-inter), sans-serif"
+            >
+              {label}
+            </text>
+          );
+        })}
 
         {/* Stacked areas — render bottom to top */}
         {stacks.map((layer, sIdx) => {
@@ -257,10 +279,10 @@ export function StackedAreaChart({
         })}
 
         {/* Hover zones */}
-        {labels.map((_, i) => {
-          const stepW = chartWidth / (n - 1);
+        {dsLabels.map((_, i) => {
+          const stepW = chartWidth / (dsN - 1);
           const rectX = i === 0 ? padding.left : xScale(i) - stepW / 2;
-          const rectW = i === 0 || i === n - 1 ? stepW / 2 + (i === 0 ? 0 : stepW / 2) : stepW;
+          const rectW = i === 0 || i === dsN - 1 ? stepW / 2 + (i === 0 ? 0 : stepW / 2) : stepW;
           return (
             <g key={i}>
               <rect
@@ -313,9 +335,9 @@ export function StackedAreaChart({
           }}
         >
           <div style={{ fontSize: 10, color: theme.tooltipSubtext, marginBottom: 6 }}>
-            {labels[hoveredIndex]}
+            {dsLabels[hoveredIndex]}
           </div>
-          {series.map((s, sIdx) => (
+          {dsSeries.map((s, sIdx) => (
             <div
               key={sIdx}
               style={{
@@ -367,7 +389,7 @@ export function StackedAreaChart({
                 fontVariantNumeric: "tabular-nums",
               }}
             >
-              {displayValue(series.reduce((sum, s) => sum + s.data[hoveredIndex], 0))}
+              {displayValue(dsSeries.reduce((sum, s) => sum + s.data[hoveredIndex], 0))}
             </span>
           </div>
         </motion.div>
