@@ -111,6 +111,7 @@ func (s *Server) setupRoutes() {
 	// API v1 routes — authenticated via JWT (dashboard) or API key (SDKs)
 	s.router.Route("/v1", func(r chi.Router) {
 		r.Use(middleware.DualAuth(s.jwtManager, s.apiKeyStore))
+		r.Use(middleware.BodyLimit(10 * 1024 * 1024)) // 10MB default
 
 		// Rate limiting
 		if s.redis != nil {
