@@ -12,13 +12,18 @@ import (
 
 // FallbackExecutor tries each provider in a fallback chain until one succeeds.
 type FallbackExecutor struct {
-	router *Router
-	logger *slog.Logger
+	router          *Router
+	logger          *slog.Logger
+	circuitBreakers *CircuitBreakerRegistry
 }
 
 // NewFallbackExecutor creates a new FallbackExecutor.
 func NewFallbackExecutor(router *Router, logger *slog.Logger) *FallbackExecutor {
-	return &FallbackExecutor{router: router, logger: logger}
+	return &FallbackExecutor{
+		router:          router,
+		logger:          logger,
+		circuitBreakers: NewCircuitBreakerRegistry(),
+	}
 }
 
 // FallbackResult contains the outcome of a fallback chain execution.
@@ -46,8 +51,25 @@ func (f *FallbackExecutor) ExecuteChain(ctx context.Context, chain *store.Fallba
 	for _, entry := range chain.Chain {
 		result.Attempts++
 
+		// Check circuit breaker before attempting this provider.
+		cb := f.circuitBreakers.Get(entry.ProviderID)
+		if !cb.Allow() {
+			result.Errors = append(result.Errors, FallbackError{
+				ProviderID: entry.ProviderID,
+				Model:      entry.Model,
+				Error:      "circuit breaker open",
+			})
+			f.logger.Warn("skipping provider — circuit breaker open",
+				"provider_id", entry.ProviderID,
+				"model", entry.Model,
+				"state", cb.State().String(),
+			)
+			continue
+		}
+
 		adapter, ok := f.router.GetAdapter(entry.ProviderID)
 		if !ok {
+			cb.RecordFailure()
 			result.Errors = append(result.Errors, FallbackError{
 				ProviderID: entry.ProviderID,
 				Model:      entry.Model,
@@ -71,11 +93,14 @@ func (f *FallbackExecutor) ExecuteChain(ctx context.Context, chain *store.Fallba
 		cancel()
 
 		if err == nil {
+			cb.RecordSuccess()
 			result.Response = resp
 			result.ProviderName = adapter.Name()
 			result.ModelUsed = entry.Model
 			return result, nil
 		}
+
+		cb.RecordFailure()
 
 		fe := FallbackError{
 			ProviderID: entry.ProviderID,

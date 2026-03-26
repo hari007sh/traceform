@@ -180,9 +180,18 @@ func (p *Proxy) handleStream(w http.ResponseWriter, r *http.Request, orgID, orig
 
 	buf := make([]byte, 4096)
 	for {
+		select {
+		case <-r.Context().Done():
+			stream.Close()
+			return
+		default:
+		}
 		n, err := stream.Read(buf)
 		if n > 0 {
-			w.Write(buf[:n])
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				stream.Close()
+				return
+			}
 			flusher.Flush()
 		}
 		if err == io.EOF {
@@ -198,12 +207,16 @@ func (p *Proxy) handleStream(w http.ResponseWriter, r *http.Request, orgID, orig
 }
 
 // recordCostEvent asynchronously records a cost event for a completed request.
+// It uses a detached context (not the HTTP request context) so the write
+// succeeds even if the client disconnects before the goroutine runs.
 // Errors are logged but never fail the request.
-func (p *Proxy) recordCostEvent(ctx context.Context, orgID, model, providerName string, tokensIn, tokensOut int) {
+func (p *Proxy) recordCostEvent(_ context.Context, orgID, model, providerName string, tokensIn, tokensOut int) {
 	if p.costTracker == nil {
 		return
 	}
 	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 		event := &coststore.CostEvent{
 			AgentName:    "", // gateway does not have agent context
 			Model:        model,

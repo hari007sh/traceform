@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 // PostgresStore provides CRUD access to webhook data in PostgreSQL.
@@ -79,7 +80,7 @@ func (s *PostgresStore) CreateEndpoint(ctx context.Context, ep *WebhookEndpoint)
 	          RETURNING created_at, updated_at`
 
 	return s.db.QueryRowContext(ctx, query,
-		ep.ID, ep.OrgID, ep.Name, ep.Type, ep.URL, ep.Secret, ep.Events, ep.Headers, ep.IsActive,
+		ep.ID, ep.OrgID, ep.Name, ep.Type, ep.URL, ep.Secret, pq.Array(ep.Events), ep.Headers, ep.IsActive,
 	).Scan(&ep.CreatedAt, &ep.UpdatedAt)
 }
 
@@ -91,7 +92,7 @@ func (s *PostgresStore) GetEndpoint(ctx context.Context, orgID, id string) (*Web
 	var ep WebhookEndpoint
 	err := s.db.QueryRowContext(ctx, query, orgID, id).Scan(
 		&ep.ID, &ep.OrgID, &ep.Name, &ep.Type, &ep.URL, &ep.Secret,
-		&ep.Events, &ep.Headers, &ep.IsActive, &ep.CreatedAt, &ep.UpdatedAt,
+		pq.Array(&ep.Events), &ep.Headers, &ep.IsActive, &ep.CreatedAt, &ep.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -121,7 +122,7 @@ func (s *PostgresStore) ListEndpoints(ctx context.Context, orgID string) ([]Webh
 	for rows.Next() {
 		var ep WebhookEndpoint
 		if err := rows.Scan(&ep.ID, &ep.OrgID, &ep.Name, &ep.Type, &ep.URL, &ep.Secret,
-			&ep.Events, &ep.Headers, &ep.IsActive, &ep.CreatedAt, &ep.UpdatedAt); err != nil {
+			pq.Array(&ep.Events), &ep.Headers, &ep.IsActive, &ep.CreatedAt, &ep.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan endpoint: %w", err)
 		}
 		if ep.Events == nil {
@@ -144,7 +145,7 @@ func (s *PostgresStore) UpdateEndpoint(ctx context.Context, ep *WebhookEndpoint)
 	          RETURNING updated_at`
 
 	return s.db.QueryRowContext(ctx, query,
-		ep.Name, ep.Type, ep.URL, ep.Secret, ep.Events,
+		ep.Name, ep.Type, ep.URL, ep.Secret, pq.Array(ep.Events),
 		ep.Headers, ep.IsActive, ep.OrgID, ep.ID,
 	).Scan(&ep.UpdatedAt)
 }
@@ -183,7 +184,7 @@ func (s *PostgresStore) ListActiveEndpointsForEvent(ctx context.Context, orgID, 
 	for rows.Next() {
 		var ep WebhookEndpoint
 		if err := rows.Scan(&ep.ID, &ep.OrgID, &ep.Name, &ep.Type, &ep.URL, &ep.Secret,
-			&ep.Events, &ep.Headers, &ep.IsActive, &ep.CreatedAt, &ep.UpdatedAt); err != nil {
+			pq.Array(&ep.Events), &ep.Headers, &ep.IsActive, &ep.CreatedAt, &ep.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan endpoint: %w", err)
 		}
 		if ep.Events == nil {
