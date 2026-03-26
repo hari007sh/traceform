@@ -47,10 +47,21 @@ func (s *Server) setupRoutes() {
 	s.router.Get("/health", s.handleHealth)
 	s.router.Get("/ready", s.handleReady)
 
+	// --- Build SSO handler ---
+	ssoStore := auth.NewSSOStore(s.db)
+	encSvcSSO, _ := routeservice.NewEncryption(s.cfg.EncryptionKey)
+	ssoHandler := auth.NewSSOHandler(ssoStore, s.jwtManager, encSvcSSO, s.db, s.logger, s.cfg.FrontendURL)
+
 	// Auth routes — unauthenticated
 	s.router.Route("/auth", func(r chi.Router) {
 		r.Post("/github", s.handleGitHubLogin)
 		r.Get("/github/callback", s.handleGitHubCallback)
+
+		// SSO routes
+		r.Get("/sso/lookup", ssoHandler.HandleSSOLookup)
+		r.Post("/saml/acs", ssoHandler.HandleSAMLACSEndpoint)
+		r.Get("/oidc/{orgID}/login", ssoHandler.HandleOIDCLogin)
+		r.Get("/oidc/callback", ssoHandler.HandleOIDCCallback)
 	})
 
 	// --- Build trace module dependencies ---
@@ -498,15 +509,9 @@ func (s *Server) setupRoutes() {
 		// SSO configuration — owner only
 		r.Route("/sso", func(r chi.Router) {
 			r.Use(middleware.RequireRole("owner"))
-			r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-				WriteJSON(w, http.StatusOK, map[string]interface{}{"data": nil, "enabled": false})
-			})
-			r.Post("/", func(w http.ResponseWriter, r *http.Request) {
-				WriteError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "SSO configuration is not yet available")
-			})
-			r.Delete("/", func(w http.ResponseWriter, r *http.Request) {
-				WriteError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "SSO configuration is not yet available")
-			})
+			r.Get("/", ssoHandler.HandleSSOConfigGet)
+			r.Post("/", ssoHandler.HandleSSOConfigUpsert)
+			r.Delete("/", ssoHandler.HandleSSOConfigDelete)
 		})
 	})
 }
