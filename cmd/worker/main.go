@@ -119,8 +119,8 @@ func main() {
 	patternMatcher := worker.NewPatternMatcher(chDB, pgDB, logger.With("worker", "pattern_matcher"))
 	patternMatcher.Start()
 
-	// Start alert evaluator
-	alertEvaluator := worker.NewAlertEvaluator(chDB, pgDB, logger.With("worker", "alert_evaluator"))
+	// Start alert evaluator (NATS connection enables webhook dispatch on alert fire)
+	alertEvaluator := worker.NewAlertEvaluator(chDB, pgDB, natsConn, logger.With("worker", "alert_evaluator"))
 	alertEvaluator.Start()
 
 	// Start budget checker (every 60 seconds)

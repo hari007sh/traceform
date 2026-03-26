@@ -7,6 +7,10 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	webhookservice "github.com/agentstack/agentstack/internal/webhook/service"
+	webhookstore "github.com/agentstack/agentstack/internal/webhook/store"
+	"github.com/nats-io/nats.go"
 )
 
 const (
@@ -16,20 +20,30 @@ const (
 
 // AlertEvaluator periodically evaluates alert rules from PostgreSQL against
 // ClickHouse trace data and creates alert_events when thresholds are crossed.
+// When an alert fires, it dispatches a webhook event via NATS so that
+// configured Slack/PagerDuty/generic endpoints receive notifications.
 type AlertEvaluator struct {
-	chDB   *sql.DB
-	pgDB   *sql.DB
-	logger *slog.Logger
-	done   chan struct{}
+	chDB       *sql.DB
+	pgDB       *sql.DB
+	dispatcher *webhookservice.Dispatcher
+	logger     *slog.Logger
+	done       chan struct{}
 }
 
 // NewAlertEvaluator creates a new alert evaluator worker.
-func NewAlertEvaluator(chDB, pgDB *sql.DB, logger *slog.Logger) *AlertEvaluator {
+// If nc is non-nil, fired alerts are published to the webhook delivery pipeline.
+func NewAlertEvaluator(chDB, pgDB *sql.DB, nc *nats.Conn, logger *slog.Logger) *AlertEvaluator {
+	var dispatcher *webhookservice.Dispatcher
+	if nc != nil {
+		pg := webhookstore.NewPostgresStore(pgDB)
+		dispatcher = webhookservice.NewDispatcher(pg, nc, logger)
+	}
 	return &AlertEvaluator{
-		chDB:   chDB,
-		pgDB:   pgDB,
-		logger: logger,
-		done:   make(chan struct{}),
+		chDB:       chDB,
+		pgDB:       pgDB,
+		dispatcher: dispatcher,
+		logger:     logger,
+		done:       make(chan struct{}),
 	}
 }
 
@@ -118,6 +132,9 @@ func (ae *AlertEvaluator) run() {
 				"org_id", rule.OrgID,
 				"details", string(details),
 			)
+
+			// Dispatch webhook event so Slack/PagerDuty/generic endpoints are notified.
+			ae.dispatchAlertWebhook(ctx, rule, details)
 		}
 	}
 
@@ -337,6 +354,49 @@ func (ae *AlertEvaluator) createAlertEvent(ctx context.Context, rule alertRule, 
 	}
 
 	return nil
+}
+
+// dispatchAlertWebhook publishes an "alert.fired" event to the webhook delivery
+// pipeline via NATS. The webhook sender worker picks this up and delivers it to
+// any endpoints subscribed to the "alert.fired" event (Slack, PagerDuty, generic).
+func (ae *AlertEvaluator) dispatchAlertWebhook(ctx context.Context, rule alertRule, details json.RawMessage) {
+	if ae.dispatcher == nil {
+		return
+	}
+
+	// Build the payload that Slack/PagerDuty formatters expect.
+	payload := map[string]interface{}{
+		"alert_rule_id":   rule.ID,
+		"alert_rule_name": rule.Name,
+		"org_id":          rule.OrgID,
+	}
+
+	// Merge the alert details (metric, threshold, actual_value, etc.) into the payload.
+	var detailMap map[string]interface{}
+	if err := json.Unmarshal(details, &detailMap); err == nil {
+		for k, v := range detailMap {
+			payload[k] = v
+		}
+	}
+
+	// Map specific detail fields to the keys the Slack/PagerDuty formatters use.
+	if v, ok := payload["actual_value"]; ok {
+		payload["current_value"] = v
+	}
+
+	if err := ae.dispatcher.Dispatch(ctx, rule.OrgID, "alert.fired", payload); err != nil {
+		ae.logger.Error("failed to dispatch alert webhook",
+			"rule_id", rule.ID,
+			"org_id", rule.OrgID,
+			"error", err,
+		)
+	} else {
+		ae.logger.Info("alert webhook dispatched",
+			"rule_id", rule.ID,
+			"org_id", rule.OrgID,
+			"event", "alert.fired",
+		)
+	}
 }
 
 // compareValues evaluates whether actual <op> threshold is true.
