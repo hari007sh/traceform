@@ -502,6 +502,10 @@ func (s *Server) setupRoutes() {
 			r.Patch("/", s.handleUpdateOrg)
 			r.Delete("/", s.handleDeleteOrg)
 			r.Get("/usage", s.handleGetOrgUsage)
+
+			// GDPR data deletion endpoints
+			r.Delete("/data", s.handleDeleteOrgData)
+			r.Delete("/data/sessions", s.handleDeleteOrgSessions)
 		})
 
 		// API key management
