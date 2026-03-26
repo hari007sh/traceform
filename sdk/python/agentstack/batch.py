@@ -18,6 +18,7 @@ logger = logging.getLogger("agentstack.batch")
 DEFAULT_BATCH_SIZE = 50
 DEFAULT_FLUSH_INTERVAL_SECONDS = 5.0
 DEFAULT_MAX_QUEUE_SIZE = 10_000
+MAX_FLUSH_RETRIES = 3
 
 
 class BatchSender:
@@ -104,9 +105,9 @@ class BatchSender:
             )
             return False
 
-        # Check if we should trigger an immediate flush
-        if self._queue.qsize() >= self._batch_size:
-            self._drain_and_flush()
+        # The background thread handles all flushing.  We no longer call
+        # _drain_and_flush() here — doing so blocked the caller's thread and
+        # defeated the purpose of async batching.
 
         return True
 
@@ -169,14 +170,35 @@ class BatchSender:
         # Send in chunks of batch_size
         for i in range(0, len(to_send), self._batch_size):
             chunk = to_send[i : i + self._batch_size]
+            self._flush_chunk(chunk)
+
+    def _flush_chunk(self, chunk: List[Dict[str, Any]]) -> None:
+        """Send a single chunk with retry + exponential backoff.
+
+        After ``MAX_FLUSH_RETRIES`` failures the chunk is dropped to prevent
+        unbounded re-queuing.
+        """
+        for attempt in range(MAX_FLUSH_RETRIES):
             try:
                 self._send_fn(chunk)
                 logger.debug("Flushed %d events", len(chunk))
+                return
             except Exception:
-                logger.exception("Failed to flush %d events", len(chunk))
-                # Re-queue failed events (best effort)
-                with self._buffer_lock:
-                    self._buffer.extend(chunk)
+                if attempt == MAX_FLUSH_RETRIES - 1:
+                    logger.error(
+                        "Dropping %d events after %d retries",
+                        len(chunk),
+                        MAX_FLUSH_RETRIES,
+                    )
+                    return
+                wait = min(2 ** attempt, 4)
+                logger.warning(
+                    "Flush attempt %d/%d failed, retrying in %ds",
+                    attempt + 1,
+                    MAX_FLUSH_RETRIES,
+                    wait,
+                )
+                time.sleep(wait)
 
     @property
     def pending_count(self) -> int:

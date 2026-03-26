@@ -5,6 +5,7 @@ Handles communication with the AgentStack API server.
 Supports batched event sending, retry logic, and async compatibility.
 """
 
+import atexit
 import json
 import logging
 import threading
@@ -65,12 +66,16 @@ class AgentStackClient:
         self._api_key = api_key
         self._endpoint = endpoint.rstrip("/")
         self._timeout = timeout
-        self._session = requests.Session()
-        self._session.headers.update({
+
+        # Per-thread HTTP sessions for thread safety (requests.Session is not
+        # thread-safe).  Each thread lazily creates its own session via the
+        # ``_session`` property.
+        self._local = threading.local()
+        self._session_headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "User-Agent": "agentstack-python/0.1.0",
-        })
+        }
 
         self._batch_sender = BatchSender(
             send_fn=self._send_batch,
@@ -78,8 +83,10 @@ class AgentStackClient:
             flush_interval=flush_interval,
         )
         self._batch_sender.start()
-        self._lock = threading.Lock()
         self._server_sample_rate: Optional[float] = None
+
+        # Ensure pending events are flushed when the process exits.
+        atexit.register(self.shutdown)
 
     @property
     def endpoint(self) -> str:
@@ -90,6 +97,19 @@ class AgentStackClient:
     def server_sample_rate(self) -> Optional[float]:
         """Server-recommended sample rate from the last batch response, or None."""
         return self._server_sample_rate
+
+    @property
+    def _session(self) -> requests.Session:
+        """Return a per-thread ``requests.Session``.
+
+        ``requests.Session`` is not thread-safe so each thread gets its own
+        instance, created lazily on first access.
+        """
+        if not hasattr(self._local, "session"):
+            s = requests.Session()
+            s.headers.update(self._session_headers)
+            self._local.session = s
+        return self._local.session
 
     def send_event(self, event: Dict[str, Any]) -> None:
         """
@@ -138,7 +158,9 @@ class AgentStackClient:
     def shutdown(self) -> None:
         """Gracefully shut down the client, flushing remaining events."""
         self._batch_sender.shutdown()
-        self._session.close()
+        # Close the calling thread's session (if one was created).
+        if hasattr(self._local, "session"):
+            self._local.session.close()
         logger.debug("AgentStackClient shut down.")
 
     def _send_batch(self, events: List[Dict[str, Any]]) -> None:

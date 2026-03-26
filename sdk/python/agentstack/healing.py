@@ -9,11 +9,13 @@ Provides automatic intervention for:
 - Timeout recovery (retry + skip logic)
 """
 
+import collections
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 import hashlib
 import json
 import contextvars
+import threading
 import time
 import logging
 
@@ -91,6 +93,9 @@ class HealingEngine:
         summarize_instruction = engine.check_context(current_tokens=95000, max_tokens=128000)
     """
 
+    # Maximum entries kept in call_history to bound memory usage.
+    _MAX_CALL_HISTORY = 1000
+
     def __init__(self, config: HealingConfig, session: Any):
         """
         Args:
@@ -105,6 +110,14 @@ class HealingEngine:
         self.interventions: List[HealingIntervention] = []
         self.retry_counts: Dict[str, int] = {}
         self._started_at = time.time()
+
+        # Lock protecting all mutable state (call_history, total_cost_cents,
+        # total_tokens, interventions, retry_counts, _fp_counts).
+        self._lock = threading.Lock()
+
+        # O(1) fingerprint counter for loop detection — replaces the O(N)
+        # scan of call_history on every call.
+        self._fp_counts: collections.Counter = collections.Counter()
 
     def _fingerprint(self, tool_name: str, params: dict) -> str:
         """Generate a deterministic hash of a tool call for duplicate detection."""
@@ -128,67 +141,79 @@ class HealingEngine:
 
         fp = self._fingerprint(tool_name, params)
 
-        # ── LOOP DETECTION ──
-        identical = sum(1 for c in self.call_history if c['fp'] == fp)
-        if identical >= self.config.loop_threshold:
-            intervention = HealingIntervention(
-                type="loop_break",
-                description=f"Agent called '{tool_name}' {identical+1} times with identical params",
-                action_taken="Injected corrective prompt",
-                original_call={"tool": tool_name, "params": params},
-                saved_cost_estimate_cents=identical * 5,
-            )
-            self.interventions.append(intervention)
-            self.session.add_event("healing", "loop_break", {
-                "tool": tool_name,
-                "count": identical + 1,
-            })
-            logger.warning(
-                "Shield: loop detected — %s called %d times with same params",
-                tool_name, identical + 1,
-            )
-            return (
-                f"You have called '{tool_name}' {identical+1} times with the same "
-                f"parameters. Try a completely different approach or summarize what you have."
-            )
-
-        # ── COST CHECK ──
-        if self.total_cost_cents >= self.config.cost_limit_cents:
-            action = (
-                "Switched to fallback model" if self.config.model_fallback else "Halted"
-            )
-            intervention = HealingIntervention(
-                type="cost_breaker",
-                description=(
-                    f"Cost ${self.total_cost_cents/100:.2f} exceeded limit "
-                    f"${self.config.cost_limit_cents/100:.2f}"
-                ),
-                action_taken=action,
-                original_call={"tool": tool_name},
-            )
-            self.interventions.append(intervention)
-            self.session.add_event("healing", "cost_breaker", {
-                "cost": self.total_cost_cents,
-                "limit": self.config.cost_limit_cents,
-            })
-            logger.warning(
-                "Shield: cost breaker triggered — $%.2f >= $%.2f",
-                self.total_cost_cents / 100, self.config.cost_limit_cents / 100,
-            )
-            if self.config.model_fallback:
-                return (
-                    f"BUDGET LIMIT REACHED. Switch to model "
-                    f"'{self.config.model_fallback}' for all remaining operations."
+        with self._lock:
+            # ── LOOP DETECTION (O(1) via Counter) ──
+            identical = self._fp_counts[fp]
+            if identical >= self.config.loop_threshold:
+                intervention = HealingIntervention(
+                    type="loop_break",
+                    description=f"Agent called '{tool_name}' {identical+1} times with identical params",
+                    action_taken="Injected corrective prompt",
+                    original_call={"tool": tool_name, "params": params},
+                    saved_cost_estimate_cents=identical * 5,
                 )
-            raise CostLimitExceeded(self.total_cost_cents, self.config.cost_limit_cents)
+                self.interventions.append(intervention)
+                self.session.add_event("healing", "loop_break", {
+                    "tool": tool_name,
+                    "count": identical + 1,
+                })
+                logger.warning(
+                    "Shield: loop detected — %s called %d times with same params",
+                    tool_name, identical + 1,
+                )
+                return (
+                    f"You have called '{tool_name}' {identical+1} times with the same "
+                    f"parameters. Try a completely different approach or summarize what you have."
+                )
 
-        # ── RECORD CALL ──
-        self.call_history.append({
-            "tool": tool_name,
-            "params": params,
-            "fp": fp,
-            "ts": time.time(),
-        })
+            # ── COST CHECK ──
+            if self.total_cost_cents >= self.config.cost_limit_cents:
+                action = (
+                    "Switched to fallback model" if self.config.model_fallback else "Halted"
+                )
+                intervention = HealingIntervention(
+                    type="cost_breaker",
+                    description=(
+                        f"Cost ${self.total_cost_cents/100:.2f} exceeded limit "
+                        f"${self.config.cost_limit_cents/100:.2f}"
+                    ),
+                    action_taken=action,
+                    original_call={"tool": tool_name},
+                )
+                self.interventions.append(intervention)
+                self.session.add_event("healing", "cost_breaker", {
+                    "cost": self.total_cost_cents,
+                    "limit": self.config.cost_limit_cents,
+                })
+                logger.warning(
+                    "Shield: cost breaker triggered — $%.2f >= $%.2f",
+                    self.total_cost_cents / 100, self.config.cost_limit_cents / 100,
+                )
+                if self.config.model_fallback:
+                    return (
+                        f"BUDGET LIMIT REACHED. Switch to model "
+                        f"'{self.config.model_fallback}' for all remaining operations."
+                    )
+                raise CostLimitExceeded(self.total_cost_cents, self.config.cost_limit_cents)
+
+            # ── RECORD CALL ──
+            self._fp_counts[fp] += 1
+            self.call_history.append({
+                "tool": tool_name,
+                "params": params,
+                "fp": fp,
+                "ts": time.time(),
+            })
+            # Cap call_history to bound memory.
+            if len(self.call_history) > self._MAX_CALL_HISTORY:
+                removed = self.call_history[:len(self.call_history) - self._MAX_CALL_HISTORY]
+                self.call_history = self.call_history[-self._MAX_CALL_HISTORY:]
+                # Decrement counters for evicted entries.
+                for entry in removed:
+                    self._fp_counts[entry['fp']] -= 1
+                    if self._fp_counts[entry['fp']] <= 0:
+                        del self._fp_counts[entry['fp']]
+
         return None
 
     def on_tool_error(
@@ -209,54 +234,55 @@ class HealingEngine:
 
         err = str(error).lower()
 
-        # ── HALLUCINATION GUARD ──
-        hallucination_signals = [
-            "not found", "does not exist", "no such",
-            "unknown function", "invalid tool", "unrecognized",
-        ]
-        if any(s in err for s in hallucination_signals):
-            key = f"hall:{tool_name}"
-            self.retry_counts[key] = self.retry_counts.get(key, 0) + 1
-            if self.retry_counts[key] > self.config.max_retries_per_step:
-                return None  # exhausted retries, let error propagate
-            intervention = HealingIntervention(
-                type="hallucination_catch",
-                description=f"Agent called non-existent tool '{tool_name}'",
-                action_taken="Provided available tools list",
-                original_call={"tool": tool_name, "error": str(error)},
-            )
-            self.interventions.append(intervention)
-            self.session.add_event("healing", "hallucination_catch", {
-                "tool": tool_name,
-            })
-            logger.warning("Shield: hallucination caught — tool '%s' does not exist", tool_name)
-            tools_msg = f" Available tools: {available_tools}" if available_tools else ""
-            return f"Error: '{tool_name}' does not exist.{tools_msg} Use only valid tools."
-
-        # ── TIMEOUT RECOVERY ──
-        timeout_signals = ["timeout", "timed out", "deadline exceeded"]
-        if any(s in err for s in timeout_signals):
-            key = f"timeout:{tool_name}"
-            self.retry_counts[key] = self.retry_counts.get(key, 0) + 1
-            if self.retry_counts[key] > 1 or not self.config.timeout_retry:
+        with self._lock:
+            # ── HALLUCINATION GUARD ──
+            hallucination_signals = [
+                "not found", "does not exist", "no such",
+                "unknown function", "invalid tool", "unrecognized",
+            ]
+            if any(s in err for s in hallucination_signals):
+                key = f"hall:{tool_name}"
+                self.retry_counts[key] = self.retry_counts.get(key, 0) + 1
+                if self.retry_counts[key] > self.config.max_retries_per_step:
+                    return None  # exhausted retries, let error propagate
                 intervention = HealingIntervention(
-                    type="timeout_recovery",
-                    description=f"Tool '{tool_name}' timed out after retry",
-                    action_taken="Skipped tool, continuing without result",
-                    original_call={"tool": tool_name},
-                    result="skipped",
+                    type="hallucination_catch",
+                    description=f"Agent called non-existent tool '{tool_name}'",
+                    action_taken="Provided available tools list",
+                    original_call={"tool": tool_name, "error": str(error)},
                 )
                 self.interventions.append(intervention)
-                self.session.add_event("healing", "timeout_skip", {
+                self.session.add_event("healing", "hallucination_catch", {
                     "tool": tool_name,
                 })
-                logger.warning("Shield: timeout — skipping tool '%s'", tool_name)
-                return f"'{tool_name}' is unavailable (timed out). Continue without it."
-            self.session.add_event("healing", "timeout_retry", {
-                "tool": tool_name,
-            })
-            logger.info("Shield: timeout — retrying tool '%s'", tool_name)
-            return None  # let framework retry
+                logger.warning("Shield: hallucination caught — tool '%s' does not exist", tool_name)
+                tools_msg = f" Available tools: {available_tools}" if available_tools else ""
+                return f"Error: '{tool_name}' does not exist.{tools_msg} Use only valid tools."
+
+            # ── TIMEOUT RECOVERY ──
+            timeout_signals = ["timeout", "timed out", "deadline exceeded"]
+            if any(s in err for s in timeout_signals):
+                key = f"timeout:{tool_name}"
+                self.retry_counts[key] = self.retry_counts.get(key, 0) + 1
+                if self.retry_counts[key] > 1 or not self.config.timeout_retry:
+                    intervention = HealingIntervention(
+                        type="timeout_recovery",
+                        description=f"Tool '{tool_name}' timed out after retry",
+                        action_taken="Skipped tool, continuing without result",
+                        original_call={"tool": tool_name},
+                        result="skipped",
+                    )
+                    self.interventions.append(intervention)
+                    self.session.add_event("healing", "timeout_skip", {
+                        "tool": tool_name,
+                    })
+                    logger.warning("Shield: timeout — skipping tool '%s'", tool_name)
+                    return f"'{tool_name}' is unavailable (timed out). Continue without it."
+                self.session.add_event("healing", "timeout_retry", {
+                    "tool": tool_name,
+                })
+                logger.info("Shield: timeout — retrying tool '%s'", tool_name)
+                return None  # let framework retry
 
         return None
 
@@ -273,16 +299,17 @@ class HealingEngine:
 
         ratio = current_tokens / max_tokens
         if ratio >= self.config.context_summarize_at:
-            intervention = HealingIntervention(
-                type="context_overflow",
-                description=f"Context at {ratio:.0%} of {max_tokens} tokens",
-                action_taken="Injected summarization instruction",
-                original_call={
-                    "current_tokens": current_tokens,
-                    "max_tokens": max_tokens,
-                },
-            )
-            self.interventions.append(intervention)
+            with self._lock:
+                intervention = HealingIntervention(
+                    type="context_overflow",
+                    description=f"Context at {ratio:.0%} of {max_tokens} tokens",
+                    action_taken="Injected summarization instruction",
+                    original_call={
+                        "current_tokens": current_tokens,
+                        "max_tokens": max_tokens,
+                    },
+                )
+                self.interventions.append(intervention)
             self.session.add_event("healing", "context_overflow", {
                 "ratio": round(ratio, 2),
             })
@@ -297,8 +324,9 @@ class HealingEngine:
 
     def update_cost(self, cost_cents: int, tokens: int) -> None:
         """Record cost and token usage from an LLM call."""
-        self.total_cost_cents += cost_cents
-        self.total_tokens += tokens
+        with self._lock:
+            self.total_cost_cents += cost_cents
+            self.total_tokens += tokens
 
     def get_summary(self) -> dict:
         """Get a summary of all healing interventions for this session."""
@@ -306,18 +334,23 @@ class HealingEngine:
             "loop_break", "hallucination_catch", "cost_breaker",
             "context_overflow", "timeout_recovery",
         ]
+        with self._lock:
+            interventions_snapshot = list(self.interventions)
+            cost = self.total_cost_cents
+            tokens = self.total_tokens
+
         return {
-            "total_interventions": len(self.interventions),
+            "total_interventions": len(interventions_snapshot),
             "by_type": {
-                t: sum(1 for i in self.interventions if i.type == t)
+                t: sum(1 for i in interventions_snapshot if i.type == t)
                 for t in types
-                if any(i.type == t for i in self.interventions)
+                if any(i.type == t for i in interventions_snapshot)
             },
             "estimated_savings_cents": sum(
-                i.saved_cost_estimate_cents for i in self.interventions
+                i.saved_cost_estimate_cents for i in interventions_snapshot
             ),
-            "total_cost_cents": self.total_cost_cents,
-            "total_tokens": self.total_tokens,
+            "total_cost_cents": cost,
+            "total_tokens": tokens,
             "duration_seconds": round(time.time() - self._started_at, 2),
             "interventions": [
                 {
@@ -328,6 +361,6 @@ class HealingEngine:
                     "saved_cost_estimate_cents": i.saved_cost_estimate_cents,
                     "timestamp": i.timestamp,
                 }
-                for i in self.interventions
+                for i in interventions_snapshot
             ],
         }
