@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"strings"
 
@@ -17,6 +18,10 @@ const (
 	UserIDKey contextKey = "user_id"
 	// APIKeyIDKey is the context key for the API key ID.
 	APIKeyIDKey contextKey = "api_key_id"
+	// UserEmailKey is the context key for the authenticated user email.
+	UserEmailKey contextKey = "user_email"
+	// UserRoleKey is the context key for the authenticated user role.
+	UserRoleKey contextKey = "user_role"
 )
 
 // APIKeyAuth returns middleware that authenticates requests using API keys.
@@ -59,6 +64,8 @@ func DualAuth(jwtManager *auth.JWTManager, apiKeyStore *auth.APIKeyStore) func(h
 			if jwtErr == nil {
 				ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
 				ctx = context.WithValue(ctx, OrgIDKey, claims.OrgID)
+				ctx = context.WithValue(ctx, UserEmailKey, claims.Email)
+				ctx = context.WithValue(ctx, UserRoleKey, claims.Role)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
@@ -95,6 +102,8 @@ func JWTAuth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 
 			ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
 			ctx = context.WithValue(ctx, OrgIDKey, claims.OrgID)
+			ctx = context.WithValue(ctx, UserEmailKey, claims.Email)
+			ctx = context.WithValue(ctx, UserRoleKey, claims.Role)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -114,6 +123,28 @@ func GetUserID(ctx context.Context) string {
 		return v
 	}
 	return ""
+}
+
+// GetUserEmail extracts the user email from the request context.
+func GetUserEmail(ctx context.Context) string {
+	if v, ok := ctx.Value(UserEmailKey).(string); ok {
+		return v
+	}
+	return ""
+}
+
+// GetClientIP extracts the client IP address from the request,
+// checking X-Forwarded-For and X-Real-IP headers before falling back to RemoteAddr.
+func GetClientIP(r *http.Request) string {
+	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
+		parts := strings.Split(ip, ",")
+		return strings.TrimSpace(parts[0])
+	}
+	if ip := r.Header.Get("X-Real-IP"); ip != "" {
+		return ip
+	}
+	host, _, _ := net.SplitHostPort(r.RemoteAddr)
+	return host
 }
 
 func extractBearerToken(r *http.Request) string {
