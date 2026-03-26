@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -19,8 +19,12 @@ import {
   XCircle,
   Timer,
   RefreshCw,
+  ChevronRight,
 } from "lucide-react";
-import { fadeIn, staggerContainer, staggerItem } from "@/lib/animations";
+import { Virtuoso } from "react-virtuoso";
+import { SessionReplay } from "@/components/session-replay";
+import type { SpanData, HealingMarker } from "@/components/session-replay";
+import { fadeIn } from "@/lib/animations";
 import { SkeletonBlock } from "@/components/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { api, ApiError } from "@/lib/api";
@@ -71,11 +75,25 @@ const spanStatusIcons: Record<string, React.ElementType> = {
   timeout: AlertCircle,
 };
 
-function getDepth(span: Span, allSpans: Span[]): number {
-  if (!span.parent_id) return 0;
-  const parent = allSpans.find((s) => s.id === span.parent_id);
-  if (!parent) return 0;
-  return 1 + getDepth(parent, allSpans);
+/** O(N) depth computation — builds a hash map once instead of O(N^2) .find() per span */
+function computeDepths(spans: Span[]): Map<string, number> {
+  const depthMap = new Map<string, number>();
+  const spanMap = new Map(spans.map((s) => [s.id, s]));
+
+  function depth(id: string): number {
+    if (depthMap.has(id)) return depthMap.get(id)!;
+    const span = spanMap.get(id);
+    if (!span?.parent_id || !spanMap.has(span.parent_id)) {
+      depthMap.set(id, 0);
+      return 0;
+    }
+    const d = 1 + depth(span.parent_id);
+    depthMap.set(id, d);
+    return d;
+  }
+
+  spans.forEach((s) => depth(s.id));
+  return depthMap;
 }
 
 function formatDuration(ms: number): string {
@@ -168,15 +186,98 @@ export default function SessionDetailPage() {
   const maxDuration = session?.duration_ms ?? 0;
 
   // Order spans by start time
-  const orderedSpans = [...spans].sort(
-    (a, b) =>
-      new Date(a.started_at).getTime() - new Date(b.started_at).getTime()
+  const orderedSpans = useMemo(
+    () =>
+      [...spans].sort(
+        (a, b) =>
+          new Date(a.started_at).getTime() - new Date(b.started_at).getTime()
+      ),
+    [spans]
+  );
+
+  // O(N) depth map — computed once
+  const depths = useMemo(() => computeDepths(orderedSpans), [orderedSpans]);
+
+  // Track which spans have children (for collapse toggle)
+  const hasChildren = useMemo(() => {
+    const set = new Set<string>();
+    orderedSpans.forEach((s) => {
+      if (s.parent_id) set.add(s.parent_id);
+    });
+    return set;
+  }, [orderedSpans]);
+
+  // Collapsed subtree state
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  // Filter out children of collapsed parents
+  const visibleSpans = useMemo(() => {
+    const spanMap = new Map(orderedSpans.map((s) => [s.id, s]));
+    return orderedSpans.filter((span) => {
+      let parentId = span.parent_id;
+      while (parentId) {
+        if (collapsed.has(parentId)) return false;
+        const parent = spanMap.get(parentId);
+        parentId = parent?.parent_id || "";
+        if (!parentId) break;
+      }
+      return true;
+    });
+  }, [orderedSpans, collapsed]);
+
+  const toggleCollapse = useCallback((spanId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(spanId)) {
+        next.delete(spanId);
+      } else {
+        next.add(spanId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Map Span[] -> SpanData[] for SessionReplay component
+  const replaySpans: SpanData[] = useMemo(
+    () =>
+      orderedSpans.map((s) => ({
+        id: s.id,
+        name: s.name,
+        span_type: s.span_type,
+        start_time: s.started_at,
+        end_time: s.ended_at,
+        parent_id: s.parent_id || null,
+        model: s.model || undefined,
+        tokens: s.input_tokens || s.output_tokens
+          ? { input: s.input_tokens, output: s.output_tokens }
+          : undefined,
+        status: s.status === "timeout" ? "completed" : s.status,
+      })),
+    [orderedSpans]
+  );
+
+  // Map healing events -> HealingMarker[] for SessionReplay
+  const healingMarkers: HealingMarker[] = useMemo(
+    () =>
+      events
+        .filter((e) => e.type === "healing" || e.type === "healing_intervention")
+        .map((e) => ({
+          id: e.id,
+          timestamp: e.created_at,
+          intervention_type: e.name || e.type,
+          description: e.data || "",
+        })),
+    [events]
   );
 
   // Order events by timestamp
-  const orderedEvents = [...events].sort(
-    (a, b) =>
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  const orderedEvents = useMemo(
+    () =>
+      [...events].sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      ),
+    [events]
   );
 
   return (
@@ -325,10 +426,20 @@ export default function SessionDetailPage() {
             </div>
           </div>
 
+          {/* Session Replay Gantt Chart */}
+          {orderedSpans.length > 0 && (
+            <SessionReplay spans={replaySpans} healingMarkers={healingMarkers} />
+          )}
+
           {/* Span Tree */}
           <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] overflow-hidden">
-            <div className="px-5 py-4 border-b border-[var(--border-subtle)]">
+            <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
               <h3 className="text-sm font-medium">Span Timeline</h3>
+              {orderedSpans.length > 0 && (
+                <span className="text-xs text-[var(--text-tertiary)]">
+                  {visibleSpans.length} of {orderedSpans.length} spans
+                </span>
+              )}
             </div>
 
             {orderedSpans.length === 0 ? (
@@ -341,148 +452,161 @@ export default function SessionDetailPage() {
                 </p>
               </div>
             ) : (
-              <motion.div
-                variants={staggerContainer}
-                initial="hidden"
-                animate="visible"
-              >
-                {orderedSpans.map((span) => {
-                  const depth = getDepth(span, orderedSpans);
-                  const SpanTypeIcon = spanTypeIcons[span.span_type] || Zap;
-                  const StatusIcon =
-                    spanStatusIcons[span.status] || CheckCircle2;
-                  const barWidth =
-                    maxDuration > 0
-                      ? Math.max(4, (span.duration_ms / maxDuration) * 100)
-                      : 4;
+              <div style={{ height: Math.min(visibleSpans.length * 80, 600) }}>
+                <Virtuoso
+                  data={visibleSpans}
+                  itemContent={(_index, span) => {
+                    const depth = depths.get(span.id) || 0;
+                    const SpanTypeIcon = spanTypeIcons[span.span_type] || Zap;
+                    const StatusIcon =
+                      spanStatusIcons[span.status] || CheckCircle2;
+                    const barWidth =
+                      maxDuration > 0
+                        ? Math.max(4, (span.duration_ms / maxDuration) * 100)
+                        : 4;
+                    const isCollapsed = collapsed.has(span.id);
+                    const isParent = hasChildren.has(span.id);
 
-                  return (
-                    <motion.div
-                      key={span.id}
-                      variants={staggerItem}
-                      className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--bg-hover)] transition-colors"
-                    >
-                      <div className="flex items-center gap-3 px-5 py-3">
-                        {/* Indentation */}
-                        <div
-                          style={{ width: depth * 24 }}
-                          className="flex-shrink-0"
-                        />
-
-                        {/* Type Icon */}
-                        <div
-                          className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${spanTypeColors[span.span_type]}`}
-                        >
-                          <SpanTypeIcon className="w-3.5 h-3.5" />
-                        </div>
-
-                        {/* Name + Type Badge */}
-                        <div className="min-w-0 flex-shrink-0 w-48">
-                          <p className="text-sm font-medium truncate">
-                            {span.name}
-                          </p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] px-1.5 py-0 h-4 border-[var(--border-subtle)]"
-                            >
-                              {span.span_type.replace("_", " ")}
-                            </Badge>
-                            {span.model && (
-                              <span className="text-[10px] text-[var(--text-tertiary)]">
-                                {span.model}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Status */}
-                        <div className="flex items-center gap-1.5 flex-shrink-0 w-24">
-                          <StatusIcon
-                            className="w-3.5 h-3.5"
-                            style={{
-                              color:
-                                span.status === "completed"
-                                  ? "var(--accent-green)"
-                                  : span.status === "failed"
-                                  ? "var(--accent-red)"
-                                  : span.status === "running"
-                                  ? "var(--accent-blue)"
-                                  : "var(--accent-amber)",
-                            }}
+                    return (
+                      <div className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] transition-colors">
+                        <div className="flex items-center gap-3 px-5 py-3">
+                          {/* Indentation */}
+                          <div
+                            style={{ width: depth * 24 }}
+                            className="flex-shrink-0"
                           />
-                          <span className="text-xs capitalize text-[var(--text-secondary)]">
-                            {span.status}
-                          </span>
-                        </div>
 
-                        {/* Duration Bar */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 rounded-full bg-[var(--bg-hover)] overflow-hidden">
-                              <div
-                                className="h-full rounded-full transition-all"
-                                style={{
-                                  width: `${barWidth}%`,
-                                  backgroundColor:
-                                    span.span_type === "llm_call"
-                                      ? "var(--accent-purple)"
-                                      : span.span_type === "tool_call"
-                                      ? "var(--accent-amber)"
-                                      : span.span_type === "agent"
-                                      ? "var(--accent-blue)"
-                                      : span.span_type === "retrieval"
-                                      ? "var(--accent-green)"
-                                      : "var(--healing-blue)",
-                                }}
-                              />
+                          {/* Collapse toggle */}
+                          <button
+                            onClick={() => isParent && toggleCollapse(span.id)}
+                            className={`w-4 h-4 flex items-center justify-center flex-shrink-0 transition-transform ${
+                              isParent
+                                ? "text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                                : "text-transparent cursor-default"
+                            }`}
+                            style={{
+                              transform: isParent && !isCollapsed ? "rotate(90deg)" : "rotate(0deg)",
+                            }}
+                            aria-label={isParent ? (isCollapsed ? "Expand" : "Collapse") : undefined}
+                          >
+                            {isParent && <ChevronRight className="w-3.5 h-3.5" />}
+                          </button>
+
+                          {/* Type Icon */}
+                          <div
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${spanTypeColors[span.span_type]}`}
+                          >
+                            <SpanTypeIcon className="w-3.5 h-3.5" />
+                          </div>
+
+                          {/* Name + Type Badge */}
+                          <div className="min-w-0 flex-shrink-0 w-48">
+                            <p className="text-sm font-medium truncate">
+                              {span.name}
+                            </p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] px-1.5 py-0 h-4 border-[var(--border-subtle)]"
+                              >
+                                {span.span_type.replace("_", " ")}
+                              </Badge>
+                              {span.model && (
+                                <span className="text-[10px] text-[var(--text-tertiary)]">
+                                  {span.model}
+                                </span>
+                              )}
                             </div>
-                            <span className="text-xs text-[var(--text-tertiary)] w-14 text-right flex-shrink-0">
-                              {formatDuration(span.duration_ms)}
+                          </div>
+
+                          {/* Status */}
+                          <div className="flex items-center gap-1.5 flex-shrink-0 w-24">
+                            <StatusIcon
+                              className="w-3.5 h-3.5"
+                              style={{
+                                color:
+                                  span.status === "completed"
+                                    ? "var(--accent-green)"
+                                    : span.status === "failed"
+                                    ? "var(--accent-red)"
+                                    : span.status === "running"
+                                    ? "var(--accent-blue)"
+                                    : "var(--accent-amber)",
+                              }}
+                            />
+                            <span className="text-xs capitalize text-[var(--text-secondary)]">
+                              {span.status}
                             </span>
                           </div>
-                        </div>
-                      </div>
 
-                      {/* Input / Output Payload */}
-                      {(span.input || span.output) && (
-                        <div className="px-5 pb-3 grid grid-cols-1 sm:grid-cols-2 gap-3" style={{ paddingLeft: `${depth * 24 + 20 + 28 + 12}px` }}>
-                          {/* Input */}
-                          <div>
-                            <p className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-1">Input</p>
-                            <pre className="text-xs text-[var(--text-secondary)] whitespace-pre-wrap break-all max-h-48 overflow-auto rounded-lg bg-[var(--bg-primary)] border border-[var(--border-subtle)] p-2 font-mono">
-                              {expandedPayloads[`${span.id}-input`] || span.input || '\u2014'}
-                            </pre>
-                            {span.input_truncated && !expandedPayloads[`${span.id}-input`] && (
-                              <button
-                                onClick={() => fetchFullPayload(span.id, 'input')}
-                                className="text-xs text-[var(--accent-blue)] hover:text-[var(--accent-blue)]/80 mt-1 font-medium"
-                              >
-                                Show full input
-                              </button>
-                            )}
-                          </div>
-                          {/* Output */}
-                          <div>
-                            <p className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-1">Output</p>
-                            <pre className="text-xs text-[var(--text-secondary)] whitespace-pre-wrap break-all max-h-48 overflow-auto rounded-lg bg-[var(--bg-primary)] border border-[var(--border-subtle)] p-2 font-mono">
-                              {expandedPayloads[`${span.id}-output`] || span.output || '\u2014'}
-                            </pre>
-                            {span.output_truncated && !expandedPayloads[`${span.id}-output`] && (
-                              <button
-                                onClick={() => fetchFullPayload(span.id, 'output')}
-                                className="text-xs text-[var(--accent-blue)] hover:text-[var(--accent-blue)]/80 mt-1 font-medium"
-                              >
-                                Show full output
-                              </button>
-                            )}
+                          {/* Duration Bar */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-2 rounded-full bg-[var(--bg-hover)] overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all"
+                                  style={{
+                                    width: `${barWidth}%`,
+                                    backgroundColor:
+                                      span.span_type === "llm_call"
+                                        ? "var(--accent-purple)"
+                                        : span.span_type === "tool_call"
+                                        ? "var(--accent-amber)"
+                                        : span.span_type === "agent"
+                                        ? "var(--accent-blue)"
+                                        : span.span_type === "retrieval"
+                                        ? "var(--accent-green)"
+                                        : "var(--healing-blue)",
+                                  }}
+                                />
+                              </div>
+                              <span className="text-xs text-[var(--text-tertiary)] w-14 text-right flex-shrink-0">
+                                {formatDuration(span.duration_ms)}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      )}
-                    </motion.div>
-                  );
-                })}
-              </motion.div>
+
+                        {/* Input / Output Payload */}
+                        {(span.input || span.output) && (
+                          <div className="px-5 pb-3 grid grid-cols-1 sm:grid-cols-2 gap-3" style={{ paddingLeft: `${depth * 24 + 20 + 16 + 28 + 12}px` }}>
+                            {/* Input */}
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-1">Input</p>
+                              <pre className="text-xs text-[var(--text-secondary)] whitespace-pre-wrap break-all max-h-48 overflow-auto rounded-lg bg-[var(--bg-primary)] border border-[var(--border-subtle)] p-2 font-mono">
+                                {expandedPayloads[`${span.id}-input`] || span.input || '\u2014'}
+                              </pre>
+                              {span.input_truncated && !expandedPayloads[`${span.id}-input`] && (
+                                <button
+                                  onClick={() => fetchFullPayload(span.id, 'input')}
+                                  className="text-xs text-[var(--accent-blue)] hover:text-[var(--accent-blue)]/80 mt-1 font-medium"
+                                >
+                                  Show full input
+                                </button>
+                              )}
+                            </div>
+                            {/* Output */}
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium mb-1">Output</p>
+                              <pre className="text-xs text-[var(--text-secondary)] whitespace-pre-wrap break-all max-h-48 overflow-auto rounded-lg bg-[var(--bg-primary)] border border-[var(--border-subtle)] p-2 font-mono">
+                                {expandedPayloads[`${span.id}-output`] || span.output || '\u2014'}
+                              </pre>
+                              {span.output_truncated && !expandedPayloads[`${span.id}-output`] && (
+                                <button
+                                  onClick={() => fetchFullPayload(span.id, 'output')}
+                                  className="text-xs text-[var(--accent-blue)] hover:text-[var(--accent-blue)]/80 mt-1 font-medium"
+                                >
+                                  Show full output
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }}
+                />
+              </div>
             )}
           </div>
 
