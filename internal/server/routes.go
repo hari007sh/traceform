@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/agentstack/agentstack/internal/audit"
 	"github.com/agentstack/agentstack/internal/auth"
 	costhandler "github.com/agentstack/agentstack/internal/cost/handler"
 	costservice "github.com/agentstack/agentstack/internal/cost/service"
@@ -168,35 +169,35 @@ func (s *Server) setupRoutes() {
 		// Trace module: Agent definitions CRUD
 		r.Route("/agents", func(r chi.Router) {
 			r.Get("/", agentHandler.List)
-			r.Post("/", agentHandler.Create)
 			r.Get("/{id}", agentHandler.Get)
-			r.Put("/{id}", agentHandler.Update)
-			r.Delete("/{id}", agentHandler.Delete)
+			r.With(middleware.RequireRole("admin")).Post("/", agentHandler.Create)
+			r.With(middleware.RequireRole("admin")).Put("/{id}", agentHandler.Update)
+			r.With(middleware.RequireRole("admin")).Delete("/{id}", agentHandler.Delete)
 		})
 
 		// Trace module: Failure patterns CRUD
 		r.Route("/patterns", func(r chi.Router) {
 			r.Get("/", patternHandler.List)
-			r.Post("/", patternHandler.Create)
 			r.Get("/{id}", patternHandler.Get)
-			r.Put("/{id}", patternHandler.Update)
-			r.Delete("/{id}", patternHandler.Delete)
+			r.With(middleware.RequireRole("admin")).Post("/", patternHandler.Create)
+			r.With(middleware.RequireRole("admin")).Put("/{id}", patternHandler.Update)
+			r.With(middleware.RequireRole("admin")).Delete("/{id}", patternHandler.Delete)
 		})
 
 		// Trace module: Alert rules CRUD
 		r.Route("/alerts", func(r chi.Router) {
 			r.Get("/", alertHandler.List)
-			r.Post("/", alertHandler.Create)
 			r.Get("/{id}", alertHandler.Get)
-			r.Put("/{id}", alertHandler.Update)
-			r.Delete("/{id}", alertHandler.Delete)
+			r.With(middleware.RequireRole("admin")).Post("/", alertHandler.Create)
+			r.With(middleware.RequireRole("admin")).Put("/{id}", alertHandler.Update)
+			r.With(middleware.RequireRole("admin")).Delete("/{id}", alertHandler.Delete)
 		})
 
 		// Trace module: Sampling config CRUD
 		r.Route("/settings/sampling", func(r chi.Router) {
 			r.Get("/", samplingHandler.List)
-			r.Put("/", samplingHandler.Upsert)
-			r.Delete("/{id}", samplingHandler.Delete)
+			r.With(middleware.RequireRole("admin")).Put("/", samplingHandler.Upsert)
+			r.With(middleware.RequireRole("admin")).Delete("/{id}", samplingHandler.Delete)
 		})
 
 		// --- Build test module dependencies ---
@@ -214,24 +215,24 @@ func (s *Server) setupRoutes() {
 			// Test suites CRUD
 			r.Route("/suites", func(r chi.Router) {
 				r.Get("/", suiteHandler.List)
-				r.Post("/", suiteHandler.Create)
 				r.Get("/{id}", suiteHandler.Get)
 				r.Put("/{id}", suiteHandler.Update)
-				r.Delete("/{id}", suiteHandler.Delete)
+				r.With(middleware.RequireRole("admin")).Post("/", suiteHandler.Create)
+				r.With(middleware.RequireRole("admin")).Delete("/{id}", suiteHandler.Delete)
 
 				// Test cases within a suite
 				r.Get("/{suiteId}/cases", caseHandler.List)
-				r.Post("/{suiteId}/cases", caseHandler.Create)
+				r.With(middleware.RequireRole("admin")).Post("/{suiteId}/cases", caseHandler.Create)
 
 				// Start a test run for a suite
-				r.Post("/{suiteId}/run", runHandler.StartRun)
+				r.With(middleware.RequireRole("admin")).Post("/{suiteId}/run", runHandler.StartRun)
 			})
 
 			// Test cases (direct access by ID)
 			r.Route("/cases", func(r chi.Router) {
 				r.Get("/{id}", caseHandler.Get)
-				r.Put("/{id}", caseHandler.Update)
-				r.Delete("/{id}", caseHandler.Delete)
+				r.With(middleware.RequireRole("admin")).Put("/{id}", caseHandler.Update)
+				r.With(middleware.RequireRole("admin")).Delete("/{id}", caseHandler.Delete)
 			})
 
 			// Test runs
@@ -243,14 +244,14 @@ func (s *Server) setupRoutes() {
 			// Evaluators CRUD
 			r.Route("/evaluators", func(r chi.Router) {
 				r.Get("/", evaluatorHandler.List)
-				r.Post("/", evaluatorHandler.Create)
 				r.Get("/{id}", evaluatorHandler.Get)
-				r.Put("/{id}", evaluatorHandler.Update)
-				r.Delete("/{id}", evaluatorHandler.Delete)
+				r.With(middleware.RequireRole("admin")).Post("/", evaluatorHandler.Create)
+				r.With(middleware.RequireRole("admin")).Put("/{id}", evaluatorHandler.Update)
+				r.With(middleware.RequireRole("admin")).Delete("/{id}", evaluatorHandler.Delete)
 			})
 
 			// CI/CD endpoint
-			r.Post("/ci/run", runHandler.CIRun)
+			r.With(middleware.RequireRole("admin")).Post("/ci/run", runHandler.CIRun)
 		})
 
 		// --- Build guard module dependencies ---
@@ -266,14 +267,14 @@ func (s *Server) setupRoutes() {
 			// Guardrail rules CRUD
 			r.Route("/rules", func(r chi.Router) {
 				r.Get("/", rulesHandler.List)
-				r.Post("/", rulesHandler.Create)
 				r.Get("/{id}", rulesHandler.Get)
-				r.Put("/{id}", rulesHandler.Update)
-				r.Delete("/{id}", rulesHandler.Delete)
+				r.With(middleware.RequireRole("admin")).Post("/", rulesHandler.Create)
+				r.With(middleware.RequireRole("admin")).Put("/{id}", rulesHandler.Update)
+				r.With(middleware.RequireRole("admin")).Delete("/{id}", rulesHandler.Delete)
 			})
 
 			// Guard check endpoint
-			r.Post("/check", checkHandler.Check)
+			r.With(middleware.RequireRole("admin")).Post("/check", checkHandler.Check)
 
 			// Guard events
 			r.Get("/events", eventsHandler.ListEvents)
@@ -295,8 +296,8 @@ func (s *Server) setupRoutes() {
 		// Cost module routes
 		r.Route("/cost", func(r chi.Router) {
 			// Cost events
-			r.Post("/events", costEventsHandler.Record)
 			r.Get("/events", costEventsHandler.List)
+			r.With(middleware.RequireRole("admin")).Post("/events", costEventsHandler.Record)
 
 			// Cost analytics
 			r.Route("/analytics", func(r chi.Router) {
@@ -310,15 +311,15 @@ func (s *Server) setupRoutes() {
 			// Budget policies CRUD
 			r.Route("/budgets", func(r chi.Router) {
 				r.Get("/", costBudgetsHandler.List)
-				r.Post("/", costBudgetsHandler.Create)
 				r.Get("/{id}", costBudgetsHandler.Get)
-				r.Put("/{id}", costBudgetsHandler.Update)
-				r.Delete("/{id}", costBudgetsHandler.Delete)
+				r.With(middleware.RequireRole("admin")).Post("/", costBudgetsHandler.Create)
+				r.With(middleware.RequireRole("admin")).Put("/{id}", costBudgetsHandler.Update)
+				r.With(middleware.RequireRole("admin")).Delete("/{id}", costBudgetsHandler.Delete)
 			})
 
 			// Model pricing
 			r.Get("/models", costModelsHandler.List)
-			r.Put("/models", costModelsHandler.Upsert)
+			r.With(middleware.RequireRole("admin")).Put("/models", costModelsHandler.Upsert)
 		})
 
 		// --- Build prompt module dependencies ---
@@ -348,32 +349,32 @@ func (s *Server) setupRoutes() {
 			// Providers CRUD
 			r.Route("/providers", func(r chi.Router) {
 				r.Get("/", providerHandler.List)
-				r.Post("/", providerHandler.Create)
 				r.Get("/{id}", providerHandler.Get)
-				r.Put("/{id}", providerHandler.Update)
-				r.Delete("/{id}", providerHandler.Delete)
+				r.With(middleware.RequireRole("admin")).Post("/", providerHandler.Create)
+				r.With(middleware.RequireRole("admin")).Put("/{id}", providerHandler.Update)
+				r.With(middleware.RequireRole("admin")).Delete("/{id}", providerHandler.Delete)
 			})
 
 			// Routing rules CRUD
 			r.Route("/routes", func(r chi.Router) {
 				r.Get("/", routeRulesHandler.List)
-				r.Post("/", routeRulesHandler.Create)
-				r.Put("/{id}", routeRulesHandler.Update)
-				r.Delete("/{id}", routeRulesHandler.Delete)
+				r.With(middleware.RequireRole("admin")).Post("/", routeRulesHandler.Create)
+				r.With(middleware.RequireRole("admin")).Put("/{id}", routeRulesHandler.Update)
+				r.With(middleware.RequireRole("admin")).Delete("/{id}", routeRulesHandler.Delete)
 			})
 
 			// Fallback chains CRUD
 			r.Route("/fallbacks", func(r chi.Router) {
 				r.Get("/", fallbackHandler.List)
-				r.Post("/", fallbackHandler.Create)
 				r.Get("/{id}", fallbackHandler.Get)
-				r.Put("/{id}", fallbackHandler.Update)
-				r.Delete("/{id}", fallbackHandler.Delete)
+				r.With(middleware.RequireRole("admin")).Post("/", fallbackHandler.Create)
+				r.With(middleware.RequireRole("admin")).Put("/{id}", fallbackHandler.Update)
+				r.With(middleware.RequireRole("admin")).Delete("/{id}", fallbackHandler.Delete)
 			})
 
 			// Cache management
 			r.Get("/cache/stats", cacheHandler.Stats)
-			r.Post("/cache/purge", cacheHandler.Purge)
+			r.With(middleware.RequireRole("admin")).Post("/cache/purge", cacheHandler.Purge)
 
 			// Gateway analytics
 			r.Get("/analytics", gatewayAnalyticsHandler.GetAnalytics)
@@ -381,19 +382,19 @@ func (s *Server) setupRoutes() {
 
 		// --- Prompt Management routes ---
 		r.Route("/prompts", func(r chi.Router) {
-			r.Post("/", promptsHandler.Create)
 			r.Get("/", promptsHandler.List)
 			r.Get("/slug/{slug}", promptsHandler.GetBySlug)
 			r.Get("/{id}", promptsHandler.Get)
-			r.Patch("/{id}", promptsHandler.Update)
-			r.Delete("/{id}", promptsHandler.Delete)
+			r.With(middleware.RequireRole("admin")).Post("/", promptsHandler.Create)
+			r.With(middleware.RequireRole("admin")).Patch("/{id}", promptsHandler.Update)
+			r.With(middleware.RequireRole("admin")).Delete("/{id}", promptsHandler.Delete)
 
 			// Version management
-			r.Post("/{id}/versions", versionsHandler.Create)
 			r.Get("/{id}/versions", versionsHandler.List)
 			r.Get("/{id}/versions/{version}", versionsHandler.Get)
-			r.Post("/{id}/deploy/{version}", versionsHandler.Deploy)
-			r.Post("/{id}/rollback", versionsHandler.Rollback)
+			r.With(middleware.RequireRole("admin")).Post("/{id}/versions", versionsHandler.Create)
+			r.With(middleware.RequireRole("admin")).Post("/{id}/deploy/{version}", versionsHandler.Deploy)
+			r.With(middleware.RequireRole("admin")).Post("/{id}/rollback", versionsHandler.Rollback)
 		})
 
 		// --- Playground routes ---
@@ -413,21 +414,21 @@ func (s *Server) setupRoutes() {
 
 		// Dataset module routes
 		r.Route("/datasets", func(r chi.Router) {
-			r.Post("/", dsHandler.Create)
 			r.Get("/", dsHandler.List)
 			r.Get("/{id}", dsHandler.Get)
-			r.Patch("/{id}", dsHandler.Update)
-			r.Delete("/{id}", dsHandler.Delete)
-			r.Post("/{id}/link/{suiteID}", dsHandler.LinkSuite)
-			r.Delete("/{id}/link/{suiteID}", dsHandler.UnlinkSuite)
-			r.Post("/{id}/items", dsItemHandler.Create)
-			r.Post("/{id}/items/batch", dsItemHandler.CreateBatch)
 			r.Get("/{id}/items", dsItemHandler.List)
 			r.Get("/{id}/items/{itemID}", dsItemHandler.Get)
-			r.Delete("/{id}/items/{itemID}", dsItemHandler.Delete)
-			r.Post("/{id}/import", dsItemHandler.Import)
 			r.Get("/{id}/export", dsItemHandler.Export)
-			r.Post("/from-session/{sessionID}", dsHandler.FromSession)
+			r.With(middleware.RequireRole("admin")).Post("/", dsHandler.Create)
+			r.With(middleware.RequireRole("admin")).Patch("/{id}", dsHandler.Update)
+			r.With(middleware.RequireRole("admin")).Delete("/{id}", dsHandler.Delete)
+			r.With(middleware.RequireRole("admin")).Post("/{id}/link/{suiteID}", dsHandler.LinkSuite)
+			r.With(middleware.RequireRole("admin")).Delete("/{id}/link/{suiteID}", dsHandler.UnlinkSuite)
+			r.With(middleware.RequireRole("admin")).Post("/{id}/items", dsItemHandler.Create)
+			r.With(middleware.RequireRole("admin")).Post("/{id}/items/batch", dsItemHandler.CreateBatch)
+			r.With(middleware.RequireRole("admin")).Delete("/{id}/items/{itemID}", dsItemHandler.Delete)
+			r.With(middleware.RequireRole("admin")).Post("/{id}/import", dsItemHandler.Import)
+			r.With(middleware.RequireRole("admin")).Post("/from-session/{sessionID}", dsHandler.FromSession)
 		})
 
 		// --- Build OTel module dependencies ---
@@ -448,14 +449,14 @@ func (s *Server) setupRoutes() {
 
 		// Webhook module routes
 		r.Route("/webhooks", func(r chi.Router) {
-			r.Post("/", whHandler.Create)
 			r.Get("/", whHandler.List)
 			r.Get("/{id}", whHandler.Get)
-			r.Patch("/{id}", whHandler.Update)
-			r.Delete("/{id}", whHandler.Delete)
-			r.Post("/{id}/test", whHandler.Test)
 			r.Get("/{id}/deliveries", whDeliveryHandler.List)
-			r.Post("/{id}/deliveries/{deliveryID}/retry", whDeliveryHandler.Retry)
+			r.With(middleware.RequireRole("admin")).Post("/", whHandler.Create)
+			r.With(middleware.RequireRole("admin")).Patch("/{id}", whHandler.Update)
+			r.With(middleware.RequireRole("admin")).Delete("/{id}", whHandler.Delete)
+			r.With(middleware.RequireRole("admin")).Post("/{id}/test", whHandler.Test)
+			r.With(middleware.RequireRole("admin")).Post("/{id}/deliveries/{deliveryID}/retry", whDeliveryHandler.Retry)
 		})
 	})
 
@@ -463,8 +464,9 @@ func (s *Server) setupRoutes() {
 	s.router.Route("/api", func(r chi.Router) {
 		r.Use(middleware.JWTAuth(s.jwtManager))
 
-		// Organization management
+		// Organization management — owner only
 		r.Route("/org", func(r chi.Router) {
+			r.Use(middleware.RequireRole("owner"))
 			r.Get("/", s.handleGetOrg)
 			r.Patch("/", s.handleUpdateOrg)
 			r.Delete("/", s.handleDeleteOrg)
@@ -474,16 +476,37 @@ func (s *Server) setupRoutes() {
 		// API key management
 		r.Route("/api-keys", func(r chi.Router) {
 			r.Get("/", s.handleListAPIKeys)
-			r.Post("/", s.handleCreateAPIKey)
-			r.Delete("/{id}", s.handleDeleteAPIKey)
+			r.With(middleware.RequireRole("admin")).Post("/", s.handleCreateAPIKey)
+			r.With(middleware.RequireRole("admin")).Delete("/{id}", s.handleDeleteAPIKey)
 		})
 
 		// Team management
 		r.Route("/team", func(r chi.Router) {
 			r.Get("/", s.handleListTeam)
-			r.Post("/invite", s.handleInviteTeamMember)
-			r.Patch("/{id}/role", s.handleUpdateTeamMemberRole)
-			r.Delete("/{id}", s.handleRemoveTeamMember)
+			r.With(middleware.RequireRole("owner")).Post("/invite", s.handleInviteTeamMember)
+			r.With(middleware.RequireRole("owner")).Patch("/{id}/role", s.handleUpdateTeamMemberRole)
+			r.With(middleware.RequireRole("owner")).Delete("/{id}", s.handleRemoveTeamMember)
+		})
+
+		// Audit logs — admin only
+		auditHandler := audit.NewHandler(audit.NewStore(s.db), s.logger)
+		r.Route("/audit-logs", func(r chi.Router) {
+			r.Use(middleware.RequireRole("admin"))
+			r.Get("/", auditHandler.List)
+		})
+
+		// SSO configuration — owner only
+		r.Route("/sso", func(r chi.Router) {
+			r.Use(middleware.RequireRole("owner"))
+			r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+				WriteJSON(w, http.StatusOK, map[string]interface{}{"data": nil, "enabled": false})
+			})
+			r.Post("/", func(w http.ResponseWriter, r *http.Request) {
+				WriteError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "SSO configuration is not yet available")
+			})
+			r.Delete("/", func(w http.ResponseWriter, r *http.Request) {
+				WriteError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "SSO configuration is not yet available")
+			})
 		})
 	})
 }

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/agentstack/agentstack/internal/audit"
 	"github.com/agentstack/agentstack/internal/auth"
 	"github.com/agentstack/agentstack/internal/config"
 	"github.com/agentstack/agentstack/internal/server/httputil"
@@ -31,6 +32,7 @@ type Server struct {
 	jwtManager   *auth.JWTManager
 	apiKeyStore  *auth.APIKeyStore
 	logger       *slog.Logger
+	auditLogger  *audit.Logger
 }
 
 // New creates a new Server instance with all dependencies.
@@ -42,6 +44,9 @@ func New(cfg *config.Config, db *sql.DB, redisClient *redis.Client, natsConn *na
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret)
 	apiKeyStore := auth.NewAPIKeyStore(db)
 
+	auditStore := audit.NewStore(db)
+	auditLog := audit.NewLogger(auditStore, logger)
+
 	s := &Server{
 		cfg:         cfg,
 		router:      chi.NewRouter(),
@@ -51,6 +56,7 @@ func New(cfg *config.Config, db *sql.DB, redisClient *redis.Client, natsConn *na
 		jwtManager:  jwtManager,
 		apiKeyStore: apiKeyStore,
 		logger:      logger,
+		auditLogger: auditLog,
 	}
 
 	// Apply options (e.g., WithClickHouse)

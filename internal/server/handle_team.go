@@ -143,6 +143,11 @@ func (s *Server) handleInviteTeamMember(w http.ResponseWriter, r *http.Request) 
 	m.CreatedAt = createdAt.Format(time.RFC3339)
 	m.UpdatedAt = updatedAt.Format(time.RFC3339)
 
+	s.auditLogger.Log(r, "invited", "team_member", m.ID, map[string]interface{}{
+		"email": email,
+		"role":  role,
+	})
+
 	WriteJSON(w, http.StatusCreated, m)
 }
 
@@ -223,6 +228,11 @@ func (s *Server) handleUpdateTeamMemberRole(w http.ResponseWriter, r *http.Reque
 	m.CreatedAt = createdAt.Format(time.RFC3339)
 	m.UpdatedAt = updatedAt.Format(time.RFC3339)
 
+	s.auditLogger.Log(r, "updated_role", "team_member", memberID, map[string]interface{}{
+		"previous_role": currentRole,
+		"new_role":      role,
+	})
+
 	WriteJSON(w, http.StatusOK, m)
 }
 
@@ -292,6 +302,10 @@ func (s *Server) handleRemoveTeamMember(w http.ResponseWriter, r *http.Request) 
 		WriteError(w, http.StatusNotFound, "NOT_FOUND", "team member not found")
 		return
 	}
+
+	s.auditLogger.Log(r, "removed", "team_member", memberID, map[string]interface{}{
+		"role": targetRole,
+	})
 
 	w.WriteHeader(http.StatusNoContent)
 }

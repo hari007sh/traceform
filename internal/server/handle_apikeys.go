@@ -157,6 +157,11 @@ func (s *Server) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.auditLogger.Log(r, "created", "api_key", keyID, map[string]interface{}{
+		"name":       name,
+		"key_prefix": keyPrefix,
+	})
+
 	resp := apiKeyCreateResponse{
 		apiKeyResponse: apiKeyResponse{
 			ID:          keyID,
@@ -205,6 +210,8 @@ func (s *Server) handleDeleteAPIKey(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusNotFound, "NOT_FOUND", "API key not found")
 		return
 	}
+
+	s.auditLogger.Log(r, "deleted", "api_key", keyID, nil)
 
 	w.WriteHeader(http.StatusNoContent)
 }
