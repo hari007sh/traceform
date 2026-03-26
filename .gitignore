@@ -54,3 +54,9 @@ chdata/
 coverage/
 htmlcov/
 .coverage
+
+# Compiled binaries
+server
+gateway
+worker
+main
