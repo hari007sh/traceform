@@ -56,7 +56,7 @@ htmlcov/
 .coverage
 
 # Compiled binaries
-server
-gateway
-worker
-main
+/server
+/gateway
+/worker
+/main

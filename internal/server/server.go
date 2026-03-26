@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/nats-io/nats.go"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -82,8 +83,14 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(chimw.RealIP)
 	s.router.Use(chimw.Recoverer)
 	s.router.Use(chimw.Timeout(30 * time.Second))
+	s.router.Use(middleware.SecurityHeaders)
 	s.router.Use(middleware.CORS(s.cfg.FrontendURL))
+	s.router.Use(chimw.Compress(5)) // gzip compression level 5
+	s.router.Use(middleware.PrometheusMetrics)
 	s.router.Use(requestLogger(s.logger))
+
+	// Metrics endpoint (no auth required for Prometheus scraping)
+	s.router.Handle("/metrics", promhttp.Handler())
 }
 
 // Run starts the HTTP server and blocks until shutdown.
