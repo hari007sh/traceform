@@ -17,6 +17,7 @@ import (
 	"github.com/agentstack/agentstack/internal/route/gateway"
 	"github.com/agentstack/agentstack/internal/route/service"
 	"github.com/agentstack/agentstack/internal/route/store"
+	"github.com/agentstack/agentstack/internal/server/middleware"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -96,6 +97,7 @@ func main() {
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
+	r.Use(middleware.BodyLimit(10 * 1024 * 1024)) // 10MB default
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -118,11 +120,12 @@ func main() {
 
 	// Start server
 	srv := &http.Server{
-		Addr:         cfg.GatewayAddr(),
-		Handler:      r,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 120 * time.Second, // long timeout for streaming
-		IdleTimeout:  60 * time.Second,
+		Addr:              cfg.GatewayAddr(),
+		Handler:           r,
+		ReadHeaderTimeout: 15 * time.Second,
+		WriteTimeout:      120 * time.Second, // long timeout for streaming
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    64 * 1024,
 	}
 
 	done := make(chan os.Signal, 1)
@@ -138,14 +141,21 @@ func main() {
 	<-done
 	logger.Info("gateway shutting down")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// 1. Drain in-flight HTTP requests first (30s timeout).
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Error("http server shutdown error", "error", err)
+	}
 
-	// Clean up
+	// 2. Stop async logger (flushes remaining buffered requests).
 	asyncLogger.Stop()
-	router.Stop()
+
+	// 3. Close NATS connection (no more publishes).
 	if natsConn != nil {
 		natsConn.Close()
 	}
-	srv.Shutdown(ctx)
+
+	// 4. Stop the gateway router last.
+	router.Stop()
 }

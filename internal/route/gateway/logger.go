@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/agentstack/agentstack/internal/route/store"
@@ -22,6 +23,7 @@ type AsyncLogger struct {
 	logger        *slog.Logger
 	wg            sync.WaitGroup
 	done          chan struct{}
+	stopped       atomic.Bool
 }
 
 // NewAsyncLogger creates and starts an AsyncLogger.
@@ -41,8 +43,11 @@ func NewAsyncLogger(nc *nats.Conn, s *store.Store, logger *slog.Logger) *AsyncLo
 }
 
 // Log enqueues a gateway request for asynchronous logging.
-// It never blocks the caller; if the buffer is full, the request is dropped.
+// It never blocks the caller; if the buffer is full or the logger is stopped, the request is dropped.
 func (al *AsyncLogger) Log(req *store.GatewayRequest) {
+	if al.stopped.Load() {
+		return
+	}
 	select {
 	case al.buffer <- req:
 	default:
@@ -52,6 +57,7 @@ func (al *AsyncLogger) Log(req *store.GatewayRequest) {
 
 // Stop flushes remaining requests and stops the logger.
 func (al *AsyncLogger) Stop() {
+	al.stopped.Store(true)
 	close(al.done)
 	al.wg.Wait()
 }
@@ -78,15 +84,19 @@ func (al *AsyncLogger) flushLoop() {
 				batch = nil
 			}
 		case <-al.done:
-			// Drain remaining
-			close(al.buffer)
-			for req := range al.buffer {
-				batch = append(batch, req)
+			// Drain remaining without closing the channel (closing causes panic
+			// if Log() is called concurrently during shutdown).
+			for {
+				select {
+				case req := <-al.buffer:
+					batch = append(batch, req)
+				default:
+					if len(batch) > 0 {
+						al.flush(batch)
+					}
+					return
+				}
 			}
-			if len(batch) > 0 {
-				al.flush(batch)
-			}
-			return
 		}
 	}
 }
