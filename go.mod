@@ -12,6 +12,7 @@ require (
 	github.com/lib/pq v1.12.0
 	github.com/nats-io/nats.go v1.49.0
 	github.com/redis/go-redis/v9 v9.18.0
+	golang.org/x/time v0.15.0
 )
 
 require (
@@ -40,5 +41,4 @@ require (
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
-	golang.org/x/time v0.15.0 // indirect
 )
