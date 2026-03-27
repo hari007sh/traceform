@@ -27,6 +27,8 @@ import {
   ExternalLink,
   Star,
   Sparkles,
+  Monitor,
+  Cloud,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -233,16 +235,17 @@ const competitors: { name: string; support: Support[] }[] = [
 const selfHostedTiers = [
   {
     name: "Community",
-    subtitle: "Self-Hosted",
+    subtitle: "Free forever \u2014 your infrastructure",
     price: "Free",
     period: "forever",
-    description: "All 6 modules, your infrastructure, no limits on what you can build",
+    description: "All 6 modules on your own servers. Deploy with Docker Compose and get started in minutes.",
     features: [
       "All 6 modules",
       "3 team members",
       "7-day retention",
       "Basic RBAC (admin/viewer)",
-      "Community support",
+      "Docker Compose deploy",
+      "Community support (GitHub)",
     ],
     cta: "Get Started",
     ctaLink: "/login",
@@ -250,10 +253,10 @@ const selfHostedTiers = [
   },
   {
     name: "Team",
-    subtitle: "Self-Hosted License Key",
+    subtitle: "License key \u2014 your infrastructure",
     price: "$199",
     period: "/mo",
-    description: "Everything in Community, plus team features and extended limits",
+    description: "Everything in Community, plus team features, extended retention, and priority support.",
     features: [
       "25 team members",
       "90-day retention",
@@ -269,10 +272,10 @@ const selfHostedTiers = [
   },
   {
     name: "Enterprise",
-    subtitle: "Custom License",
+    subtitle: "Custom license \u2014 your infrastructure",
     price: "Custom",
     period: "",
-    description: "Unlimited scale with dedicated support and compliance features",
+    description: "Unlimited scale with SSO, custom roles, SLA, and on-prem deployment assistance.",
     features: [
       "Unlimited members",
       "Custom retention",
@@ -290,29 +293,30 @@ const selfHostedTiers = [
 
 const cloudTiers = [
   {
-    name: "Cloud Starter",
-    subtitle: "Fully Managed",
+    name: "Starter",
+    subtitle: "Fully managed \u2014 we run it",
     price: "$49",
     period: "/mo",
-    description: "We run it for you -- same Community features, zero infrastructure hassle",
+    description: "All 6 modules fully managed. Zero infrastructure, automatic updates, start in 30 seconds.",
     features: [
       "All 6 modules",
       "3 team members",
-      "7-day retention",
+      "30-day retention",
       "Basic RBAC (admin/viewer)",
       "Automatic updates & backups",
-      "No infrastructure to maintain",
+      "Zero infrastructure",
+      "Email support",
     ],
     cta: "Try Cloud",
     ctaLink: "/login",
     highlighted: false,
   },
   {
-    name: "Cloud Team",
-    subtitle: "Fully Managed",
+    name: "Pro",
+    subtitle: "Fully managed \u2014 team features",
     price: "$199",
     period: "/mo",
-    description: "Team features fully managed -- audit logs, exports, error groups included",
+    description: "Team features fully managed. Audit logs, exports, error groups, and 99.9% uptime.",
     features: [
       "25 team members",
       "90-day retention",
@@ -320,18 +324,19 @@ const cloudTiers = [
       "Data export (CSV/JSON)",
       "Error groups",
       "Budget enforcement",
-      "Email support",
+      "Priority support",
+      "99.9% uptime SLA",
     ],
     cta: "Try Cloud",
     ctaLink: "/login",
     highlighted: true,
   },
   {
-    name: "Cloud Enterprise",
-    subtitle: "Fully Managed",
+    name: "Enterprise",
+    subtitle: "Fully managed \u2014 enterprise grade",
     price: "Custom",
     period: "",
-    description: "Enterprise-grade managed platform with SSO, SLA, and dedicated support",
+    description: "Enterprise-grade managed platform with SSO, SLA guarantee, and SOC 2 compliance.",
     features: [
       "Unlimited members",
       "Custom retention",
@@ -339,6 +344,8 @@ const cloudTiers = [
       "Custom roles",
       "SLA guarantee",
       "Dedicated support",
+      "Custom domain",
+      "SOC 2 report",
     ],
     cta: "Contact Sales",
     ctaLink: "#",
@@ -1330,94 +1337,152 @@ Result: PASS (4/4 evaluators passed)`}
             <div className="mt-6 inline-flex items-center rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#0d0d14] p-1">
               <button
                 onClick={() => setPricingTab("self-hosted")}
-                className={`relative px-5 py-2 rounded-md text-sm font-medium transition-all ${
+                className={`relative flex items-center gap-2 px-5 py-2 rounded-md text-sm font-medium transition-all ${
                   pricingTab === "self-hosted"
                     ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
                     : "text-zinc-400 hover:text-white"
                 }`}
               >
+                <Monitor className="w-3.5 h-3.5" />
                 Self-Hosted
               </button>
               <button
                 onClick={() => setPricingTab("cloud")}
-                className={`relative px-5 py-2 rounded-md text-sm font-medium transition-all ${
+                className={`relative flex items-center gap-2 px-5 py-2 rounded-md text-sm font-medium transition-all ${
                   pricingTab === "cloud"
                     ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
                     : "text-zinc-400 hover:text-white"
                 }`}
               >
+                <Cloud className="w-3.5 h-3.5" />
                 Cloud Hosted
               </button>
             </div>
-            <p className="mt-2 text-[11px] text-zinc-500">
-              {pricingTab === "self-hosted"
-                ? "Run on your own infrastructure with a license key"
-                : "We run it for you -- no infrastructure to maintain"}
-            </p>
           </motion.div>
 
           <AnimatePresence mode="wait">
             <motion.div
               key={pricingTab}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="grid grid-cols-1 md:grid-cols-3 gap-4"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.25 }}
             >
-              {(pricingTab === "self-hosted" ? selfHostedTiers : cloudTiers).map((tier) => (
-                <div
-                  key={tier.name}
-                  className={`relative rounded-xl border p-6 flex flex-col ${
-                    tier.highlighted
-                      ? "border-blue-500 bg-[#1a1a24] shadow-lg shadow-blue-500/5"
-                      : "border-[rgba(255,255,255,0.06)] bg-[#1a1a24]"
-                  }`}
-                >
-                  {tier.highlighted && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-semibold uppercase tracking-wider">
-                      Most Popular
-                    </div>
-                  )}
-                  <div className="mb-4">
-                    <h3 className="text-sm font-medium text-zinc-400">
-                      {tier.name}
-                    </h3>
-                    <p className="text-[11px] text-zinc-500 mt-0.5">{tier.subtitle}</p>
-                    <div className="flex items-baseline gap-1 mt-2">
-                      <span className="text-3xl font-bold text-white">
-                        {tier.price}
-                      </span>
-                      {tier.period && (
-                        <span className="text-sm text-zinc-500">
-                          {tier.period}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-zinc-500 mt-2">
-                      {tier.description}
+              {/* Descriptive banner */}
+              {pricingTab === "self-hosted" ? (
+                <div className="mb-6 rounded-xl border border-zinc-800 bg-[#13131a] p-4 flex items-start gap-4">
+                  <div className="flex-shrink-0 mt-0.5 w-9 h-9 rounded-lg bg-zinc-800/80 flex items-center justify-center">
+                    <Monitor className="w-4.5 h-4.5 text-zinc-300" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">Self-Hosted</h3>
+                    <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed">
+                      Deploy on your infrastructure with Docker Compose or Kubernetes.<br className="hidden sm:inline" />{" "}
+                      You manage the servers &mdash; we provide the software and license.
                     </p>
                   </div>
-                  <ul className="space-y-2.5 mb-6 flex-1">
-                    {tier.features.map((f) => (
-                      <li key={f} className="flex items-center gap-2 text-sm text-zinc-400">
-                        <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                  <Link
-                    href={tier.ctaLink}
-                    className={`inline-flex items-center justify-center h-10 rounded-lg text-sm font-medium transition-colors active:scale-[0.98] ${
-                      tier.highlighted
-                        ? "bg-blue-600 text-white hover:bg-blue-500"
-                        : "border border-white/10 text-white hover:bg-white/5"
-                    }`}
-                  >
-                    {tier.cta}
-                  </Link>
                 </div>
-              ))}
+              ) : (
+                <div className="mb-6 rounded-xl border border-blue-900/30 bg-[#12122a] p-4 flex items-start gap-4">
+                  <div className="flex-shrink-0 mt-0.5 w-9 h-9 rounded-lg bg-blue-900/40 flex items-center justify-center">
+                    <Cloud className="w-4.5 h-4.5 text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">Cloud Hosted</h3>
+                    <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed">
+                      We handle everything &mdash; deployment, updates, backups, monitoring.<br className="hidden sm:inline" />{" "}
+                      No servers to manage. Start in 30 seconds.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Pricing cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {(pricingTab === "self-hosted" ? selfHostedTiers : cloudTiers).map((tier) => {
+                  const isCloud = pricingTab === "cloud";
+                  return (
+                    <div
+                      key={tier.name}
+                      className={`relative rounded-xl border p-6 flex flex-col overflow-hidden ${
+                        tier.highlighted
+                          ? isCloud
+                            ? "border-blue-500 bg-[#1a1a2e] shadow-lg shadow-blue-500/10"
+                            : "border-blue-500 bg-[#1a1a24] shadow-lg shadow-blue-500/5"
+                          : isCloud
+                            ? "border-blue-900/30 bg-[#1a1a2a]"
+                            : "border-zinc-800 bg-[#1a1a24]"
+                      }`}
+                    >
+                      {/* Subtle blue gradient overlay for cloud cards */}
+                      {isCloud && (
+                        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/[0.03] via-transparent to-blue-600/[0.02] pointer-events-none" />
+                      )}
+
+                      {tier.highlighted && (
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-semibold uppercase tracking-wider z-10">
+                          Most Popular
+                        </div>
+                      )}
+
+                      {/* Badge in top-right corner */}
+                      <div className="absolute top-4 right-4 z-10">
+                        {isCloud ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-900/40 text-[10px] font-medium text-blue-400 border border-blue-800/30">
+                            <Cloud className="w-2.5 h-2.5" />
+                            Managed
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800/60 text-[10px] font-medium text-zinc-400 border border-zinc-700/30">
+                            <Monitor className="w-2.5 h-2.5" />
+                            Self-Host
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="relative mb-4">
+                        <h3 className="text-sm font-medium text-zinc-400">
+                          {tier.name}
+                        </h3>
+                        <p className="text-[11px] text-zinc-500 mt-0.5">{tier.subtitle}</p>
+                        <div className="flex items-baseline gap-1 mt-2">
+                          <span className="text-3xl font-bold text-white">
+                            {tier.price}
+                          </span>
+                          {tier.period && (
+                            <span className="text-sm text-zinc-500">
+                              {tier.period}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-zinc-500 mt-2">
+                          {tier.description}
+                        </p>
+                      </div>
+                      <ul className="relative space-y-2.5 mb-6 flex-1">
+                        {tier.features.map((f) => (
+                          <li key={f} className="flex items-center gap-2 text-sm text-zinc-400">
+                            <Check className={`w-3.5 h-3.5 flex-shrink-0 ${isCloud ? "text-blue-400" : "text-emerald-400"}`} />
+                            {f}
+                          </li>
+                        ))}
+                      </ul>
+                      <Link
+                        href={tier.ctaLink}
+                        className={`relative inline-flex items-center justify-center h-10 rounded-lg text-sm font-medium transition-colors active:scale-[0.98] ${
+                          tier.highlighted
+                            ? "bg-blue-600 text-white hover:bg-blue-500"
+                            : isCloud
+                              ? "border border-blue-800/40 text-white hover:bg-blue-900/20"
+                              : "border border-white/10 text-white hover:bg-white/5"
+                        }`}
+                      >
+                        {tier.cta}
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
             </motion.div>
           </AnimatePresence>
         </Section>
