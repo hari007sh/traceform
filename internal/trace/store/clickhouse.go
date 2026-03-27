@@ -158,6 +158,38 @@ func (f *SessionFilter) Normalize() {
 
 // --- Query Methods ---
 
+// hasOnlyTimeFilters returns true if the filter has no filters beyond org_id and time range.
+func hasOnlyTimeFilters(f SessionFilter) bool {
+	return f.Search == "" && f.AgentName == "" && f.Status == ""
+}
+
+// getApproximateCount returns an approximate session count for the given org and time range.
+// It first tries the materialized view (pre-aggregated, fast), then falls back to an exact
+// count with a 2-second execution time limit for timeout protection.
+func (s *ClickHouseStore) getApproximateCount(ctx context.Context, orgID string, start, end time.Time) (int, error) {
+	// Try MV first (pre-aggregated, fast)
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(countMerge(session_count), 0)
+		 FROM agentstack.mv_sessions_hourly_data
+		 WHERE org_id = ? AND hour >= ? AND hour <= ?`,
+		orgID, start, end).Scan(&count)
+	if err == nil && count > 0 {
+		return count, nil
+	}
+
+	// Fallback: exact count with timeout protection
+	err = s.db.QueryRowContext(ctx,
+		`SELECT count() FROM agentstack.sessions
+		 WHERE org_id = ? AND started_at >= ? AND started_at <= ?
+		 SETTINGS max_execution_time=2`,
+		orgID, start, end).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("approximate count: %w", err)
+	}
+	return count, nil
+}
+
 // ListSessions returns sessions matching the given filter.
 func (s *ClickHouseStore) ListSessions(ctx context.Context, orgID string, f SessionFilter) ([]Session, int, error) {
 	f.Normalize()
@@ -188,11 +220,25 @@ func (s *ClickHouseStore) ListSessions(ctx context.Context, orgID string, f Sess
 
 	whereClause := strings.Join(where, " AND ")
 
-	// Count query
-	countQuery := fmt.Sprintf("SELECT count() FROM agentstack.sessions WHERE %s", whereClause)
+	// Count query: use approximate count for unfiltered queries with time range
 	var total int
-	if err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("count sessions: %w", err)
+	if hasOnlyTimeFilters(f) && f.StartDate != nil && f.EndDate != nil {
+		approx, err := s.getApproximateCount(ctx, orgID, *f.StartDate, *f.EndDate)
+		if err == nil && approx > 0 {
+			total = approx
+		} else {
+			// Fall back to exact count
+			countQuery := fmt.Sprintf("SELECT count() FROM agentstack.sessions WHERE %s", whereClause)
+			if err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+				return nil, 0, fmt.Errorf("count sessions: %w", err)
+			}
+		}
+	} else {
+		// Filtered queries always use exact count
+		countQuery := fmt.Sprintf("SELECT count() FROM agentstack.sessions WHERE %s", whereClause)
+		if err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+			return nil, 0, fmt.Errorf("count sessions: %w", err)
+		}
 	}
 
 	// Data query — sort column and direction are whitelisted in Normalize()

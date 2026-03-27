@@ -31,9 +31,11 @@ func main() {
 	}
 	defer db.Close()
 
+	// PostgreSQL connection pool — PgBouncer-compatible settings
 	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(10)
+	db.SetMaxIdleConns(15)
 	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(1 * time.Minute)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -85,6 +87,10 @@ func main() {
 				chDB.Close()
 				chDB = nil
 			} else {
+				// ClickHouse connection pool settings
+				chDB.SetMaxOpenConns(15)
+				chDB.SetMaxIdleConns(10)
+				chDB.SetConnMaxLifetime(5 * time.Minute)
 				defer chDB.Close()
 				logger.Info("connected to ClickHouse")
 			}

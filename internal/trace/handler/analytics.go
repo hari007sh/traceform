@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/agentstack/agentstack/internal/cache"
 	"github.com/agentstack/agentstack/internal/server/httputil"
 	"github.com/agentstack/agentstack/internal/server/middleware"
 	"github.com/agentstack/agentstack/internal/trace/service"
@@ -14,12 +15,18 @@ import (
 // AnalyticsHandler handles analytics query endpoints.
 type AnalyticsHandler struct {
 	svc    *service.AnalyticsService
+	cache  *cache.QueryCache
 	logger *slog.Logger
 }
 
 // NewAnalyticsHandler creates a new analytics handler.
 func NewAnalyticsHandler(svc *service.AnalyticsService, logger *slog.Logger) *AnalyticsHandler {
 	return &AnalyticsHandler{svc: svc, logger: logger}
+}
+
+// SetCache sets the query result cache on the handler.
+func (h *AnalyticsHandler) SetCache(c *cache.QueryCache) {
+	h.cache = c
 }
 
 // Overview handles GET /v1/analytics/overview.
@@ -32,11 +39,27 @@ func (h *AnalyticsHandler) Overview(w http.ResponseWriter, r *http.Request) {
 
 	start, end := parseTimeRange(r)
 
+	// Check cache (30s TTL for overview)
+	if h.cache != nil {
+		cacheKey := cache.Key(orgID, "overview", start, end)
+		var cached service.OverviewResponse
+		if h.cache.Get(r.Context(), cacheKey, &cached) {
+			httputil.WriteJSON(w, http.StatusOK, cached)
+			return
+		}
+	}
+
 	overview, err := h.svc.GetOverview(r.Context(), orgID, start, end)
 	if err != nil {
 		h.logger.Error("failed to get overview", "org_id", orgID, "error", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "QUERY_ERROR", "failed to compute overview analytics")
 		return
+	}
+
+	// Store in cache
+	if h.cache != nil {
+		cacheKey := cache.Key(orgID, "overview", start, end)
+		h.cache.Set(r.Context(), cacheKey, overview, 30*time.Second)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, overview)
@@ -53,11 +76,32 @@ func (h *AnalyticsHandler) SessionsOverTime(w http.ResponseWriter, r *http.Reque
 	start, end := parseTimeRange(r)
 	interval := parseInterval(r)
 
+	// Check cache (60s TTL for sessions-over-time)
+	if h.cache != nil {
+		cacheKey := cache.Key(orgID, "sessions-over-time", start, end, interval)
+		var cached []interface{}
+		if h.cache.Get(r.Context(), cacheKey, &cached) {
+			httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
+				"data":     cached,
+				"start":    start.Format(time.RFC3339),
+				"end":      end.Format(time.RFC3339),
+				"interval": interval,
+			})
+			return
+		}
+	}
+
 	points, err := h.svc.GetSessionsOverTime(r.Context(), orgID, start, end, interval)
 	if err != nil {
 		h.logger.Error("failed to get sessions over time", "org_id", orgID, "error", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "QUERY_ERROR", "failed to compute sessions over time")
 		return
+	}
+
+	// Store in cache
+	if h.cache != nil {
+		cacheKey := cache.Key(orgID, "sessions-over-time", start, end, interval)
+		h.cache.Set(r.Context(), cacheKey, points, 60*time.Second)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
@@ -79,11 +123,32 @@ func (h *AnalyticsHandler) FailureRate(w http.ResponseWriter, r *http.Request) {
 	start, end := parseTimeRange(r)
 	interval := parseInterval(r)
 
+	// Check cache (60s TTL for failure-rate)
+	if h.cache != nil {
+		cacheKey := cache.Key(orgID, "failure-rate", start, end, interval)
+		var cached []interface{}
+		if h.cache.Get(r.Context(), cacheKey, &cached) {
+			httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
+				"data":     cached,
+				"start":    start.Format(time.RFC3339),
+				"end":      end.Format(time.RFC3339),
+				"interval": interval,
+			})
+			return
+		}
+	}
+
 	points, err := h.svc.GetFailureRateOverTime(r.Context(), orgID, start, end, interval)
 	if err != nil {
 		h.logger.Error("failed to get failure rate", "org_id", orgID, "error", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "QUERY_ERROR", "failed to compute failure rate")
 		return
+	}
+
+	// Store in cache
+	if h.cache != nil {
+		cacheKey := cache.Key(orgID, "failure-rate", start, end, interval)
+		h.cache.Set(r.Context(), cacheKey, points, 60*time.Second)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{

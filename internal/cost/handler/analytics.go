@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/agentstack/agentstack/internal/cache"
 	"github.com/agentstack/agentstack/internal/cost/service"
 	"github.com/agentstack/agentstack/internal/server/httputil"
 	"github.com/agentstack/agentstack/internal/server/middleware"
@@ -14,12 +15,18 @@ import (
 // AnalyticsHandler handles cost analytics endpoints.
 type AnalyticsHandler struct {
 	analytics *service.AnalyticsService
+	cache     *cache.QueryCache
 	logger    *slog.Logger
 }
 
 // NewAnalyticsHandler creates a new cost analytics handler.
 func NewAnalyticsHandler(analytics *service.AnalyticsService, logger *slog.Logger) *AnalyticsHandler {
 	return &AnalyticsHandler{analytics: analytics, logger: logger}
+}
+
+// SetCache sets the query result cache on the handler.
+func (h *AnalyticsHandler) SetCache(c *cache.QueryCache) {
+	h.cache = c
 }
 
 // parseDateRange extracts from/to query params with defaults (last 30 days).
@@ -62,11 +69,27 @@ func (h *AnalyticsHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check cache (60s TTL for cost summary)
+	if h.cache != nil {
+		cacheKey := cache.Key(orgID, "cost-summary", from, to)
+		var cached interface{}
+		if h.cache.Get(r.Context(), cacheKey, &cached) {
+			httputil.WriteJSON(w, http.StatusOK, cached)
+			return
+		}
+	}
+
 	summary, err := h.analytics.GetSummary(r.Context(), orgID, from, to)
 	if err != nil {
 		h.logger.Error("failed to get cost summary", "org_id", orgID, "error", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "QUERY_ERROR", "failed to get cost summary")
 		return
+	}
+
+	// Store in cache
+	if h.cache != nil {
+		cacheKey := cache.Key(orgID, "cost-summary", from, to)
+		h.cache.Set(r.Context(), cacheKey, summary, 60*time.Second)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, summary)
@@ -146,6 +169,16 @@ func (h *AnalyticsHandler) TopSpenders(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Check cache (60s TTL for top spenders)
+	if h.cache != nil {
+		cacheKey := cache.Key(orgID, "top-spenders", from, to, limit)
+		var cached map[string]interface{}
+		if h.cache.Get(r.Context(), cacheKey, &cached) {
+			httputil.WriteJSON(w, http.StatusOK, cached)
+			return
+		}
+	}
+
 	spenders, err := h.analytics.GetTopSpenders(r.Context(), orgID, from, to, limit)
 	if err != nil {
 		h.logger.Error("failed to get top spenders", "org_id", orgID, "error", err)
@@ -153,9 +186,17 @@ func (h *AnalyticsHandler) TopSpenders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
+	result := map[string]interface{}{
 		"spenders": spenders,
-	})
+	}
+
+	// Store in cache
+	if h.cache != nil {
+		cacheKey := cache.Key(orgID, "top-spenders", from, to, limit)
+		h.cache.Set(r.Context(), cacheKey, result, 60*time.Second)
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, result)
 }
 
 // Compare handles GET /v1/cost/analytics/compare — compare model costs.
