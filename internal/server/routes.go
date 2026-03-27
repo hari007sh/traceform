@@ -561,6 +561,9 @@ func (s *Server) setupRoutes() {
 		// Usage & billing info
 		r.Get("/usage", s.handleGetUsage)
 
+		// License info
+		r.Get("/license", s.handleGetLicense)
+
 		// Audit logs — admin only, requires audit_log feature
 		auditHandler := audit.NewHandler(audit.NewStore(s.db), s.logger)
 		r.Route("/audit-logs", func(r chi.Router) {

@@ -3,14 +3,20 @@ package middleware
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/traceform/traceform/internal/license"
 )
 
 // OrgPlanKey is the context key for the authenticated organization's plan.
 const OrgPlanKey contextKey = "org_plan"
+
+// LicenseKey is the context key for the loaded license (self-hosted mode).
+const LicenseKey contextKey = "license"
 
 // PlanLimits defines what each plan allows.
 type PlanLimits struct {
@@ -73,10 +79,50 @@ var PlanConfigs = map[string]PlanLimits{
 	},
 }
 
-// RequireFeature returns middleware that checks if the org's plan includes a feature.
+// featureTierMap documents the minimum tier needed for each gated feature,
+// used for user-facing error messages.
+var featureTierMap = map[string]string{
+	"sso":                "enterprise",
+	"custom_roles":       "enterprise",
+	"audit_log":          "team",
+	"data_export":        "team",
+	"error_groups":       "team",
+	"budget_enforcement": "team",
+	"api_key_rotation":   "team",
+}
+
+// isSelfHosted returns true when the server is running in self-hosted mode
+// (default) rather than cloud-hosted mode.
+func isSelfHosted() bool {
+	return os.Getenv("TRACEFORM_MODE") != "cloud"
+}
+
+// RequireFeature returns middleware that checks if the org's plan (cloud mode)
+// or license (self-hosted mode) includes the requested feature.
 func RequireFeature(feature string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if isSelfHosted() {
+				// Self-hosted: check the license from context
+				lic := GetLicenseFromContext(r.Context())
+				if lic != nil && lic.HasFeature(feature) {
+					next.ServeHTTP(w, r)
+					return
+				}
+				tier := "community"
+				if lic != nil {
+					tier = lic.Tier
+				}
+				requiredTier := featureTierMap[feature]
+				if requiredTier == "" {
+					requiredTier = "team"
+				}
+				writeError(w, http.StatusForbidden, "LICENSE_REQUIRED",
+					fmt.Sprintf("This feature requires a %s license. Current: %s. Visit https://traceform.dev/pricing to upgrade.", requiredTier, tier))
+				return
+			}
+
+			// Cloud mode: use the database-backed plan
 			plan := GetOrgPlan(r.Context())
 			limits, ok := PlanConfigs[plan]
 			if !ok {
@@ -106,6 +152,26 @@ func RequireFeature(feature string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// LicenseInjector returns middleware that injects the given license into
+// every request context. This is applied once at server startup so all
+// downstream handlers and middleware can access it.
+func LicenseInjector(lic *license.License) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), LicenseKey, lic)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// GetLicenseFromContext extracts the license from the request context.
+func GetLicenseFromContext(ctx context.Context) *license.License {
+	if v, ok := ctx.Value(LicenseKey).(*license.License); ok {
+		return v
+	}
+	return nil
 }
 
 // OrgPlanLoader loads the org's plan into context, cached in Redis for 5 minutes.

@@ -15,6 +15,7 @@ import (
 	"github.com/traceform/traceform/internal/auth"
 	"github.com/traceform/traceform/internal/billing"
 	"github.com/traceform/traceform/internal/config"
+	"github.com/traceform/traceform/internal/license"
 	"github.com/traceform/traceform/internal/server/httputil"
 	"github.com/traceform/traceform/internal/server/middleware"
 	"github.com/go-chi/chi/v5"
@@ -38,6 +39,7 @@ type Server struct {
 	logger          *slog.Logger
 	auditLogger     *audit.Logger
 	meter           *billing.Meter
+	license         *license.License
 }
 
 // New creates a new Server instance with all dependencies.
@@ -76,6 +78,20 @@ func New(cfg *config.Config, db *sql.DB, redisClient *redis.Client, natsConn *na
 		tokenRevocation = auth.NewTokenRevocation(redisClient)
 	}
 
+	// Load license from environment (self-hosted mode)
+	licenseKey := os.Getenv("TRACEFORM_LICENSE_KEY")
+	lic, licErr := license.Validate(licenseKey)
+	if licErr != nil {
+		logger.Warn("invalid license key, running as Community edition", "error", licErr)
+		lic = license.CommunityLicense()
+	}
+	logger.Info("license loaded",
+		"tier", lic.Tier,
+		"org", lic.Org,
+		"expires", lic.ExpiresAt,
+		"features", lic.Features,
+	)
+
 	s := &Server{
 		cfg:             cfg,
 		router:          chi.NewRouter(),
@@ -88,6 +104,7 @@ func New(cfg *config.Config, db *sql.DB, redisClient *redis.Client, natsConn *na
 		logger:          logger,
 		auditLogger:     auditLog,
 		meter:           meter,
+		license:         lic,
 	}
 
 	// Apply options (e.g., WithClickHouse)
@@ -118,6 +135,11 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(chimw.Compress(5)) // gzip compression level 5
 	s.router.Use(middleware.PrometheusMetrics)
 	s.router.Use(requestLogger(s.logger))
+
+	// Inject license into every request context (self-hosted feature gating)
+	if s.license != nil {
+		s.router.Use(middleware.LicenseInjector(s.license))
+	}
 
 	// Metrics endpoint (no auth required for Prometheus scraping)
 	s.router.Handle("/metrics", promhttp.Handler())

@@ -44,6 +44,8 @@ func main() {
 		cli.CostCommand(remaining)
 	case "gate":
 		cli.GateCommand(remaining)
+	case "license":
+		cli.LicenseCommand(remaining)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		fmt.Fprintln(os.Stderr, "Run 'traceform --help' for usage.")
@@ -60,6 +62,7 @@ Commands:
   test       Run test suites and view results
   cost       View cost analytics and budget policies
   gate       Run quality gates (CI/CD integration)
+  license    Manage license keys (generate, validate, info)
   version    Print version information
 
 Global Flags:
