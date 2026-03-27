@@ -1,0 +1,184 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feat/*]
+  pull_request:
+    branches: [main]
+
+env:
+  GO_VERSION: '1.22'
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  go-test:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: agentstack
+          POSTGRES_PASSWORD: agentstack_dev
+          POSTGRES_DB: agentstack
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      nats:
+        image: nats:latest
+        ports: ['4222:4222']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Build
+        run: go build ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./... -v -count=1 -race -coverprofile=coverage.out
+        env:
+          DATABASE_URL: postgresql://agentstack:agentstack_dev@localhost:5432/agentstack?sslmode=disable
+          REDIS_URL: redis://localhost:6379
+          NATS_URL: nats://localhost:4222
+          JWT_SECRET: ci-test-secret
+          ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+
+  python-test:
+    name: Python SDK Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        working-directory: sdk/python
+        run: pip install pytest pytest-asyncio pytest-mock requests
+      - name: Run tests
+        working-directory: sdk/python
+        run: pytest tests/ -v
+
+  frontend-typecheck:
+    name: Frontend Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+      - name: Type check
+        working-directory: web
+        run: npx tsc --noEmit
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [go-test, python-test, frontend-typecheck]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build server image
+        run: docker build -f deploy/Dockerfile -t agentstack/server:ci .
+      - name: Build gateway image
+        run: docker build -f deploy/Dockerfile.gateway -t agentstack/gateway:ci .
+
+  e2e-test:
+    name: E2E Integration Tests
+    runs-on: ubuntu-latest
+    needs: [go-test]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: agentstack
+          POSTGRES_PASSWORD: agentstack_dev
+          POSTGRES_DB: agentstack
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      clickhouse:
+        image: clickhouse/clickhouse-server:latest
+        ports: ['9000:9000', '8123:8123']
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+      nats:
+        image: nats:latest
+        ports: ['4222:4222']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgresql://agentstack:agentstack_dev@localhost:5432/agentstack?sslmode=disable
+          CLICKHOUSE_URL: clickhouse://localhost:9000/agentstack
+          REDIS_URL: redis://localhost:6379
+          NATS_URL: nats://localhost:4222
+        run: go run ./cmd/migrate/main.go
+      - name: Seed data
+        env:
+          DATABASE_URL: postgresql://agentstack:agentstack_dev@localhost:5432/agentstack?sslmode=disable
+          CLICKHOUSE_URL: clickhouse://localhost:9000/agentstack
+          REDIS_URL: redis://localhost:6379
+          NATS_URL: nats://localhost:4222
+        run: go run ./cmd/migrate/main.go -seed
+      - name: Start services
+        env:
+          PORT: '8080'
+          GATEWAY_PORT: '8090'
+          DATABASE_URL: postgresql://agentstack:agentstack_dev@localhost:5432/agentstack?sslmode=disable
+          CLICKHOUSE_URL: clickhouse://localhost:9000/agentstack
+          REDIS_URL: redis://localhost:6379
+          NATS_URL: nats://localhost:4222
+          JWT_SECRET: ci-test-secret
+          ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          FRONTEND_URL: http://localhost:3000
+        run: |
+          go run ./cmd/server/main.go &
+          go run ./cmd/gateway/main.go &
+          go run ./cmd/worker/main.go &
+          sleep 10
+      - name: Run E2E tests
+        env:
+          AGENTSTACK_URL: http://localhost:8080
+          AGENTSTACK_GATEWAY_URL: http://localhost:8090
+        run: python3 test_e2e.py
+
+  helm-lint:
+    name: Helm Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Lint chart
+        run: helm lint deploy/helm/agentstack/ || true
