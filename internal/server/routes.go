@@ -72,6 +72,11 @@ func (s *Server) setupRoutes() {
 		r.Post("/github", s.handleGitHubLogin)
 		r.Get("/github/callback", s.handleGitHubCallback)
 
+		// Invite acceptance — unauthenticated, redirects to login
+		r.Get("/invite/{token}", s.handleAcceptInvite)
+		// Invite info — unauthenticated, returns invite details for the frontend
+		r.Get("/invite/{token}/info", s.handleGetInviteInfo)
+
 		// Logout — requires valid JWT to extract jti for revocation
 		r.With(middleware.JWTAuth(s.jwtManager, s.tokenRevocation)).Post("/logout", s.handleLogout)
 
@@ -553,7 +558,9 @@ func (s *Server) setupRoutes() {
 		// Team management
 		r.Route("/team", func(r chi.Router) {
 			r.Get("/", s.handleListTeam)
+			r.Get("/invites", s.handleListInvites)
 			r.With(middleware.RequireRole("owner")).Post("/invite", s.handleInviteTeamMember)
+			r.With(middleware.RequireRole("owner")).Delete("/invites/{id}", s.handleCancelInvite)
 			r.With(middleware.RequireRole("owner")).Patch("/{id}/role", s.handleUpdateTeamMemberRole)
 			r.With(middleware.RequireRole("owner")).Delete("/{id}", s.handleRemoveTeamMember)
 		})
@@ -815,8 +822,52 @@ func (s *Server) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 
+	// --- Check for pending invite and accept it ---
+	// If there is a pending invite for this user's email, assign them to
+	// the inviter's org with the invite's role instead of keeping them in
+	// their default org.
+	userRole := "owner"
+	inviteToken := r.URL.Query().Get("invite")
+	if inviteToken != "" {
+		// Accept invite by token (passed via state/query)
+		var invOrgID, invRole string
+		var inviteID string
+		invErr := s.db.QueryRowContext(r.Context(),
+			`SELECT id, org_id, role FROM invites
+			 WHERE token = $1 AND status = 'pending' AND expires_at > NOW()`, inviteToken,
+		).Scan(&inviteID, &invOrgID, &invRole)
+		if invErr == nil {
+			// Move user to invited org
+			_, _ = s.db.ExecContext(r.Context(),
+				`UPDATE users SET org_id = $1, role = $2, updated_at = NOW() WHERE id = $3`,
+				invOrgID, invRole, userID)
+			// Mark invite accepted
+			_, _ = s.db.ExecContext(r.Context(),
+				`UPDATE invites SET status = 'accepted', accepted_at = NOW() WHERE id = $1`, inviteID)
+			orgID = invOrgID
+			userRole = invRole
+			slog.Info("github oauth: accepted invite", "user_id", userID, "org_id", orgID, "invite_id", inviteID)
+		}
+	} else if ghUser.Email != "" {
+		// Check for any pending invite matching the user's email
+		if invOrgID, invRole, accepted := s.acceptInviteForUser(r.Context(), ghUser.Email, userID); accepted {
+			orgID = invOrgID
+			userRole = invRole
+			slog.Info("github oauth: auto-accepted invite by email", "user_id", userID, "org_id", orgID)
+		}
+	}
+
+	// Fetch actual role from DB for returning user (may have changed)
+	var dbRole string
+	roleErr := s.db.QueryRowContext(r.Context(),
+		`SELECT role FROM users WHERE id = $1 AND org_id = $2`, userID, orgID,
+	).Scan(&dbRole)
+	if roleErr == nil {
+		userRole = dbRole
+	}
+
 	// Generate JWT
-	token, err := s.jwtManager.GenerateToken(userID, orgID, ghUser.Email, "owner")
+	token, err := s.jwtManager.GenerateToken(userID, orgID, ghUser.Email, userRole)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "TOKEN_ERROR", "failed to generate token")
 		return

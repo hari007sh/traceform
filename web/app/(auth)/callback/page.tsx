@@ -18,9 +18,15 @@ function CallbackHandler() {
       return;
     }
 
-    fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/auth/github/callback?code=${code}`
-    )
+    // Pass invite token through to the backend if present
+    const inviteToken = searchParams.get("invite") || localStorage.getItem("pending_invite") || "";
+    let callbackURL = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/auth/github/callback?code=${code}`;
+    if (inviteToken) {
+      callbackURL += `&invite=${encodeURIComponent(inviteToken)}`;
+      localStorage.removeItem("pending_invite");
+    }
+
+    fetch(callbackURL)
       .then((res) => res.json())
       .then((data) => {
         if (data.token) {

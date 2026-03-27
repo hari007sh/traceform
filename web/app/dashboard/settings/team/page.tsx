@@ -12,6 +12,12 @@ import {
   Loader2,
   AlertTriangle,
   UserPlus,
+  Copy,
+  Check,
+  Clock,
+  X,
+  Mail,
+  Link2,
 } from "lucide-react";
 import { fadeIn, staggerContainer, staggerItem } from "@/lib/animations";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +38,12 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { api, ApiError } from "@/lib/api";
 import { showSuccess, showError, showApiError } from "@/lib/toast";
 
@@ -45,6 +57,23 @@ interface TeamMember {
   role: Role;
   created_at: string;
   updated_at: string;
+}
+
+interface TeamInfoResponse {
+  members: TeamMember[];
+  member_count: number;
+  member_limit: number;
+}
+
+interface InviteInfo {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  invite_url: string;
+  status: string;
+  expires_at: string;
+  created_at: string;
 }
 
 interface CurrentUser {
@@ -110,8 +139,15 @@ function getAvatarColor(id: string): string {
 
 export default function TeamPage() {
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [memberLimit, setMemberLimit] = useState<number>(-1);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+
+  // Pending invites
+  const [pendingInvites, setPendingInvites] = useState<InviteInfo[]>([]);
+  const [cancellingInviteId, setCancellingInviteId] = useState<string | null>(
+    null
+  );
 
   // Invite dialog state
   const [showInvite, setShowInvite] = useState(false);
@@ -120,12 +156,23 @@ export default function TeamPage() {
   const [inviteRole, setInviteRole] = useState<Role>("member");
   const [inviting, setInviting] = useState(false);
 
+  // Invite URL dialog (shown after invite is created)
+  const [inviteUrlDialog, setInviteUrlDialog] = useState<{
+    url: string;
+    email: string;
+    name: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
+
   // Remove dialog state
   const [removeTarget, setRemoveTarget] = useState<TeamMember | null>(null);
   const [removing, setRemoving] = useState(false);
 
   // Role change loading state
   const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null);
+
+  const isAtLimit =
+    memberLimit > 0 && members.length >= memberLimit;
 
   const initToken = useCallback(() => {
     const token =
@@ -163,8 +210,9 @@ export default function TeamPage() {
     }
 
     try {
-      const data = await api.get<TeamMember[]>("/api/team");
-      setMembers(data);
+      const data = await api.get<TeamInfoResponse>("/api/team");
+      setMembers(data.members);
+      setMemberLimit(data.member_limit);
     } catch (err) {
       if (err instanceof ApiError) {
         showApiError(err);
@@ -176,9 +224,21 @@ export default function TeamPage() {
     }
   }, [initToken]);
 
+  // Fetch pending invites
+  const fetchInvites = useCallback(async () => {
+    if (!initToken()) return;
+    try {
+      const data = await api.get<InviteInfo[]>("/api/team/invites");
+      setPendingInvites(data.filter((inv) => inv.status === "pending"));
+    } catch {
+      // Silently fail — invites are supplementary info
+    }
+  }, [initToken]);
+
   useEffect(() => {
     fetchTeam();
-  }, [fetchTeam]);
+    fetchInvites();
+  }, [fetchTeam, fetchInvites]);
 
   // Invite member
   const handleInvite = async () => {
@@ -187,14 +247,21 @@ export default function TeamPage() {
 
     try {
       initToken();
-      const newMember = await api.post<TeamMember>("/api/team/invite", {
+      const result = await api.post<InviteInfo>("/api/team/invite", {
         email: inviteEmail.trim(),
         name: inviteName.trim(),
         role: inviteRole,
       });
-      setMembers((prev) => [...prev, newMember]);
-      showSuccess(`${inviteName.trim()} has been added to the team`);
+      showSuccess(`Invite sent to ${inviteName.trim()}`);
       resetInviteDialog();
+      // Show the invite URL dialog
+      setInviteUrlDialog({
+        url: result.invite_url,
+        email: result.email,
+        name: result.name,
+      });
+      // Refresh invites list
+      fetchInvites();
     } catch (err) {
       if (err instanceof ApiError) {
         showApiError(err);
@@ -203,6 +270,37 @@ export default function TeamPage() {
       }
     } finally {
       setInviting(false);
+    }
+  };
+
+  // Cancel invite
+  const handleCancelInvite = async (inviteId: string) => {
+    setCancellingInviteId(inviteId);
+    try {
+      initToken();
+      await api.delete(`/api/team/invites/${inviteId}`);
+      setPendingInvites((prev) => prev.filter((inv) => inv.id !== inviteId));
+      showSuccess("Invite cancelled");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        showApiError(err);
+      } else {
+        showError("Failed to cancel invite");
+      }
+    } finally {
+      setCancellingInviteId(null);
+    }
+  };
+
+  // Copy invite URL to clipboard
+  const handleCopyUrl = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      showSuccess("Invite link copied to clipboard");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      showError("Failed to copy link");
     }
   };
 
@@ -298,17 +396,53 @@ export default function TeamPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-[var(--text-primary)]">
-            Team
+            Team Members{" "}
+            {memberLimit > 0 && (
+              <span className="text-sm font-normal text-[var(--text-secondary)]">
+                ({members.length}/{memberLimit})
+              </span>
+            )}
           </h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">
             Manage team members, roles, and access
           </p>
         </div>
-        <Button onClick={() => setShowInvite(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Invite Member
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  onClick={() => setShowInvite(true)}
+                  disabled={isAtLimit}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Invite Member
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {isAtLimit && (
+              <TooltipContent>
+                <p>Member limit reached. Upgrade your plan.</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
       </div>
+
+      {/* Member limit warning */}
+      {isAtLimit && (
+        <div className="flex items-start gap-3 p-3 rounded-lg bg-[var(--accent-amber)]/10 border border-[var(--accent-amber)]/20">
+          <AlertTriangle className="w-4 h-4 text-[var(--accent-amber)] mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-[var(--accent-amber)]">
+              Member limit reached
+            </p>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+              Your plan allows {memberLimit} team members. Upgrade to add more.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Members count */}
       <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
@@ -494,6 +628,104 @@ export default function TeamPage() {
         )}
       </motion.div>
 
+      {/* Pending Invites Section */}
+      {pendingInvites.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+            <Mail className="w-4 h-4" />
+            <span>
+              {pendingInvites.length} pending{" "}
+              {pendingInvites.length === 1 ? "invite" : "invites"}
+            </span>
+          </div>
+
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
+            className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] overflow-hidden"
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-[var(--border-subtle)]">
+                    <th className="text-left px-5 py-3 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium">
+                      Invitee
+                    </th>
+                    <th className="text-left px-5 py-3 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium">
+                      Role
+                    </th>
+                    <th className="text-left px-5 py-3 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium">
+                      Expires
+                    </th>
+                    <th className="text-right px-5 py-3 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingInvites.map((invite) => {
+                    const RoleIcon =
+                      roleIcons[invite.role as Role] || User;
+                    return (
+                      <motion.tr
+                        key={invite.id}
+                        variants={staggerItem}
+                        className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--bg-hover)] transition-colors"
+                      >
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-[var(--bg-hover)] flex items-center justify-center">
+                              <Clock className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
+                            </div>
+                            <div>
+                              <span className="text-sm font-medium text-[var(--text-primary)] block">
+                                {invite.name || invite.email.split("@")[0]}
+                              </span>
+                              <span className="text-[11px] text-[var(--text-tertiary)] block">
+                                {invite.email}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <Badge
+                            className={`${roleBadgeStyles[invite.role as Role] || roleBadgeStyles.member} border text-[10px] uppercase tracking-wider font-semibold gap-1`}
+                          >
+                            <RoleIcon className="w-3 h-3" />
+                            {invite.role}
+                          </Badge>
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-[var(--text-secondary)]">
+                          {formatDate(invite.expires_at)}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center justify-end gap-1">
+                            {cancellingInviteId === invite.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--text-tertiary)]" />
+                            ) : (
+                              <button
+                                onClick={() =>
+                                  handleCancelInvite(invite.id)
+                                }
+                                className="p-1.5 rounded hover:bg-[var(--accent-red)]/10 text-[var(--text-tertiary)] hover:text-[var(--accent-red)] transition-colors"
+                                title="Cancel invite"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* Invite Member Dialog */}
       <Dialog
         open={showInvite}
@@ -503,8 +735,8 @@ export default function TeamPage() {
           <DialogHeader>
             <DialogTitle>Invite Team Member</DialogTitle>
             <DialogDescription>
-              Add a new member to your organization. They will be able to access
-              the dashboard based on their assigned role.
+              Send an invite link to add a new member to your organization.
+              They will receive a link to join with their assigned role.
             </DialogDescription>
           </DialogHeader>
 
@@ -603,14 +835,78 @@ export default function TeamPage() {
               {inviting ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Inviting...
+                  Sending Invite...
                 </span>
               ) : (
                 <>
                   <UserPlus className="w-3.5 h-3.5 mr-1.5" />
-                  Invite Member
+                  Send Invite
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invite URL Dialog (shown after invite is created) */}
+      <Dialog
+        open={inviteUrlDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setInviteUrlDialog(null);
+            setCopied(false);
+          }
+        }}
+      >
+        <DialogContent className="bg-[var(--bg-elevated)] border-[var(--border-default)] max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="w-5 h-5 text-[var(--accent-blue)]" />
+              Invite Sent
+            </DialogTitle>
+            <DialogDescription>
+              Share this link with{" "}
+              <span className="font-medium text-[var(--text-primary)]">
+                {inviteUrlDialog?.name}
+              </span>{" "}
+              ({inviteUrlDialog?.email}) to join your organization. The link
+              expires in 7 days.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-subtle)]">
+              <input
+                type="text"
+                readOnly
+                value={inviteUrlDialog?.url || ""}
+                className="flex-1 bg-transparent text-sm text-[var(--text-primary)] outline-none truncate"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  inviteUrlDialog && handleCopyUrl(inviteUrlDialog.url)
+                }
+                className="flex-shrink-0"
+              >
+                {copied ? (
+                  <Check className="w-3.5 h-3.5 text-[var(--accent-green)]" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+              </Button>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                setInviteUrlDialog(null);
+                setCopied(false);
+              }}
+            >
+              Done
             </Button>
           </DialogFooter>
         </DialogContent>
