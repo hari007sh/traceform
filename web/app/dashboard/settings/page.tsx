@@ -333,7 +333,7 @@ export default function SettingsPage() {
                 Slug
               </label>
               <div className="flex items-center gap-2">
-                <span className="text-sm text-[var(--text-tertiary)] whitespace-nowrap">agentstack.dev/</span>
+                <span className="text-sm text-[var(--text-tertiary)] whitespace-nowrap">traceform.dev/</span>
                 <Input
                   value={orgSlug}
                   onChange={(e) =>
@@ -437,7 +437,7 @@ export default function SettingsPage() {
             <div>
               <h2 className="text-sm font-semibold text-[var(--text-primary)]">Appearance</h2>
               <p className="text-xs text-[var(--text-tertiary)]">
-                Choose how AgentStack looks to you
+                Choose how Traceform looks to you
               </p>
             </div>
           </div>

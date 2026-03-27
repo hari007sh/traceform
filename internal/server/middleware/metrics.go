@@ -12,35 +12,35 @@ import (
 
 var (
 	httpRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "agentstack_http_requests_total",
+		Name: "traceform_http_requests_total",
 		Help: "Total number of HTTP requests",
 	}, []string{"method", "path", "status"})
 
 	httpRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "agentstack_http_request_duration_seconds",
+		Name:    "traceform_http_request_duration_seconds",
 		Help:    "HTTP request duration in seconds",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "path"})
 
 	activeConnections = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "agentstack_active_connections",
+		Name: "traceform_active_connections",
 		Help: "Number of active HTTP connections",
 	})
 
 	// Business metrics — increment from handlers as needed.
 
 	IngestEventsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "agentstack_ingest_events_total",
+		Name: "traceform_ingest_events_total",
 		Help: "Total ingested events by type",
 	}, []string{"type"}) // session, span, event, healing
 
 	GatewayRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "agentstack_gateway_requests_total",
+		Name: "traceform_gateway_requests_total",
 		Help: "Total gateway proxy requests",
 	}, []string{"provider", "model", "status"})
 
 	ActiveSessionsGauge = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "agentstack_active_sessions",
+		Name: "traceform_active_sessions",
 		Help: "Number of currently running sessions",
 	})
 )

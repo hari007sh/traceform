@@ -1,0 +1,158 @@
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+server:
+  image:
+    repository: traceform/server
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  service:
+    type: ClusterIP
+    port: 8080
+  env:
+    ENVIRONMENT: production
+
+gateway:
+  image:
+    repository: traceform/gateway
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  service:
+    type: ClusterIP
+    port: 8090
+
+worker:
+  image:
+    repository: traceform/worker
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+web:
+  image:
+    repository: traceform/web
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  service:
+    type: ClusterIP
+    port: 3000
+
+migrate:
+  image:
+    repository: traceform/server
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: app.traceform.dev
+      paths:
+        - path: /
+          pathType: Prefix
+          service: web
+        - path: /v1
+          pathType: Prefix
+          service: server
+        - path: /api
+          pathType: Prefix
+          service: server
+        - path: /auth
+          pathType: Prefix
+          service: server
+        - path: /docs
+          pathType: Prefix
+          service: server
+        - path: /health
+          pathType: Prefix
+          service: server
+        - path: /metrics
+          pathType: Prefix
+          service: server
+  tls:
+    - secretName: traceform-tls
+      hosts:
+        - app.traceform.dev
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# External dependencies (use these OR install sub-charts)
+postgresql:
+  external: true
+  host: postgresql.default.svc.cluster.local
+  port: 5432
+  database: agentstack
+  username: traceform
+  existingSecret: traceform-db-credentials
+  secretKey: password
+
+clickhouse:
+  external: true
+  host: clickhouse.default.svc.cluster.local
+  port: 9000
+  database: agentstack
+
+redis:
+  external: true
+  host: redis-master.default.svc.cluster.local
+  port: 6379
+
+nats:
+  external: true
+  host: nats.default.svc.cluster.local
+  port: 4222
+
+secrets:
+  jwtSecret: ""
+  encryptionKey: ""
+  githubClientId: ""
+  githubClientSecret: ""

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	"github.com/agentstack/agentstack/internal/test/service"
-	"github.com/agentstack/agentstack/internal/test/store"
+	"github.com/traceform/traceform/internal/test/service"
+	"github.com/traceform/traceform/internal/test/store"
 	"github.com/nats-io/nats.go"
 )
 

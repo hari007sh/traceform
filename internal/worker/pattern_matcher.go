@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/agentstack/agentstack/internal/trace/store"
+	"github.com/traceform/traceform/internal/trace/store"
 )
 
 const (
@@ -138,7 +138,7 @@ func (pm *PatternMatcher) loadRecentSessions(ctx context.Context) ([]store.Sessi
 	query := `SELECT id, org_id, agent_name, agent_id, status, input, output, error,
 	                 metadata, total_tokens, total_cost_cents, total_spans, duration_ms,
 	                 has_healing, tags, started_at, ended_at, created_at
-	          FROM agentstack.sessions
+	          FROM traceform.sessions
 	          WHERE started_at >= ?
 	          ORDER BY started_at DESC
 	          LIMIT 500`

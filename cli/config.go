@@ -15,8 +15,8 @@ type GlobalConfig struct {
 var globalCfg GlobalConfig
 
 // ParseGlobalFlags extracts --api-key and --endpoint from the arg list,
-// returning the remaining args. Falls back to AGENTSTACK_API_KEY and
-// AGENTSTACK_ENDPOINT environment variables.
+// returning the remaining args. Falls back to TRACEFORM_API_KEY and
+// TRACEFORM_ENDPOINT environment variables.
 func ParseGlobalFlags(args []string) []string {
 	remaining := make([]string, 0, len(args))
 
@@ -45,10 +45,10 @@ func ParseGlobalFlags(args []string) []string {
 
 	// Fall back to environment variables
 	if globalCfg.APIKey == "" {
-		globalCfg.APIKey = os.Getenv("AGENTSTACK_API_KEY")
+		globalCfg.APIKey = os.Getenv("TRACEFORM_API_KEY")
 	}
 	if globalCfg.Endpoint == "" {
-		globalCfg.Endpoint = os.Getenv("AGENTSTACK_ENDPOINT")
+		globalCfg.Endpoint = os.Getenv("TRACEFORM_ENDPOINT")
 	}
 	if globalCfg.Endpoint == "" {
 		globalCfg.Endpoint = "http://localhost:8080"
@@ -62,9 +62,9 @@ func getAPIURL() string {
 	if globalCfg.Endpoint != "" {
 		return globalCfg.Endpoint
 	}
-	url := os.Getenv("AGENTSTACK_ENDPOINT")
+	url := os.Getenv("TRACEFORM_ENDPOINT")
 	if url == "" {
-		url = os.Getenv("AGENTSTACK_API_URL")
+		url = os.Getenv("TRACEFORM_API_URL")
 	}
 	if url == "" {
 		url = "http://localhost:8080"
@@ -77,9 +77,9 @@ func getAPIKey() string {
 	if globalCfg.APIKey != "" {
 		return globalCfg.APIKey
 	}
-	key := os.Getenv("AGENTSTACK_API_KEY")
+	key := os.Getenv("TRACEFORM_API_KEY")
 	if key == "" {
-		fmt.Fprintln(os.Stderr, "Warning: AGENTSTACK_API_KEY not set, using empty key")
+		fmt.Fprintln(os.Stderr, "Warning: TRACEFORM_API_KEY not set, using empty key")
 	}
 	return key
 }

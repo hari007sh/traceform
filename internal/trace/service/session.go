@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/agentstack/agentstack/internal/trace/store"
+	"github.com/traceform/traceform/internal/trace/store"
 )
 
 // SessionService provides query access to trace sessions.

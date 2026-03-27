@@ -1,4 +1,4 @@
-// Package billing provides usage metering and plan enforcement for AgentStack.
+// Package billing provides usage metering and plan enforcement for Traceform.
 package billing
 
 import (
@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/agentstack/agentstack/internal/server/middleware"
+	"github.com/traceform/traceform/internal/server/middleware"
 	"github.com/redis/go-redis/v9"
 )
 

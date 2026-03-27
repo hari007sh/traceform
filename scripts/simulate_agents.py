@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-AgentStack Live Test — Simulate Real AI Agent Usage
+Traceform Live Test — Simulate Real AI Agent Usage
 
-Sends REAL data to all AgentStack API endpoints to populate the dashboard.
+Sends REAL data to all Traceform API endpoints to populate the dashboard.
 """
 
 import json
@@ -15,13 +15,13 @@ API_URL = "http://localhost:8080"
 
 # Use JWT token if available (matches logged-in user's org), else fall back to API key
 import os
-_jwt_file = "/tmp/agentstack_jwt.txt"
+_jwt_file = "/tmp/traceform_jwt.txt"
 if os.path.exists(_jwt_file):
     with open(_jwt_file) as f:
         API_KEY = f.read().strip()
     print(f"Using JWT token from {_jwt_file}")
 else:
-    API_KEY = os.environ.get("AGENTSTACK_API_KEY", "as_sk_test123")
+    API_KEY = os.environ.get("TRACEFORM_API_KEY", "tf_sk_test123")
     print(f"Using API key: {API_KEY[:20]}...")
 
 HEADERS = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
@@ -260,7 +260,7 @@ def create_budgets():
 
 def main():
     print("=" * 60)
-    print("🚀 AgentStack Live Test")
+    print("🚀 Traceform Live Test")
     print("=" * 60)
 
     try:

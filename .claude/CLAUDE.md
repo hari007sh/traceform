@@ -1,7 +1,7 @@
-# AgentStack — Claude Code Project Instructions
+# Traceform — Claude Code Project Instructions
 
 ## Project Overview
-AgentStack is an open-source AI agent production platform with 6 modules: Shield (self-healing), Trace (observability), Test (evaluation), Guard (guardrails), Route (gateway), Cost (cost intelligence).
+Traceform is an open-source AI agent production platform with 6 modules: Shield (self-healing), Trace (observability), Test (evaluation), Guard (guardrails), Route (gateway), Cost (cost intelligence).
 
 ## Quality Standard: PRODUCTION, Not MVP
 This is NOT an MVP. Every feature must be production-quality:
@@ -57,7 +57,7 @@ Use Chrome DevTools MCP for deeper inspection:
 curl http://localhost:8080/health
 
 # Test with API key
-curl -H "Authorization: Bearer as_sk_test123" http://localhost:8080/v1/sessions
+curl -H "Authorization: Bearer tf_sk_test123" http://localhost:8080/v1/sessions
 
 # Test error handling
 curl -X POST http://localhost:8080/v1/ingest/sessions -d '{}' # should return 400
@@ -66,10 +66,10 @@ curl -X POST http://localhost:8080/v1/ingest/sessions -d '{}' # should return 40
 ### Step 4: After building SDK features, verify with test scripts
 ```python
 # Create test_sdk.py and run it
-import agentstack
-agentstack.init(api_key="as_sk_test", endpoint="http://localhost:8080")
+import traceform
+traceform.init(api_key="tf_sk_test", endpoint="http://localhost:8080")
 
-with agentstack.session(agent_name="test") as session:
+with traceform.session(agent_name="test") as session:
     with session.span("test_span", span_type="llm_call") as span:
         span.set_output("test output")
         span.set_tokens(100, 50)

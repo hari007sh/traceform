@@ -277,7 +277,7 @@ func formatGenericEvent(event string, p map[string]interface{}) SlackMessage {
 		Blocks: []SlackBlock{
 			{
 				Type: "header",
-				Text: &SlackText{Type: "plain_text", Text: fmt.Sprintf("AgentStack Event: %s", event)},
+				Text: &SlackText{Type: "plain_text", Text: fmt.Sprintf("Traceform Event: %s", event)},
 			},
 			{
 				Type: "section",

@@ -2,9 +2,9 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: 'agentstack-server'
+  - job_name: 'traceform-server'
     static_configs:
       - targets: ['host.docker.internal:8080']
-  - job_name: 'agentstack-gateway'
+  - job_name: 'traceform-gateway'
     static_configs:
       - targets: ['host.docker.internal:8090']

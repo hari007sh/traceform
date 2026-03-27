@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "traceform.fullname" . }}-server
+  labels:
+    {{- include "traceform.componentLabels" (dict "root" . "component" "server") | nindent 4 }}
+spec:
+  type: {{ .Values.server.service.type }}
+  ports:
+    - port: {{ .Values.server.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "traceform.selectorLabels" (dict "root" . "component" "server") | nindent 4 }}

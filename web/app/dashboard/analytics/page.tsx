@@ -360,7 +360,7 @@ export default function AnalyticsPage() {
           <h3 className="text-sm font-medium mb-2">No analytics data yet</h3>
           <p className="text-xs text-[var(--text-tertiary)] max-w-md mx-auto leading-relaxed mb-6">
             Analytics will populate automatically once agent sessions are
-            recorded. Start by instrumenting your agents with the AgentStack SDK.
+            recorded. Start by instrumenting your agents with the Traceform SDK.
           </p>
           <div className="flex items-center justify-center gap-3">
             <a
@@ -371,7 +371,7 @@ export default function AnalyticsPage() {
               <ArrowRight className="w-3.5 h-3.5" />
             </a>
             <a
-              href="https://docs.agentstack.dev/sdk"
+              href="https://docs.traceform.dev/sdk"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"

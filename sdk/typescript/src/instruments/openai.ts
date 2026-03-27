@@ -11,7 +11,7 @@ import { getGlobalClient, getGlobalSession } from '../index';
  * @example
  * ```ts
  * import OpenAI from 'openai';
- * import { instrumentOpenAI } from '@agentstack/sdk';
+ * import { instrumentOpenAI } from '@traceform/sdk';
  *
  * const openai = instrumentOpenAI(new OpenAI({ apiKey: '...' }));
  * // All calls now automatically create spans

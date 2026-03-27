@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-27
 **Status:** Approved
-**Goal:** Add SAML/OIDC SSO, role-based access control (owner/admin/viewer), and audit logging so AgentStack passes enterprise security questionnaires.
+**Goal:** Add SAML/OIDC SSO, role-based access control (owner/admin/viewer), and audit logging so Traceform passes enterprise security questionnaires.
 
 ---
 

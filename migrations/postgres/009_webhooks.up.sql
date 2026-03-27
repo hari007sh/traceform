@@ -1,5 +1,5 @@
 -- =============================================
--- AgentStack Webhook Integrations — Database Schema
+-- Traceform Webhook Integrations — Database Schema
 -- =============================================
 
 CREATE TABLE webhook_endpoints (

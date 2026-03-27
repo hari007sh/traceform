@@ -1,5 +1,5 @@
 # =============================================================================
-# AgentStack — Caddy Reverse Proxy Configuration
+# Traceform — Caddy Reverse Proxy Configuration
 # =============================================================================
 #
 # Caddy provides automatic TLS via Let's Encrypt in production and self-signed
@@ -18,10 +18,10 @@
 # ─── Production: automatic TLS with Let's Encrypt ────────────────────────────
 #
 # Caddy will automatically obtain and renew a certificate from Let's Encrypt
-# for app.agentstack.dev. Ensure DNS points to this server and ports 80/443
+# for app.traceform.dev. Ensure DNS points to this server and ports 80/443
 # are open.
 
-app.agentstack.dev {
+app.traceform.dev {
 	# Encode responses with gzip/zstd for smaller payloads
 	encode gzip zstd
 

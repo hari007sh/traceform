@@ -134,7 +134,7 @@ const comparisonFeatures = [
 type Support = "full" | "partial" | "none";
 
 const competitors: { name: string; support: Support[] }[] = [
-  { name: "AgentStack", support: ["full", "full", "full", "full", "full", "full"] },
+  { name: "Traceform", support: ["full", "full", "full", "full", "full", "full"] },
   { name: "Langfuse", support: ["full", "none", "partial", "none", "none", "partial"] },
   { name: "DeepEval", support: ["none", "none", "full", "none", "none", "none"] },
   { name: "Portkey", support: ["partial", "none", "none", "none", "full", "partial"] },
@@ -228,7 +228,7 @@ export default function LandingPage() {
             <div className="w-7 h-7 rounded-lg bg-[var(--accent-blue)] flex items-center justify-center">
               <span className="text-white font-bold text-sm">A</span>
             </div>
-            <span className="font-semibold text-sm text-[var(--text-primary)]">AgentStack</span>
+            <span className="font-semibold text-sm text-[var(--text-primary)]">Traceform</span>
           </Link>
           <div className="hidden md:flex items-center gap-8">
             <a href="#modules" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
@@ -332,7 +332,7 @@ export default function LandingPage() {
               <ArrowRight className="w-4 h-4" />
             </Link>
             <a
-              href="https://github.com/agentstack/agentstack"
+              href="https://github.com/traceform/traceform"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 h-12 px-7 rounded-xl border border-[var(--border-default)] bg-[var(--bg-elevated)] text-[var(--text-primary)] font-medium hover:bg-[var(--bg-hover)] transition-colors"
@@ -432,7 +432,7 @@ export default function LandingPage() {
             One platform instead of five
           </h2>
           <p className="mt-4 text-[var(--text-secondary)] max-w-xl mx-auto">
-            AgentStack is the only platform that covers observability, self-healing, testing, guardrails, gateway, and cost tracking.
+            Traceform is the only platform that covers observability, self-healing, testing, guardrails, gateway, and cost tracking.
           </p>
         </motion.div>
 
@@ -451,7 +451,7 @@ export default function LandingPage() {
                     <th
                       key={c.name}
                       className={`px-4 py-4 text-[10px] uppercase tracking-wider font-medium text-center ${
-                        c.name === "AgentStack"
+                        c.name === "Traceform"
                           ? "text-[var(--accent-blue)]"
                           : "text-[var(--text-tertiary)]"
                       }`}
@@ -574,7 +574,7 @@ export default function LandingPage() {
               Ready to ship agents with confidence?
             </h2>
             <p className="mt-4 text-[var(--text-secondary)] max-w-lg mx-auto">
-              Join the teams using AgentStack to monitor, heal, test, and optimize their AI agents in production.
+              Join the teams using Traceform to monitor, heal, test, and optimize their AI agents in production.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
@@ -585,7 +585,7 @@ export default function LandingPage() {
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <a
-                href="https://github.com/agentstack/agentstack"
+                href="https://github.com/traceform/traceform"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 h-12 px-7 rounded-xl border border-[var(--border-default)] bg-[var(--bg-elevated)] text-[var(--text-primary)] font-medium hover:bg-[var(--bg-hover)] transition-colors"
@@ -673,12 +673,12 @@ export default function LandingPage() {
                 <span className="text-white font-bold text-[10px]">A</span>
               </div>
               <span className="text-sm text-[var(--text-tertiary)]">
-                AgentStack &copy; {new Date().getFullYear()}
+                Traceform &copy; {new Date().getFullYear()}
               </span>
             </div>
             <div className="flex items-center gap-6">
               <a
-                href="https://github.com/agentstack/agentstack"
+                href="https://github.com/traceform/traceform"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"

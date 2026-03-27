@@ -1,4 +1,4 @@
-# AgentStack Mac 3 — Route + Guard Modules
+# Traceform Mac 3 — Route + Guard Modules
 
 ## Specification for Autonomous Claude Code Execution
 
@@ -13,15 +13,15 @@
 
 ### Pivot Directive
 
-Mac 3 was originally planned around AgentAuth. **We are pivoting.** The existing AgentAuth codebase (Go backend, PostgreSQL, Redis, Next.js dashboard, Python+TypeScript+Go SDKs, agent identity, policies, permissions, JWT, OAuth delegation, audit log) is being set aside. Mac 3 will instead build **two new AgentStack platform modules**:
+Mac 3 was originally planned around AgentAuth. **We are pivoting.** The existing AgentAuth codebase (Go backend, PostgreSQL, Redis, Next.js dashboard, Python+TypeScript+Go SDKs, agent identity, policies, permissions, JWT, OAuth delegation, audit log) is being set aside. Mac 3 will instead build **two new Traceform platform modules**:
 
 1. **Route** — An AI model gateway/proxy that routes LLM requests to the optimal model based on cost, quality, and availability. Provides failover, caching, load balancing, and a unified OpenAI-compatible API across providers.
 
 2. **Guard** — Input and output guardrails for AI agents. Detects and blocks hallucinations, PII/sensitive data, toxic content, prompt injection, off-topic responses, and policy violations.
 
-### AgentStack Platform Context
+### Traceform Platform Context
 
-AgentStack is an open-source AI agent production platform with 6 modules:
+Traceform is an open-source AI agent production platform with 6 modules:
 
 | Module | Purpose | Milestone |
 |--------|---------|-----------|
@@ -40,9 +40,9 @@ Route and Guard integrate deeply with the other modules:
 
 ### Key Differentiator from Portkey/OpenRouter
 
-- Fully integrated with AgentStack's Cost module (routing decisions feed cost tracking)
-- Fully integrated with AgentStack's Guard module (guardrails applied at gateway level)
-- Fully integrated with AgentStack's Shield module (self-healing retries route through gateway)
+- Fully integrated with Traceform's Cost module (routing decisions feed cost tracking)
+- Fully integrated with Traceform's Guard module (guardrails applied at gateway level)
+- Fully integrated with Traceform's Shield module (self-healing retries route through gateway)
 - Open-source and self-hostable (Portkey is mostly closed-source SaaS)
 - Single platform for routing + guardrails + observability + cost tracking
 
@@ -51,7 +51,7 @@ Route and Guard integrate deeply with the other modules:
 ## 2. Project Structure
 
 ```
-agentstack-route-guard/
+traceform-route-guard/
 ├── CLAUDE.md
 ├── docker-compose.yml         # PostgreSQL (port 5435) + Redis (port 6383)
 ├── Makefile
@@ -183,10 +183,10 @@ agentstack-route-guard/
 ## 3. CLAUDE.md (Write to project root)
 
 ```markdown
-# AgentStack — Route + Guard Modules
+# Traceform — Route + Guard Modules
 
 ## What This Is
-Two modules of the AgentStack platform:
+Two modules of the Traceform platform:
 - Route: AI model gateway with routing, fallbacks, caching (OpenAI-compatible proxy)
 - Guard: Input/output guardrails (PII, toxicity, prompt injection, hallucination)
 
@@ -221,7 +221,7 @@ Two modules of the AgentStack platform:
 - Use pgx for PostgreSQL, go-redis for Redis, chi for HTTP routing.
 
 ## Design
-- Dark theme matching AgentStack brand (#0a0a0a background, #1a1a2e cards)
+- Dark theme matching Traceform brand (#0a0a0a background, #1a1a2e cards)
 - Accent color: emerald/green for Route, amber/orange for Guard
 - Same component library as core platform (shadcn/ui, dark mode)
 - Inter font family
@@ -240,24 +240,24 @@ version: "3.9"
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: agentstack-rg-postgres
+    container_name: traceform-rg-postgres
     environment:
-      POSTGRES_USER: agentstack
-      POSTGRES_PASSWORD: agentstack_dev
-      POSTGRES_DB: agentstack_route_guard
+      POSTGRES_USER: agentstack  # legacy name, do not change
+      POSTGRES_PASSWORD: traceform_dev
+      POSTGRES_DB: agentstack  # legacy name, do not change_route_guard
     ports:
       - "5435:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agentstack"]
+      test: ["CMD-SHELL", "pg_isready -U agentstack  # legacy user"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    container_name: agentstack-rg-redis
+    container_name: traceform-rg-redis
     ports:
       - "6383:6379"
     volumes:
@@ -337,7 +337,7 @@ clean:
 
 ```bash
 # Database
-DATABASE_URL=postgres://agentstack:agentstack_dev@localhost:5435/agentstack_route_guard?sslmode=disable
+DATABASE_URL=postgres://agentstack:traceform_dev@localhost:5435/traceform_route_guard?sslmode=disable
 
 # Redis
 REDIS_URL=redis://localhost:6383/0
@@ -433,7 +433,7 @@ JSON routing rule format:
 {
   "if": {
     "model_requested": "gpt-4*",           // glob match on requested model
-    "feature": "summarization",            // X-AgentStack-Feature header
+    "feature": "summarization",            // X-Traceform-Feature header
     "cost_above_cents": 100,               // estimated cost threshold
     "time_of_day": { "after": "22:00", "before": "06:00" },  // off-peak routing
     "error_rate_above": 0.05               // provider error rate threshold
@@ -516,8 +516,8 @@ CREATE INDEX idx_gateway_requests_model ON gateway_requests(org_id, model_used, 
 CREATE INDEX idx_gateway_requests_feature ON gateway_requests(org_id, feature, created_at DESC) WHERE feature IS NOT NULL;
 
 COMMENT ON COLUMN gateway_requests.status IS 'Request status: success, error, blocked, fallback, timeout, rate_limited';
-COMMENT ON COLUMN gateway_requests.feature IS 'From X-AgentStack-Feature header. Used for per-feature analytics and cost attribution.';
-COMMENT ON COLUMN gateway_requests.customer_id IS 'From X-AgentStack-Customer header. Used for per-customer cost attribution.';
+COMMENT ON COLUMN gateway_requests.feature IS 'From X-Traceform-Feature header. Used for per-feature analytics and cost attribution.';
+COMMENT ON COLUMN gateway_requests.customer_id IS 'From X-Traceform-Customer header. Used for per-customer cost attribution.';
 COMMENT ON COLUMN gateway_requests.ttfb_ms IS 'Time to first byte from provider (streaming latency).';
 ```
 
@@ -916,7 +916,7 @@ type RoutingConditions struct {
 
 type RoutingIf struct {
     ModelRequested  *string            `json:"model_requested,omitempty"`  // glob pattern
-    Feature         *string            `json:"feature,omitempty"`          // X-AgentStack-Feature
+    Feature         *string            `json:"feature,omitempty"`          // X-Traceform-Feature
     CostAboveCents  *int64             `json:"cost_above_cents,omitempty"`
     TimeOfDay       *TimeRange         `json:"time_of_day,omitempty"`
     ErrorRateAbove  *float64           `json:"error_rate_above,omitempty"`
@@ -1026,7 +1026,7 @@ import (
     "context"
     "io"
 
-    "agentstack-route-guard/internal/model"
+    "traceform-route-guard/internal/model"
 )
 
 // ProviderAdapter is the common interface all provider adapters must implement.
@@ -1102,7 +1102,7 @@ import (
     "net/http"
     "time"
 
-    "agentstack-route-guard/internal/model"
+    "traceform-route-guard/internal/model"
 )
 
 type OpenAIAdapter struct {
@@ -1382,7 +1382,7 @@ Detailed flow:
 
 1. RECEIVE REQUEST
    - Parse OpenAI-compatible request body
-   - Extract headers: Authorization, X-AgentStack-Feature, X-AgentStack-Customer, X-AgentStack-Cache
+   - Extract headers: Authorization, X-Traceform-Feature, X-Traceform-Customer, X-Traceform-Cache
 
 2. AUTHENTICATE (middleware.go)
    - Extract Bearer token from Authorization header
@@ -1397,10 +1397,10 @@ Detailed flow:
    - Run all input guards IN PARALLEL
    - If any guard returns action=block: return 400 with guardrail error, log event, STOP
    - If any guard returns action=redact: modify the input text
-   - If any guard returns action=warn: add X-AgentStack-Guard-Warning header
+   - If any guard returns action=warn: add X-Traceform-Guard-Warning header
 
 4. CACHE CHECK (cache.go)
-   - If X-AgentStack-Cache != "false":
+   - If X-Traceform-Cache != "false":
      - Compute SHA-256 hash of: normalized messages JSON + model + temperature
      - Look up in Redis first (fast path), then PostgreSQL semantic_cache table
      - On HIT: increment hit_count, return cached response immediately, log as cache_hit
@@ -1446,7 +1446,7 @@ Detailed flow:
 
 10. RETURN RESPONSE
     - Return OpenAI-compatible response (or stream)
-    - Add headers: X-AgentStack-Request-ID, X-AgentStack-Provider, X-AgentStack-Model, X-AgentStack-Cache-Hit
+    - Add headers: X-Traceform-Request-ID, X-Traceform-Provider, X-Traceform-Model, X-Traceform-Cache-Hit
 ```
 
 ### 8.2 Router Engine (`internal/gateway/router.go`)
@@ -1460,8 +1460,8 @@ import (
     "sync"
     "time"
 
-    "agentstack-route-guard/internal/model"
-    "agentstack-route-guard/internal/store"
+    "traceform-route-guard/internal/model"
+    "traceform-route-guard/internal/store"
 )
 
 type Router struct {
@@ -1578,7 +1578,7 @@ import (
 
     "github.com/redis/go-redis/v9"
 
-    "agentstack-route-guard/internal/model"
+    "traceform-route-guard/internal/model"
 )
 
 type Cache struct {
@@ -1617,7 +1617,7 @@ func CacheKey(orgID string, req *model.ChatCompletionRequest) string {
 
 func (c *Cache) Get(ctx context.Context, orgID string, req *model.ChatCompletionRequest) (*model.ChatCompletionResponse, bool, error) {
     key := CacheKey(orgID, req)
-    redisKey := fmt.Sprintf("agentstack:cache:%s:%s", orgID, key)
+    redisKey := fmt.Sprintf("traceform:cache:%s:%s", orgID, key)
 
     // Try Redis first (fast path)
     data, err := c.redis.Get(ctx, redisKey).Bytes()
@@ -1648,7 +1648,7 @@ func (c *Cache) Get(ctx context.Context, orgID string, req *model.ChatCompletion
 
 func (c *Cache) Set(ctx context.Context, orgID string, req *model.ChatCompletionRequest, resp *model.ChatCompletionResponse) error {
     key := CacheKey(orgID, req)
-    redisKey := fmt.Sprintf("agentstack:cache:%s:%s", orgID, key)
+    redisKey := fmt.Sprintf("traceform:cache:%s:%s", orgID, key)
 
     data, err := json.Marshal(resp)
     if err != nil {
@@ -1693,8 +1693,8 @@ import (
     "fmt"
     "time"
 
-    "agentstack-route-guard/internal/model"
-    "agentstack-route-guard/internal/provider"
+    "traceform-route-guard/internal/model"
+    "traceform-route-guard/internal/provider"
 )
 
 type FallbackExecutor struct {
@@ -1786,8 +1786,8 @@ import (
     "sync"
     "time"
 
-    "agentstack-route-guard/internal/model"
-    "agentstack-route-guard/internal/store"
+    "traceform-route-guard/internal/model"
+    "traceform-route-guard/internal/store"
 )
 
 type AsyncLogger struct {
@@ -1903,7 +1903,7 @@ import (
     "context"
     "sync"
 
-    "agentstack-route-guard/internal/model"
+    "traceform-route-guard/internal/model"
 )
 
 // Guard is the interface all guardrail implementations must satisfy.
@@ -2044,7 +2044,7 @@ import (
     "regexp"
     "strings"
 
-    "agentstack-route-guard/internal/model"
+    "traceform-route-guard/internal/model"
 )
 
 // PII detection is ENTIRELY programmatic — no LLM calls.
@@ -2215,7 +2215,7 @@ import (
     "regexp"
     "strings"
 
-    "agentstack-route-guard/internal/model"
+    "traceform-route-guard/internal/model"
 )
 
 // Prompt injection detection uses a HYBRID approach:
@@ -2735,9 +2735,9 @@ func APIKeyPreview(apiKey string) string {
 ```
 Authorization: Bearer as_gw_xxxxx         (required)
 Content-Type: application/json             (required)
-X-AgentStack-Feature: chat                 (optional: per-feature routing/cost attribution)
-X-AgentStack-Customer: user_123            (optional: per-customer cost attribution)
-X-AgentStack-Cache: true                   (optional: enable/disable caching, default true)
+X-Traceform-Feature: chat                 (optional: per-feature routing/cost attribution)
+X-Traceform-Customer: user_123            (optional: per-customer cost attribution)
+X-Traceform-Cache: true                   (optional: enable/disable caching, default true)
 ```
 
 **Request Body:** OpenAI ChatCompletionRequest format
@@ -2807,11 +2807,11 @@ X-AgentStack-Cache: true                   (optional: enable/disable caching, de
 
 **Response headers (added by gateway):**
 ```
-X-AgentStack-Request-ID: req_abc123
-X-AgentStack-Provider: openai
-X-AgentStack-Model: gpt-4o-2024-08-06
-X-AgentStack-Cache-Hit: false
-X-AgentStack-Latency-Ms: 450
+X-Traceform-Request-ID: req_abc123
+X-Traceform-Provider: openai
+X-Traceform-Model: gpt-4o-2024-08-06
+X-Traceform-Cache-Hit: false
+X-Traceform-Latency-Ms: 450
 ```
 
 **Response (streaming):** 200 OK, Content-Type: text/event-stream
@@ -3575,7 +3575,7 @@ Response: 200 OK
 
 Sidebar navigation:
 ```
-[AgentStack Logo]
+[Traceform Logo]
 
 Route
   ├── Overview        /dashboard/route
@@ -3686,18 +3686,18 @@ client = OpenAI(
 
 # Request is routed based on your rules
 response = client.chat.completions.create(
-    model="gpt-4o",  # AgentStack routes based on rules
+    model="gpt-4o",  # Traceform routes based on rules
     messages=[{"role": "user", "content": "Hello, how are you?"}],
     extra_headers={
-        "X-AgentStack-Feature": "chat",
-        "X-AgentStack-Customer": "user_123",
-        "X-AgentStack-Cache": "true"
+        "X-Traceform-Feature": "chat",
+        "X-Traceform-Customer": "user_123",
+        "X-Traceform-Cache": "true"
     }
 )
 
 print(response.choices[0].message.content)
 # Response headers available via response._raw_response.headers:
-# X-AgentStack-Provider, X-AgentStack-Model, X-AgentStack-Cache-Hit
+# X-Traceform-Provider, X-Traceform-Model, X-Traceform-Cache-Hit
 ```
 
 ### 14.2 Python — Inline Guard Check
@@ -3733,8 +3733,8 @@ const response = await client.chat.completions.create({
   messages: [{ role: 'user', content: 'Hello!' }],
 }, {
   headers: {
-    'X-AgentStack-Feature': 'chat',
-    'X-AgentStack-Cache': 'true',
+    'X-Traceform-Feature': 'chat',
+    'X-Traceform-Cache': 'true',
   },
 });
 ```
@@ -3796,11 +3796,11 @@ client := &http.Client{
 ### Redis Key Design
 
 ```
-agentstack:cache:{org_id}:{input_hash}     — cached response (JSON)
-agentstack:ratelimit:{org_id}:{provider}    — sliding window counter
-agentstack:apikeys:{key_hash}               — API key -> org_id mapping
-agentstack:rules:{org_id}                   — cached routing rules (JSON array)
-agentstack:guards:{org_id}:{stage}          — cached guardrails (JSON array)
+traceform:cache:{org_id}:{input_hash}     — cached response (JSON)
+traceform:ratelimit:{org_id}:{provider}    — sliding window counter
+traceform:apikeys:{key_hash}               — API key -> org_id mapping
+traceform:rules:{org_id}                   — cached routing rules (JSON array)
+traceform:guards:{org_id}:{stage}          — cached guardrails (JSON array)
 ```
 
 ---
@@ -4053,7 +4053,7 @@ both    — Run on both input and output
 
 ```
 block   — Block the request/response, return error to client
-warn    — Allow through, add X-AgentStack-Guard-Warning header, log event
+warn    — Allow through, add X-Traceform-Guard-Warning header, log event
 log     — Allow through silently, log event
 redact  — Replace matched content with redaction tokens, allow through
 ```

@@ -1,6 +1,7 @@
+-- NOTE: Database name 'agentstack' is legacy. Do not rename — would break existing data.
 CREATE DATABASE IF NOT EXISTS agentstack;
 
-CREATE TABLE IF NOT EXISTS agentstack.sessions (
+CREATE TABLE IF NOT EXISTS traceform.sessions (
     id String,
     org_id String,
     agent_name String DEFAULT '',
@@ -23,7 +24,7 @@ CREATE TABLE IF NOT EXISTS agentstack.sessions (
 ORDER BY (org_id, started_at, id)
 PARTITION BY toYYYYMM(started_at);
 
-CREATE TABLE IF NOT EXISTS agentstack.spans (
+CREATE TABLE IF NOT EXISTS traceform.spans (
     id String,
     session_id String,
     org_id String,
@@ -49,7 +50,7 @@ CREATE TABLE IF NOT EXISTS agentstack.spans (
 ORDER BY (org_id, session_id, started_at, id)
 PARTITION BY toYYYYMM(started_at);
 
-CREATE TABLE IF NOT EXISTS agentstack.events (
+CREATE TABLE IF NOT EXISTS traceform.events (
     id String,
     session_id String,
     span_id String DEFAULT '',
@@ -62,7 +63,7 @@ CREATE TABLE IF NOT EXISTS agentstack.events (
 ORDER BY (org_id, session_id, created_at, id)
 PARTITION BY toYYYYMM(created_at);
 
-CREATE TABLE IF NOT EXISTS agentstack.gateway_requests (
+CREATE TABLE IF NOT EXISTS traceform.gateway_requests (
     id String,
     org_id String,
     model String DEFAULT '',

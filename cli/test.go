@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// TestCommand handles all "agentstack test" subcommands.
+// TestCommand handles all "traceform test" subcommands.
 func TestCommand(args []string) {
 	if len(args) == 0 {
 		printTestHelp()
@@ -28,13 +28,13 @@ func TestCommand(args []string) {
 		os.Exit(0)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown test command: %s\n", args[0])
-		fmt.Fprintln(os.Stderr, "Run 'agentstack test --help' for usage.")
+		fmt.Fprintln(os.Stderr, "Run 'traceform test --help' for usage.")
 		os.Exit(1)
 	}
 }
 
 func printTestHelp() {
-	fmt.Println(`Usage: agentstack test <command> [flags]
+	fmt.Println(`Usage: traceform test <command> [flags]
 
 Commands:
   run       Trigger a test run for a suite
@@ -48,24 +48,24 @@ Run Flags:
   --format <fmt>     Output format: text (default), json, junit
 
 Global Flags:
-  --api-key <key>    API key (or set AGENTSTACK_API_KEY)
-  --endpoint <url>   API endpoint (or set AGENTSTACK_ENDPOINT, default http://localhost:8080)
+  --api-key <key>    API key (or set TRACEFORM_API_KEY)
+  --endpoint <url>   API endpoint (or set TRACEFORM_ENDPOINT, default http://localhost:8080)
 
 Examples:
   # Basic test run (interactive)
-  agentstack test run --suite my-suite
+  traceform test run --suite my-suite
 
   # CI mode with JUnit output for GitHub Actions / Jenkins
-  agentstack test run --suite my-suite --ci --threshold 95 --format junit > results.xml
+  traceform test run --suite my-suite --ci --threshold 95 --format junit > results.xml
 
   # CI mode with JSON output
-  agentstack test run --suite my-suite --ci --format json --threshold 80
+  traceform test run --suite my-suite --ci --format json --threshold 80
 
   # Check status of a specific run
-  agentstack test status <run-id>
+  traceform test status <run-id>
 
   # Using explicit API key and endpoint
-  agentstack test run --suite my-suite --api-key sk_test123 --endpoint https://api.agentstack.dev`)
+  traceform test run --suite my-suite --api-key sk_test123 --endpoint https://api.traceform.dev`)
 }
 
 // testRunConfig holds parsed flags for the test run command.
@@ -136,7 +136,7 @@ func parseTestRunFlags(args []string) testRunConfig {
 
 	if cfg.SuiteID == "" {
 		fmt.Fprintln(os.Stderr, "Error: --suite is required")
-		fmt.Fprintln(os.Stderr, "Run 'agentstack test run --help' for usage.")
+		fmt.Fprintln(os.Stderr, "Run 'traceform test run --help' for usage.")
 		os.Exit(1)
 	}
 
@@ -202,7 +202,7 @@ func testRunCmd(args []string) {
 		}
 	} else {
 		// Interactive mode: just print the run ID
-		fmt.Printf("\nTrack progress:\n  agentstack test status %s\n", runID)
+		fmt.Printf("\nTrack progress:\n  traceform test status %s\n", runID)
 	}
 }
 
@@ -454,7 +454,7 @@ func outputJUnit(run *testRunResult) {
 		suiteName = run.SuiteID
 	}
 	if suiteName == "" {
-		suiteName = "AgentStack Test Suite"
+		suiteName = "Traceform Test Suite"
 	}
 
 	cases := make([]junitTestCase, 0, len(run.Results))
@@ -523,7 +523,7 @@ func outputJUnit(run *testRunResult) {
 	}
 
 	suites := junitTestSuites{
-		Name:     "AgentStack",
+		Name:     "Traceform",
 		Tests:    totalTests,
 		Failures: totalFailures,
 		Errors:   totalErrors,
@@ -552,7 +552,7 @@ func outputJUnit(run *testRunResult) {
 
 func testStatus(args []string) {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: agentstack test status <run-id>")
+		fmt.Fprintln(os.Stderr, "Usage: traceform test status <run-id>")
 		os.Exit(1)
 	}
 

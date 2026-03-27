@@ -1,14 +1,14 @@
-# AgentStack Enterprise Production Hardening
+# Traceform Enterprise Production Hardening
 
 **Date:** 2026-03-26
 **Status:** Approved
-**Goal:** Make AgentStack production-ready for enterprise-scale workloads (50K+ events/sec, millions of sessions, 10K+ concurrent gateway requests)
+**Goal:** Make Traceform production-ready for enterprise-scale workloads (50K+ events/sec, millions of sessions, 10K+ concurrent gateway requests)
 
 ---
 
 ## Problem Statement
 
-AgentStack captures every LLM message from AI agent sessions. At enterprise scale this means millions of events per day. The current implementation has critical issues that will cause crashes (OOM, panics), data loss, and unusable UI under real load. This spec covers 27 fixes across 4 phases.
+Traceform captures every LLM message from AI agent sessions. At enterprise scale this means millions of events per day. The current implementation has critical issues that will cause crashes (OOM, panics), data loss, and unusable UI under real load. This spec covers 27 fixes across 4 phases.
 
 ---
 
@@ -35,7 +35,7 @@ Current state: Unbounded slices grow until OOM. Failed batches re-queued forever
 Fix:
 - Add `maxBufferSize = 50000` constant (configurable via `MAX_BUFFER_SIZE` env var)
 - In each `handle*` callback, check `len(buffer) >= maxBufferSize`. If full, drop the message and increment a `dropped_events` counter logged every 10 seconds.
-- Add `retryCount` field to batch metadata. After 3 failed flush attempts, write the batch to a dead-letter file (`/tmp/agentstack/deadletter/YYYY-MM-DD-HH-type.jsonl`) and discard from buffer.
+- Add `retryCount` field to batch metadata. After 3 failed flush attempts, write the batch to a dead-letter file (`/tmp/traceform/deadletter/YYYY-MM-DD-HH-type.jsonl`) and discard from buffer.
 - Add exponential backoff between retries: 1s, 2s, 4s.
 
 ### 1.3 NATS Queue Groups for Horizontal Scaling
@@ -281,7 +281,7 @@ for {
 
 ### 3.5 Python SDK Thread Safety
 
-**Files:** `sdk/python/agentstack/client.py`, `sdk/python/agentstack/batch.py`, `sdk/python/agentstack/healing.py`
+**Files:** `sdk/python/traceform/client.py`, `sdk/python/traceform/batch.py`, `sdk/python/traceform/healing.py`
 
 Client:
 - Use `threading.local()` for per-thread `requests.Session`
@@ -350,10 +350,10 @@ go func() {
 **File:** `migrations/clickhouse/004_skip_indexes.up.sql` (new)
 
 ```sql
-ALTER TABLE agentstack.sessions ADD INDEX idx_status status TYPE set(10) GRANULARITY 4;
-ALTER TABLE agentstack.sessions ADD INDEX idx_agent agent_name TYPE bloom_filter(0.01) GRANULARITY 4;
-ALTER TABLE agentstack.spans ADD INDEX idx_span_status status TYPE set(10) GRANULARITY 4;
-ALTER TABLE agentstack.spans ADD INDEX idx_model model TYPE bloom_filter(0.01) GRANULARITY 4;
+ALTER TABLE traceform.sessions ADD INDEX idx_status status TYPE set(10) GRANULARITY 4;
+ALTER TABLE traceform.sessions ADD INDEX idx_agent agent_name TYPE bloom_filter(0.01) GRANULARITY 4;
+ALTER TABLE traceform.spans ADD INDEX idx_span_status status TYPE set(10) GRANULARITY 4;
+ALTER TABLE traceform.spans ADD INDEX idx_model model TYPE bloom_filter(0.01) GRANULARITY 4;
 ```
 
 ### 4.2 ZSTD Compression on Text Columns
@@ -361,12 +361,12 @@ ALTER TABLE agentstack.spans ADD INDEX idx_model model TYPE bloom_filter(0.01) G
 **File:** `migrations/clickhouse/005_compression.up.sql` (new)
 
 ```sql
-ALTER TABLE agentstack.sessions MODIFY COLUMN input CODEC(ZSTD(3));
-ALTER TABLE agentstack.sessions MODIFY COLUMN output CODEC(ZSTD(3));
-ALTER TABLE agentstack.sessions MODIFY COLUMN metadata CODEC(ZSTD(3));
-ALTER TABLE agentstack.sessions MODIFY COLUMN error CODEC(ZSTD(3));
-ALTER TABLE agentstack.spans MODIFY COLUMN input CODEC(ZSTD(3));
-ALTER TABLE agentstack.spans MODIFY COLUMN output CODEC(ZSTD(3));
+ALTER TABLE traceform.sessions MODIFY COLUMN input CODEC(ZSTD(3));
+ALTER TABLE traceform.sessions MODIFY COLUMN output CODEC(ZSTD(3));
+ALTER TABLE traceform.sessions MODIFY COLUMN metadata CODEC(ZSTD(3));
+ALTER TABLE traceform.sessions MODIFY COLUMN error CODEC(ZSTD(3));
+ALTER TABLE traceform.spans MODIFY COLUMN input CODEC(ZSTD(3));
+ALTER TABLE traceform.spans MODIFY COLUMN output CODEC(ZSTD(3));
 ```
 
 ### 4.3 Daily Partitioning for High-Cardinality Tables

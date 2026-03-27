@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/agentstack/agentstack/internal/route/store"
-	"github.com/agentstack/agentstack/internal/server/httputil"
-	"github.com/agentstack/agentstack/internal/server/middleware"
+	"github.com/traceform/traceform/internal/route/store"
+	"github.com/traceform/traceform/internal/server/httputil"
+	"github.com/traceform/traceform/internal/server/middleware"
 )
 
 // AnalyticsHandler handles gateway analytics endpoints.

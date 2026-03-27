@@ -83,7 +83,7 @@ function LoginContent() {
           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--accent-blue)] to-[var(--accent-purple)] flex items-center justify-center mb-4">
             <span className="text-white font-bold text-xl">A</span>
           </div>
-          <h1 className="text-xl font-semibold text-[var(--text-primary)]">AgentStack</h1>
+          <h1 className="text-xl font-semibold text-[var(--text-primary)]">Traceform</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">
             Sign in to your account
           </p>

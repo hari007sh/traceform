@@ -9,7 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/agentstack/agentstack/internal/route/store"
+	"github.com/traceform/traceform/internal/route/store"
 )
 
 // RoutingService handles model/provider selection based on routing rules.

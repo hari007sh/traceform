@@ -8,16 +8,16 @@
 -- ============================================================
 
 -- Drop materialized views first
-DROP VIEW IF EXISTS agentstack.mv_sessions_hourly;
-DROP VIEW IF EXISTS agentstack.mv_spans_hourly;
-DROP VIEW IF EXISTS agentstack.mv_healing_hourly;
-DROP VIEW IF EXISTS agentstack.mv_cost_daily;
+DROP VIEW IF EXISTS traceform.mv_sessions_hourly;
+DROP VIEW IF EXISTS traceform.mv_spans_hourly;
+DROP VIEW IF EXISTS traceform.mv_healing_hourly;
+DROP VIEW IF EXISTS traceform.mv_cost_daily;
 
 -- Drop target tables
-DROP TABLE IF EXISTS agentstack.mv_sessions_hourly_data;
-DROP TABLE IF EXISTS agentstack.mv_spans_hourly_data;
-DROP TABLE IF EXISTS agentstack.mv_healing_hourly_data;
-DROP TABLE IF EXISTS agentstack.mv_cost_daily_data;
+DROP TABLE IF EXISTS traceform.mv_sessions_hourly_data;
+DROP TABLE IF EXISTS traceform.mv_spans_hourly_data;
+DROP TABLE IF EXISTS traceform.mv_healing_hourly_data;
+DROP TABLE IF EXISTS traceform.mv_cost_daily_data;
 
 -- Drop session_counters
-DROP TABLE IF EXISTS agentstack.session_counters;
+DROP TABLE IF EXISTS traceform.session_counters;

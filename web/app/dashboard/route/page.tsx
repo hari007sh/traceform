@@ -271,7 +271,7 @@ export default function RouteOverviewPage() {
           </div>
           <h3 className="text-sm font-medium mb-2">No gateway traffic yet</h3>
           <p className="text-xs text-[var(--text-tertiary)] max-w-md mx-auto leading-relaxed mb-6">
-            Route your LLM requests through the AgentStack gateway for automatic
+            Route your LLM requests through the Traceform gateway for automatic
             model routing, caching, and failover.
           </p>
 
@@ -316,7 +316,7 @@ export default function RouteOverviewPage() {
               <ArrowRight className="w-3.5 h-3.5" />
             </a>
             <a
-              href="https://docs.agentstack.dev/gateway"
+              href="https://docs.traceform.dev/gateway"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"

@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/agentstack/agentstack/internal/server/httputil"
-	"github.com/agentstack/agentstack/internal/server/middleware"
+	"github.com/traceform/traceform/internal/server/httputil"
+	"github.com/traceform/traceform/internal/server/middleware"
 )
 
 // Handler provides HTTP handlers for the audit log API.

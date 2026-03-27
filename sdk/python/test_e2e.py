@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AgentStack Python SDK — End-to-End Test
+Traceform Python SDK — End-to-End Test
 
 Tests the SDK against the running backend at http://localhost:8080
 using a JWT token for authentication (DualAuth accepts both JWT and API keys).
@@ -15,7 +15,7 @@ import requests
 # Configuration
 # ---------------------------------------------------------------------------
 BACKEND_URL = "http://localhost:8080"
-JWT_FILE = "/tmp/agentstack_jwt.txt"
+JWT_FILE = "/tmp/traceform_jwt.txt"
 
 # Read JWT token
 try:
@@ -63,19 +63,19 @@ except Exception as e:
 # Step 1: Initialize the SDK
 # ---------------------------------------------------------------------------
 print("\n=== Step 1: Initialize SDK ===")
-import agentstack
+import traceform
 
 try:
-    agentstack.init(
+    traceform.init(
         api_key=JWT_TOKEN,
         endpoint=BACKEND_URL,
         batch_size=10,
         flush_interval=1.0,
         debug=True,
     )
-    check("agentstack.init() succeeded", True)
+    check("traceform.init() succeeded", True)
 except Exception as e:
-    check("agentstack.init()", False, str(e))
+    check("traceform.init()", False, str(e))
     sys.exit(1)
 
 # ---------------------------------------------------------------------------
@@ -84,7 +84,7 @@ except Exception as e:
 print("\n=== Step 2: Create session with spans ===")
 session_id = None
 try:
-    with agentstack.session(
+    with traceform.session(
         agent_name="e2e-test-agent",
         metadata={"test": True, "version": "0.1.0"},
         tags={"env": "test", "suite": "e2e"},
@@ -108,7 +108,7 @@ try:
 
         # Span 2: Tool call
         with sess.span("web-search", span_type="tool_call") as span2:
-            span2.set_input({"query": "AgentStack documentation"})
+            span2.set_input({"query": "Traceform documentation"})
             time.sleep(0.03)
             span2.set_output({"results": ["doc1.md", "doc2.md"]})
         check("Span 2 (tool_call) completed", span2.status == "completed")
@@ -146,7 +146,7 @@ except Exception as e:
 # ---------------------------------------------------------------------------
 print("\n=== Step 3: Verify data in backend ===")
 try:
-    agentstack.flush()
+    traceform.flush()
     # Give the async pipeline a moment to process
     time.sleep(2.0)
 
@@ -210,7 +210,7 @@ except Exception as e:
 # ---------------------------------------------------------------------------
 print("\n=== Step 4: Manual session lifecycle ===")
 try:
-    manual_sess = agentstack.create_session(
+    manual_sess = traceform.create_session(
         agent_name="manual-test-agent",
         metadata={"manual": True},
     )
@@ -238,11 +238,11 @@ except Exception as e:
 # ---------------------------------------------------------------------------
 print("\n=== Step 5: @trace decorator ===")
 try:
-    @agentstack.trace(name="decorated_func", span_type="tool_call")
+    @traceform.trace(name="decorated_func", span_type="tool_call")
     def my_tool(query: str) -> dict:
         return {"results": [query.upper()]}
 
-    with agentstack.session(agent_name="trace-decorator-test") as trace_sess:
+    with traceform.session(agent_name="trace-decorator-test") as trace_sess:
         result = my_tool("hello world")
         check("@trace decorated function returns correctly", result == {"results": ["HELLO WORLD"]})
 
@@ -264,7 +264,7 @@ except Exception as e:
 print("\n=== Step 6: Error handling ===")
 try:
     try:
-        with agentstack.session(agent_name="error-test-agent") as err_sess:
+        with traceform.session(agent_name="error-test-agent") as err_sess:
             with err_sess.span("failing-step", span_type="tool_call") as fail_span:
                 fail_span.set_input("this will fail")
                 raise RuntimeError("Simulated agent failure")
@@ -286,7 +286,7 @@ except Exception as e:
 # ---------------------------------------------------------------------------
 print("\n=== Step 7: Shutdown ===")
 try:
-    agentstack.shutdown()
+    traceform.shutdown()
     check("SDK shutdown succeeded", True)
 except Exception as e:
     check("SDK shutdown", False, str(e))

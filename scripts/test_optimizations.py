@@ -22,12 +22,12 @@ API_URL = "http://localhost:8080"
 CH_URL = "http://localhost:8123"
 
 # Read JWT token
-_jwt_file = "/tmp/agentstack_jwt.txt"
+_jwt_file = "/tmp/traceform_jwt.txt"
 if os.path.exists(_jwt_file):
     with open(_jwt_file) as f:
         TOKEN = f.read().strip()
 else:
-    print("ERROR: JWT token not found at /tmp/agentstack_jwt.txt")
+    print("ERROR: JWT token not found at /tmp/traceform_jwt.txt")
     sys.exit(1)
 
 HEADERS = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
@@ -111,7 +111,7 @@ time.sleep(5)
 
 # Verify session landed in ClickHouse
 session_count = ch_query(
-    f"SELECT count() FROM agentstack.sessions WHERE id = '{session_id}'"
+    f"SELECT count() FROM traceform.sessions WHERE id = '{session_id}'"
 )
 try:
     sc = int(session_count.split("\n")[0].strip())
@@ -121,7 +121,7 @@ except (ValueError, IndexError):
 
 # Verify MV populated (use countMerge on the AggregateFunction column)
 mv_result = ch_query(
-    "SELECT countMerge(session_count) FROM agentstack.mv_sessions_hourly_data "
+    "SELECT countMerge(session_count) FROM traceform.mv_sessions_hourly_data "
     "WHERE org_id != '' "
     "AND hour >= now() - INTERVAL 1 HOUR"
 )
@@ -133,7 +133,7 @@ except ValueError:
 
 # Verify span MV populated
 mv_span_result = ch_query(
-    "SELECT countMerge(span_count) FROM agentstack.mv_spans_hourly_data "
+    "SELECT countMerge(span_count) FROM traceform.mv_spans_hourly_data "
     "WHERE org_id != '' "
     "AND hour >= now() - INTERVAL 1 HOUR"
 )
@@ -201,7 +201,7 @@ time.sleep(5)
 # Query ClickHouse to verify truncation
 trunc_result = ch_query(
     f"SELECT input_truncated, input_hash, length(input) "
-    f"FROM agentstack.spans WHERE id = '{truncation_span_id}' LIMIT 1 FORMAT TabSeparated"
+    f"FROM traceform.spans WHERE id = '{truncation_span_id}' LIMIT 1 FORMAT TabSeparated"
 )
 if trunc_result and not trunc_result.startswith("ERROR"):
     # Take first line only and split by tab
@@ -221,7 +221,7 @@ else:
 
 # Also verify output was NOT truncated (it's small)
 out_trunc = ch_query(
-    f"SELECT output_truncated FROM agentstack.spans WHERE id = '{truncation_span_id}' LIMIT 1"
+    f"SELECT output_truncated FROM traceform.spans WHERE id = '{truncation_span_id}' LIMIT 1"
 )
 test("output_truncated = 0 (small payload)", out_trunc.split("\n")[0].strip() == "0", f"got {out_trunc}")
 

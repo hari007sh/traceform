@@ -1,6 +1,6 @@
-# AgentStack — Core Platform (Trace + Shield)
+# Traceform — Core Platform (Trace + Shield)
 
-This Mac builds the core AgentStack platform: observability (Trace) and self-healing (Shield).
+This Mac builds the core Traceform platform: observability (Trace) and self-healing (Shield).
 
 ## What Already Exists
 - Go backend with ClickHouse, PostgreSQL, NATS, Redis
@@ -12,7 +12,7 @@ This Mac builds the core AgentStack platform: observability (Trace) and self-hea
 - GitHub OAuth + API keys
 
 ## What To Build Now
-1. Rename everything from AgentLens to AgentStack
+1. Rename everything from AgentLens to Traceform
 2. Build Shield module (self-healing SDK — Python + TypeScript)
 3. Build Healing Dashboard (ClickHouse tables, API, pages)
 4. UI/UX Overhaul (dark theme, Framer Motion, redesign all pages)
@@ -40,7 +40,7 @@ This Mac builds the core AgentStack platform: observability (Trace) and self-hea
 ## TABLE OF CONTENTS
 
 1. [Build Order](#build-order)
-2. [Phase 1: Rename AgentLens to AgentStack](#phase-1-rename-agentlens-to-agentstack)
+2. [Phase 1: Rename AgentLens to Traceform](#phase-1-rename-agentlens-to-agentstack)
 3. [Phase 2: Shield Module — Self-Healing SDK](#phase-2-shield-module--self-healing-sdk)
 4. [Phase 3: Healing Dashboard — Backend](#phase-3-healing-dashboard--backend)
 5. [Phase 4: UI/UX Overhaul](#phase-4-uiux-overhaul)
@@ -54,7 +54,7 @@ This Mac builds the core AgentStack platform: observability (Trace) and self-hea
 Execute these phases sequentially. Do NOT skip ahead. Each phase must compile/build cleanly before moving to the next.
 
 ```
-Phase 1: Rename (AgentLens → AgentStack)          ~30 min
+Phase 1: Rename (AgentLens → Traceform)          ~30 min
 Phase 2: Shield Module (Python + TypeScript SDKs)  ~45 min
 Phase 3: Healing Dashboard (ClickHouse + API + UI)  ~60 min
 Phase 4: UI/UX Overhaul (dark theme, animations)    ~90 min
@@ -63,7 +63,7 @@ Phase 5: Landing Page                               ~45 min
 
 ---
 
-## PHASE 1: RENAME AGENTLENS TO AGENTSTACK
+## PHASE 1: RENAME AGENTLENS TO TRACEFORM
 
 ### 1.1 Go Backend
 
@@ -75,7 +75,7 @@ module agentlens
 ```
 to:
 ```
-module agentstack
+module traceform
 ```
 
 #### 1.1.2 Find and replace all Go imports
@@ -84,16 +84,16 @@ Run across every `.go` file in the project:
 
 | Find | Replace |
 |------|---------|
-| `"agentlens/` | `"agentstack/` |
-| `agentlens.` (in package references) | `agentstack.` |
-| `AgentLens` (in string literals, comments, log messages) | `AgentStack` |
+| `"traceform/` | `"traceform/` |
+| `agentlens.` (in package references) | `traceform.` |
+| `AgentLens` (in string literals, comments, log messages) | `Traceform` |
 | `agentlens` (in string literals, comments, log messages) | `agentstack` |
 
 #### 1.1.3 Rename API key prefix
 
 Find all occurrences of the API key prefix and change:
 ```
-al_sk_  →  as_sk_
+al_sk_  →  tf_sk_
 ```
 
 This will appear in:
@@ -111,16 +111,16 @@ Update the prefix constant or literal wherever it is defined. Typical location: 
 
 #### 1.1.4 Rename environment variable prefixes (if any)
 
-Search for any env vars prefixed with `AGENTLENS_` and rename to `AGENTSTACK_`:
+Search for any env vars prefixed with `AGENTLENS_` and rename to `TRACEFORM_`:
 ```
-AGENTLENS_DB_HOST  →  AGENTSTACK_DB_HOST
-AGENTLENS_API_PORT →  AGENTSTACK_API_PORT
+AGENTLENS_DB_HOST  →  TRACEFORM_DB_HOST
+AGENTLENS_API_PORT →  TRACEFORM_API_PORT
 ```
 (Apply to all occurrences found.)
 
 #### 1.1.5 Update Docker and config files
 
-- `docker-compose.yml`: Rename service names from `agentlens-api` to `agentstack-api`, container names, image names, any labels
+- `docker-compose.yml`: Rename service names from `agentlens-api` to `traceform-api`, container names, image names, any labels
 - `.env` / `.env.example`: Rename any `AGENTLENS_` prefixed variables
 - `Dockerfile`: Update module path references, binary names
 - `Makefile` (if exists): Update binary names, project references
@@ -142,7 +142,7 @@ Both must pass with zero errors.
 #### 1.2.1 Rename package directory
 
 ```bash
-mv sdk/python/agentlens sdk/python/agentstack
+mv sdk/python/agentlens sdk/python/traceform
 ```
 
 #### 1.2.2 Update `setup.py` or `pyproject.toml`
@@ -153,7 +153,7 @@ name="agentlens"
 ```
 to:
 ```python
-name="agentstack"
+name="traceform"
 ```
 
 Update all other references: description, URLs, package discovery paths.
@@ -164,24 +164,24 @@ In every `.py` file under `sdk/python/`:
 
 | Find | Replace |
 |------|---------|
-| `from agentlens` | `from agentstack` |
-| `import agentlens` | `import agentstack` |
-| `agentlens.` | `agentstack.` |
-| `"agentlens"` | `"agentstack"` |
+| `from agentlens` | `from traceform` |
+| `import agentlens` | `import traceform` |
+| `agentlens.` | `traceform.` |
+| `"agentlens"` | `"traceform"` |
 | `'agentlens'` | `'agentstack'` |
-| `AgentLens` | `AgentStack` |
-| `al_sk_` | `as_sk_` |
+| `AgentLens` | `Traceform` |
+| `al_sk_` | `tf_sk_` |
 
 #### 1.2.4 Update `__init__.py`
 
-Ensure the package `__init__.py` at `sdk/python/agentstack/__init__.py` has correct module name references.
+Ensure the package `__init__.py` at `sdk/python/traceform/__init__.py` has correct module name references.
 
 #### 1.2.5 Verify Python package
 
 ```bash
 cd sdk/python
 pip install -e .
-python -c "import agentstack; print('OK')"
+python -c "import traceform; print('OK')"
 ```
 
 ---
@@ -196,7 +196,7 @@ In `sdk/typescript/package.json`, change:
 ```
 to:
 ```json
-"name": "@agentstack/sdk"
+"name": "@traceform/sdk"
 ```
 
 #### 1.3.2 Update all TypeScript/JavaScript imports
@@ -205,10 +205,10 @@ In every `.ts` and `.tsx` file under `sdk/typescript/`:
 
 | Find | Replace |
 |------|---------|
-| `@agentlens/sdk` | `@agentstack/sdk` |
+| `@agentlens/sdk` | `@traceform/sdk` |
 | `agentlens` | `agentstack` |
-| `AgentLens` | `AgentStack` |
-| `al_sk_` | `as_sk_` |
+| `AgentLens` | `Traceform` |
+| `al_sk_` | `tf_sk_` |
 
 #### 1.3.3 Verify TypeScript build
 
@@ -228,17 +228,17 @@ In every file under `web/`:
 
 | Find | Replace |
 |------|---------|
-| `AgentLens` | `AgentStack` |
+| `AgentLens` | `Traceform` |
 | `agentlens` | `agentstack` |
-| `@agentlens/sdk` | `@agentstack/sdk` |
-| `al_sk_` | `as_sk_` |
+| `@agentlens/sdk` | `@traceform/sdk` |
+| `al_sk_` | `tf_sk_` |
 
 #### 1.4.2 Update page titles and metadata
 
 In `web/app/layout.tsx` (or wherever metadata is defined):
 ```tsx
 export const metadata = {
-  title: "AgentStack",
+  title: "Traceform",
   description: "Observability and Self-Healing for AI Agents",
 };
 ```
@@ -247,7 +247,7 @@ export const metadata = {
 
 Change the project name:
 ```json
-"name": "agentstack-dashboard"
+"name": "traceform-dashboard"
 ```
 
 #### 1.4.4 Verify Next.js build
@@ -282,13 +282,13 @@ The ONLY matches should be in `CHANGELOG.md`, `git` history, or this spec file i
 
 ## PHASE 2: SHIELD MODULE — SELF-HEALING SDK
 
-### 2.1 Python SDK — `sdk/python/agentstack/healing.py`
+### 2.1 Python SDK — `sdk/python/traceform/healing.py`
 
-Create the file `sdk/python/agentstack/healing.py` with the following exact content:
+Create the file `sdk/python/traceform/healing.py` with the following exact content:
 
 ```python
 """
-AgentStack Shield — Self-Healing Engine for AI Agents
+Traceform Shield — Self-Healing Engine for AI Agents
 
 Provides automatic intervention for:
 - Loop detection (repeated identical tool calls)
@@ -306,9 +306,9 @@ import contextvars
 import time
 import logging
 
-logger = logging.getLogger("agentstack.healing")
+logger = logging.getLogger("traceform.healing")
 
-_healing_engine = contextvars.ContextVar('agentstack_healing', default=None)
+_healing_engine = contextvars.ContextVar('traceform_healing', default=None)
 
 
 def get_healing_engine() -> Optional['HealingEngine']:
@@ -384,7 +384,7 @@ class HealingEngine:
         """
         Args:
             config: HealingConfig instance
-            session: The AgentStack session object (must have add_event method)
+            session: The Traceform session object (must have add_event method)
         """
         self.config = config
         self.session = session
@@ -624,12 +624,12 @@ class HealingEngine:
 
 ### 2.2 Integrate Healing into the Python `@trace` Decorator
 
-Locate the existing `@trace` decorator (likely in `sdk/python/agentstack/tracing.py` or `sdk/python/agentstack/decorators.py`). Modify it as follows:
+Locate the existing `@trace` decorator (likely in `sdk/python/traceform/tracing.py` or `sdk/python/traceform/decorators.py`). Modify it as follows:
 
 #### 2.2.1 Add healing parameters to `@trace`
 
 ```python
-from agentstack.healing import HealingConfig, HealingEngine, set_healing_engine, get_healing_engine
+from traceform.healing import HealingConfig, HealingEngine, set_healing_engine, get_healing_engine
 
 def trace(
     name: str = None,
@@ -712,18 +712,18 @@ def set_healing_summary(self, summary: dict):
 
 #### 2.2.3 Add a `tool_call` wrapper utility
 
-Create `sdk/python/agentstack/tools.py`:
+Create `sdk/python/traceform/tools.py`:
 
 ```python
 """
-AgentStack tool call wrapper with Shield integration.
+Traceform tool call wrapper with Shield integration.
 """
 
 from typing import Callable, Any, Optional, List
 import functools
 import asyncio
 
-from agentstack.healing import get_healing_engine
+from traceform.healing import get_healing_engine
 
 
 def tool(
@@ -792,12 +792,12 @@ def _args_to_dict(args, func) -> dict:
     return {params[i]: args[i] for i in range(min(len(args), len(params)))}
 ```
 
-#### 2.2.4 Update `sdk/python/agentstack/__init__.py`
+#### 2.2.4 Update `sdk/python/traceform/__init__.py`
 
 Add these exports:
 
 ```python
-from agentstack.healing import (
+from traceform.healing import (
     HealingConfig,
     HealingEngine,
     HealingIntervention,
@@ -805,7 +805,7 @@ from agentstack.healing import (
     get_healing_engine,
     set_healing_engine,
 )
-from agentstack.tools import tool
+from traceform.tools import tool
 ```
 
 ---
@@ -816,7 +816,7 @@ Create the file `sdk/typescript/src/healing.ts` with this exact content:
 
 ```typescript
 /**
- * AgentStack Shield — Self-Healing Engine for AI Agents (TypeScript)
+ * Traceform Shield — Self-Healing Engine for AI Agents (TypeScript)
  *
  * Provides automatic intervention for:
  * - Loop detection (repeated identical tool calls)
@@ -1249,8 +1249,8 @@ export function trace(options: TraceOptions = {}) {
 # Python
 cd sdk/python
 python -c "
-from agentstack.healing import HealingConfig, HealingEngine, CostLimitExceeded
-from agentstack.tools import tool
+from traceform.healing import HealingConfig, HealingEngine, CostLimitExceeded
+from traceform.tools import tool
 print('Python Shield: OK')
 "
 
@@ -1749,7 +1749,7 @@ func parseTimeRange(r *http.Request) (from, to time.Time, granularity string) {
 Find the main router setup (likely `internal/server/router.go` or `cmd/api/main.go`). Add:
 
 ```go
-import "agentstack/internal/healing"
+import "traceform/internal/healing"
 
 // In the router setup function, after existing route registrations:
 healingRepo := healing.NewRepository(clickhouseConn)
@@ -1776,7 +1776,7 @@ go vet ./...
 
 # Start the server and test endpoints
 curl -X POST http://localhost:8081/v1/ingest/healing \
-  -H "Authorization: Bearer as_sk_test" \
+  -H "Authorization: Bearer tf_sk_test" \
   -H "Content-Type: application/json" \
   -d '{
     "session_id": "00000000-0000-0000-0000-000000000001",
@@ -1791,10 +1791,10 @@ curl -X POST http://localhost:8081/v1/ingest/healing \
   }'
 
 curl http://localhost:8081/v1/analytics/healing \
-  -H "Authorization: Bearer as_sk_test"
+  -H "Authorization: Bearer tf_sk_test"
 
 curl http://localhost:8081/v1/sessions/00000000-0000-0000-0000-000000000001/healing \
-  -H "Authorization: Bearer as_sk_test"
+  -H "Authorization: Bearer tf_sk_test"
 ```
 
 ---
@@ -1813,7 +1813,7 @@ npm install framer-motion lucide-react
 Add the following CSS custom properties and utility classes to the existing `globals.css`. Do NOT remove existing styles — add to them.
 
 ```css
-/* ─── AgentStack Design System ─── */
+/* ─── Traceform Design System ─── */
 
 :root {
   /* Core palette */
@@ -1992,7 +1992,7 @@ Create this file:
 
 ```typescript
 /**
- * AgentStack Animation Utilities
+ * Traceform Animation Utilities
  * Framer Motion variants and helpers.
  */
 
@@ -2462,7 +2462,7 @@ export function Sidebar() {
                 exit={{ opacity: 0, width: 0 }}
                 className="text-sm font-semibold whitespace-nowrap overflow-hidden"
               >
-                AgentStack
+                Traceform
               </motion.span>
             )}
           </AnimatePresence>
@@ -3300,7 +3300,7 @@ const MODULES = [
 const COMPARISON = [
   {
     feature: "Self-Healing SDK",
-    agentstack: true,
+    traceform: true,
     langfuse: false,
     maxim: false,
     braintrust: false,
@@ -3308,7 +3308,7 @@ const COMPARISON = [
   },
   {
     feature: "Loop Detection",
-    agentstack: true,
+    traceform: true,
     langfuse: false,
     maxim: false,
     braintrust: false,
@@ -3316,7 +3316,7 @@ const COMPARISON = [
   },
   {
     feature: "Hallucination Catching",
-    agentstack: true,
+    traceform: true,
     langfuse: false,
     maxim: false,
     braintrust: false,
@@ -3324,7 +3324,7 @@ const COMPARISON = [
   },
   {
     feature: "Cost Breaker",
-    agentstack: true,
+    traceform: true,
     langfuse: false,
     maxim: false,
     braintrust: false,
@@ -3332,7 +3332,7 @@ const COMPARISON = [
   },
   {
     feature: "Context Overflow Prevention",
-    agentstack: true,
+    traceform: true,
     langfuse: false,
     maxim: false,
     braintrust: false,
@@ -3340,7 +3340,7 @@ const COMPARISON = [
   },
   {
     feature: "Session Tracing",
-    agentstack: true,
+    traceform: true,
     langfuse: true,
     maxim: true,
     braintrust: true,
@@ -3348,7 +3348,7 @@ const COMPARISON = [
   },
   {
     feature: "Failure Patterns",
-    agentstack: true,
+    traceform: true,
     langfuse: false,
     maxim: true,
     braintrust: false,
@@ -3356,7 +3356,7 @@ const COMPARISON = [
   },
   {
     feature: "Self-Hosted Option",
-    agentstack: true,
+    traceform: true,
     langfuse: true,
     maxim: false,
     braintrust: false,
@@ -3364,7 +3364,7 @@ const COMPARISON = [
   },
   {
     feature: "Open Source",
-    agentstack: true,
+    traceform: true,
     langfuse: true,
     maxim: false,
     braintrust: false,
@@ -3463,7 +3463,7 @@ export default function LandingPage() {
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
               <Zap size={14} className="text-white" />
             </div>
-            <span className="text-sm font-semibold">AgentStack</span>
+            <span className="text-sm font-semibold">Traceform</span>
           </Link>
           <div className="flex items-center gap-6">
             <a href="#modules" className="text-sm" style={{ color: "var(--text-secondary)" }}>
@@ -3473,7 +3473,7 @@ export default function LandingPage() {
               Pricing
             </a>
             <a
-              href="https://github.com/agentstack"
+              href="https://github.com/traceform"
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm"
@@ -3543,7 +3543,7 @@ export default function LandingPage() {
               className="text-lg max-w-2xl mx-auto mb-8"
               style={{ color: "var(--text-secondary)" }}
             >
-              AgentStack is the observability and self-healing platform for AI agents.
+              Traceform is the observability and self-healing platform for AI agents.
               Trace every session, catch failures before users do, and let Shield
               automatically recover from loops, hallucinations, and runaway costs.
             </p>
@@ -3558,7 +3558,7 @@ export default function LandingPage() {
                 <ArrowRight size={16} />
               </Link>
               <a
-                href="https://github.com/agentstack"
+                href="https://github.com/traceform"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium btn-press border"
@@ -3601,7 +3601,7 @@ export default function LandingPage() {
             <div className="p-4 font-mono text-sm space-y-2">
               <div className="flex items-center gap-2">
                 <span style={{ color: "var(--status-success)" }}>$</span>
-                <TypingAnimation text="pip install agentstack" delay={0.5} />
+                <TypingAnimation text="pip install traceform" delay={0.5} />
               </div>
               <div className="mt-3 space-y-1 text-xs" style={{ color: "var(--text-tertiary)" }}>
                 <motion.div
@@ -3609,7 +3609,7 @@ export default function LandingPage() {
                   animate={{ opacity: 1 }}
                   transition={{ delay: 2.5 }}
                 >
-                  Installing agentstack...
+                  Installing traceform...
                 </motion.div>
                 <motion.div
                   initial={{ opacity: 0 }}
@@ -3617,7 +3617,7 @@ export default function LandingPage() {
                   transition={{ delay: 3.0 }}
                   style={{ color: "var(--status-success)" }}
                 >
-                  Successfully installed agentstack-1.0.0
+                  Successfully installed traceform-1.0.0
                 </motion.div>
               </div>
               <motion.div
@@ -3627,7 +3627,7 @@ export default function LandingPage() {
                 className="mt-3 flex items-center gap-2"
               >
                 <span style={{ color: "var(--status-success)" }}>$</span>
-                <TypingAnimation text='python -c "import agentstack; print(agentstack.__version__)"' delay={4} speed={30} />
+                <TypingAnimation text='python -c "import traceform; print(traceform.__version__)"' delay={4} speed={30} />
               </motion.div>
               <motion.div
                 initial={{ opacity: 0 }}
@@ -3711,7 +3711,7 @@ export default function LandingPage() {
             viewport={{ once: true }}
             className="text-center mb-12"
           >
-            <h2 className="text-3xl font-bold mb-3">Why AgentStack?</h2>
+            <h2 className="text-3xl font-bold mb-3">Why Traceform?</h2>
             <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
               The only platform with built-in self-healing for AI agents.
             </p>
@@ -3732,7 +3732,7 @@ export default function LandingPage() {
                   <th className="text-left py-3 pr-4 font-medium" style={{ color: "var(--text-secondary)" }}>
                     Feature
                   </th>
-                  <th className="py-3 px-4 font-semibold text-sky-400">AgentStack</th>
+                  <th className="py-3 px-4 font-semibold text-sky-400">Traceform</th>
                   <th className="py-3 px-4 font-medium" style={{ color: "var(--text-tertiary)" }}>Langfuse</th>
                   <th className="py-3 px-4 font-medium" style={{ color: "var(--text-tertiary)" }}>Maxim</th>
                   <th className="py-3 px-4 font-medium" style={{ color: "var(--text-tertiary)" }}>Braintrust</th>
@@ -3750,7 +3750,7 @@ export default function LandingPage() {
                       {row.feature}
                     </td>
                     <td className="py-3 px-4 text-center">
-                      {row.agentstack ? (
+                      {row.traceform ? (
                         <Check size={16} className="inline text-sky-400" />
                       ) : (
                         <span style={{ color: "var(--text-muted)" }}>-</span>
@@ -3923,7 +3923,7 @@ export default function LandingPage() {
             <div className="w-6 h-6 rounded bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
               <Zap size={12} className="text-white" />
             </div>
-            <span className="text-sm font-medium">AgentStack</span>
+            <span className="text-sm font-medium">Traceform</span>
           </div>
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>
             Built for developers who ship AI agents.
@@ -4015,7 +4015,7 @@ go vet ./...
 # 4. Python SDK imports
 cd sdk/python
 python -c "
-from agentstack import HealingConfig, HealingEngine, CostLimitExceeded, tool
+from traceform import HealingConfig, HealingEngine, CostLimitExceeded, tool
 print('All imports OK')
 "
 
@@ -4040,7 +4040,7 @@ Create a test script `test_shield.py`:
 
 ```python
 """Quick smoke test for the Shield module."""
-from agentstack import HealingConfig, HealingEngine
+from traceform import HealingConfig, HealingEngine
 
 # Mock session
 class MockSession:
@@ -4100,7 +4100,7 @@ python ../../test_shield.py
 ## PROJECT STRUCTURE (after all phases)
 
 ```
-agentstack/
+traceform/
 ├── cmd/
 │   └── api/
 │       └── main.go
@@ -4122,7 +4122,7 @@ agentstack/
 │       └── NNNN_healing_events.down.sql  ← NEW
 ├── sdk/
 │   ├── python/
-│   │   └── agentstack/       ← RENAMED from agentlens
+│   │   └── traceform/       ← RENAMED from agentlens
 │   │       ├── __init__.py   ← UPDATED
 │   │       ├── healing.py    ← NEW
 │   │       ├── tools.py      ← NEW

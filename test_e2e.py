@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AgentStack End-to-End Integration Tests
+Traceform End-to-End Integration Tests
 
 Validates the full stack: API endpoints, gateway proxy, SDK integration,
 and data flow through PostgreSQL, ClickHouse, Redis, and NATS.
@@ -23,9 +23,9 @@ import uuid
 import urllib.request
 import urllib.error
 
-BASE_URL = os.environ.get("AGENTSTACK_URL", "http://localhost:8080")
-GATEWAY_URL = os.environ.get("AGENTSTACK_GATEWAY_URL", "http://localhost:8090")
-API_KEY = "as_sk_test123"
+BASE_URL = os.environ.get("TRACEFORM_URL", "http://localhost:8080")
+GATEWAY_URL = os.environ.get("TRACEFORM_GATEWAY_URL", "http://localhost:8090")
+API_KEY = "tf_sk_test123"
 ORG_ID = "00000000-0000-0000-0000-000000000001"
 HEADERS = {
     "Authorization": f"Bearer {API_KEY}",
@@ -237,7 +237,7 @@ def test_gateway_proxy():
 
     check("LMStudio is running", True)
 
-    gw_headers = {**HEADERS, "X-AgentStack-Org-ID": ORG_ID}
+    gw_headers = {**HEADERS, "X-Traceform-Org-ID": ORG_ID}
     req_body = json.dumps({
         "model": "qwen3-30b-a3b-instruct-2507-mlx",
         "messages": [{"role": "user", "content": "Say 'ok' and nothing else."}],
@@ -355,7 +355,7 @@ def test_body_size_limit():
 def test_circuit_breaker_exists():
     print("\n--- Circuit Breaker (Smoke Test) ---")
     # Just verify the gateway responds to non-existent model without crashing
-    gw_headers = {**HEADERS, "X-AgentStack-Org-ID": ORG_ID}
+    gw_headers = {**HEADERS, "X-Traceform-Org-ID": ORG_ID}
     result = api("POST", "/v1/chat/completions", {
         "model": "nonexistent-model-xyz",
         "messages": [{"role": "user", "content": "test"}],
@@ -407,7 +407,7 @@ def test_clickhouse_indexes_exist():
     print("\n--- ClickHouse Skip Indexes ---")
     import subprocess
     result = subprocess.run(
-        ["docker", "exec", "agentstack-fresh-clickhouse-1", "clickhouse-client",
+        ["docker", "exec", "traceform-fresh-clickhouse-1", "clickhouse-client",
          "--query", "SELECT name FROM system.data_skipping_indices WHERE table = 'sessions' AND database = 'agentstack'"],
         capture_output=True, text=True, timeout=10
     )
@@ -417,7 +417,7 @@ def test_clickhouse_indexes_exist():
 
 def main():
     print("=" * 60)
-    print("AgentStack E2E Integration Tests")
+    print("Traceform E2E Integration Tests")
     print("=" * 60)
     print(f"API:     {BASE_URL}")
     print(f"Gateway: {GATEWAY_URL}")

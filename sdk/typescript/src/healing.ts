@@ -5,7 +5,7 @@ import {
   HealingIntervention,
   HealingType,
 } from './types';
-import { AgentStackClient } from './client';
+import { TraceformClient } from './client';
 
 // ─── Default configuration ──────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ const DEFAULT_HEALING_CONFIG: HealingConfig = {
 
 export class HealingEngine {
   private config: HealingConfig;
-  private client: AgentStackClient | null;
+  private client: TraceformClient | null;
 
   // Loop detection state
   private recentOutputs: string[] = [];
@@ -48,7 +48,7 @@ export class HealingEngine {
   // Cost tracking state
   private sessionCost = 0;
 
-  constructor(config?: Partial<HealingConfig>, client?: AgentStackClient) {
+  constructor(config?: Partial<HealingConfig>, client?: TraceformClient) {
     this.config = {
       ...DEFAULT_HEALING_CONFIG,
       ...config,

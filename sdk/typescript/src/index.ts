@@ -1,18 +1,18 @@
-import { AgentStackClient } from './client';
+import { TraceformClient } from './client';
 import { SessionInstance } from './session';
 import { HealingEngine } from './healing';
 import { InitConfig, SessionConfig, HealingConfig } from './types';
 
 // ─── Global State ───────────────────────────────────────────────────────────
 
-let globalClient: AgentStackClient | null = null;
+let globalClient: TraceformClient | null = null;
 let globalSession: SessionInstance | null = null;
 let globalHealing: HealingEngine | null = null;
 let globalConfig: InitConfig | null = null;
 
 // ─── Accessors (used by trace, instruments) ─────────────────────────────────
 
-export function getGlobalClient(): AgentStackClient | null {
+export function getGlobalClient(): TraceformClient | null {
   return globalClient;
 }
 
@@ -27,26 +27,26 @@ export function getGlobalHealing(): HealingEngine | null {
 // ─── Core API ───────────────────────────────────────────────────────────────
 
 /**
- * Initialize the AgentStack SDK.
+ * Initialize the Traceform SDK.
  *
  * Must be called before any other SDK function. Sets up the HTTP client,
  * healing engine, and global configuration.
  *
  * @example
  * ```ts
- * import { init } from '@agentstack/sdk';
+ * import { init } from '@traceform/sdk';
  *
  * init({
- *   apiKey: process.env.AGENTSTACK_API_KEY!,
+ *   apiKey: process.env.TRACEFORM_API_KEY!,
  *   projectId: 'my-project',
- *   endpoint: 'https://api.agentstack.dev',
+ *   endpoint: 'https://api.traceform.dev',
  * });
  * ```
  */
 export function init(config: InitConfig): void {
   globalConfig = config;
 
-  globalClient = new AgentStackClient({
+  globalClient = new TraceformClient({
     apiKey: config.apiKey,
     projectId: config.projectId,
     endpoint: config.endpoint,
@@ -79,7 +79,7 @@ export function init(config: InitConfig): void {
 export function session(config?: SessionConfig): SessionInstance {
   if (!globalClient || !globalConfig) {
     throw new Error(
-      'AgentStack SDK not initialized. Call init() before creating a session.',
+      'Traceform SDK not initialized. Call init() before creating a session.',
     );
   }
 
@@ -158,7 +158,7 @@ export function _resetForTesting(): void {
 
 // ─── Re-exports ─────────────────────────────────────────────────────────────
 
-export { AgentStackClient } from './client';
+export { TraceformClient } from './client';
 export { SessionInstance } from './session';
 export { SpanInstance } from './span';
 export { HealingEngine } from './healing';

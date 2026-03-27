@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"math/rand"
 
-	"github.com/agentstack/agentstack/internal/trace/store"
+	"github.com/traceform/traceform/internal/trace/store"
 )
 
 // SamplingService provides business logic for sampling configuration.

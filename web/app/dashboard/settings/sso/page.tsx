@@ -326,7 +326,7 @@ export default function SSOSettingsPage() {
                   <span className="ml-2 text-[10px] normal-case tracking-normal text-[var(--text-tertiary)]">(auto-generated)</span>
                 </label>
                 <Input
-                  value={config.sp_entity_id || "https://app.agentstack.dev/saml/metadata"}
+                  value={config.sp_entity_id || "https://app.traceform.dev/saml/metadata"}
                   readOnly
                   className="bg-[var(--bg-primary)] border-[var(--border-default)] opacity-60 cursor-not-allowed"
                 />
@@ -337,7 +337,7 @@ export default function SSOSettingsPage() {
                   <span className="ml-2 text-[10px] normal-case tracking-normal text-[var(--text-tertiary)]">(auto-generated)</span>
                 </label>
                 <Input
-                  value={config.acs_url || "https://app.agentstack.dev/auth/saml/callback"}
+                  value={config.acs_url || "https://app.traceform.dev/auth/saml/callback"}
                   readOnly
                   className="bg-[var(--bg-primary)] border-[var(--border-default)] opacity-60 cursor-not-allowed"
                 />

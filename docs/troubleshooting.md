@@ -55,7 +55,7 @@ clickhouse://localhost:9000/agentstack
 
 **Common causes:**
 - ClickHouse ran out of memory (default limit is 4 GB). Increase the limit in `docker-compose.yml` or `docker-compose.override.yml`.
-- The `agentstack` database does not exist. Run `make migrate` to create it.
+- The `agentstack` database (legacy name) does not exist. Run `make migrate` to create it.
 
 ---
 
@@ -99,12 +99,12 @@ The SDK batches events before sending. By default, it flushes every 5 seconds or
 
 ```python
 # Python
-agentstack._client.flush()
+traceform._client.flush()
 ```
 
 ```typescript
 // TypeScript — the client exposes flush()
-import { getGlobalClient } from '@agentstack/sdk';
+import { getGlobalClient } from '@traceform/sdk';
 getGlobalClient()?.flush();
 ```
 
@@ -112,7 +112,7 @@ getGlobalClient()?.flush();
 
 ```bash
 docker compose exec clickhouse clickhouse-client \
-  --query "SELECT count() FROM agentstack.sessions"
+  --query "SELECT count() FROM traceform.sessions"
 ```
 
 If the count is non-zero but the dashboard shows nothing, the issue is on the query or frontend side. Check the API server logs and the browser console.
@@ -128,7 +128,7 @@ If the count is non-zero but the dashboard shows nothing, the issue is on the qu
 Provider management requires an authenticated request with the `admin` scope.
 
 ```bash
-curl -H "Authorization: Bearer as_sk_your_api_key" \
+curl -H "Authorization: Bearer tf_sk_your_api_key" \
   http://localhost:8080/v1/gateway/providers
 ```
 
@@ -138,7 +138,7 @@ If you get `401 Unauthorized`, generate a new API key with admin scope from Sett
 
 ```bash
 curl -X POST http://localhost:8080/v1/gateway/providers \
-  -H "Authorization: Bearer as_sk_your_api_key" \
+  -H "Authorization: Bearer tf_sk_your_api_key" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "openai",
@@ -226,8 +226,8 @@ Restart the API server after changing these values.
 If you are hitting rate limits during ingestion, increase the SDK batch size to send fewer, larger requests:
 
 ```python
-agentstack.init(
-    api_key="as_sk_...",
+traceform.init(
+    api_key="tf_sk_...",
     batch_size=200,         # default is 50
     flush_interval=10.0,    # default is 5 seconds
 )
@@ -292,7 +292,7 @@ lsof -i :3000
 This means the migration was partially applied. Check the migration state:
 
 ```bash
-docker compose exec postgres psql -U agentstack -c \
+docker compose exec postgres psql -U agentstack  # legacy user -c \
   "SELECT * FROM schema_migrations ORDER BY version;"
 ```
 
@@ -300,7 +300,7 @@ If the latest migration shows `dirty = true`, fix it manually:
 
 ```bash
 # Reset the dirty flag (replace VERSION with the failing migration number)
-docker compose exec postgres psql -U agentstack -c \
+docker compose exec postgres psql -U agentstack  # legacy user -c \
   "UPDATE schema_migrations SET dirty = false WHERE version = VERSION;"
 ```
 
@@ -309,7 +309,7 @@ Then re-run `make migrate`.
 ### "database does not exist"
 
 ```bash
-docker compose exec postgres psql -U agentstack -c "CREATE DATABASE agentstack;"
+docker compose exec postgres psql -U agentstack  # legacy user -c "CREATE DATABASE agentstack;"
 ```
 
 ### Start fresh
@@ -364,4 +364,4 @@ If you need stable authentication for scripts and CI/CD, use API keys instead of
 1. Check the API server logs in the terminal where `make dev` is running.
 2. Check the browser developer console (F12 > Console) for JavaScript errors.
 3. Check the Docker service logs: `docker compose logs <service-name> --tail 100`.
-4. Open an issue at [github.com/agentstack/agentstack/issues](https://github.com/agentstack/agentstack/issues) with the error message and steps to reproduce.
+4. Open an issue at [github.com/traceform/traceform/issues](https://github.com/traceform/traceform/issues) with the error message and steps to reproduce.

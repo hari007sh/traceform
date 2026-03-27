@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/agentstack/agentstack/internal/cache"
-	"github.com/agentstack/agentstack/internal/server/httputil"
-	"github.com/agentstack/agentstack/internal/server/middleware"
-	"github.com/agentstack/agentstack/internal/trace/service"
+	"github.com/traceform/traceform/internal/cache"
+	"github.com/traceform/traceform/internal/server/httputil"
+	"github.com/traceform/traceform/internal/server/middleware"
+	"github.com/traceform/traceform/internal/trace/service"
 )
 
 // AnalyticsHandler handles analytics query endpoints.

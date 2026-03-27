@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// GateCommand implements the "agentstack gate" quality gate subcommand.
+// GateCommand implements the "traceform gate" quality gate subcommand.
 // It runs a test suite and checks multiple gates (pass rate, cost, duration).
 func GateCommand(args []string) {
 	if len(args) == 0 {
@@ -66,7 +66,7 @@ func GateCommand(args []string) {
 }
 
 func printGateHelp() {
-	fmt.Println(`Usage: agentstack gate [flags]
+	fmt.Println(`Usage: traceform gate [flags]
 
 Run a test suite and check quality gates. Exits 0 if ALL gates pass, 1 if ANY gate fails.
 
@@ -79,21 +79,21 @@ Flags:
   --format <fmt>          Output format: text (default), json
 
 Global Flags:
-  --api-key <key>         API key (or set AGENTSTACK_API_KEY)
-  --endpoint <url>        API endpoint (or set AGENTSTACK_ENDPOINT, default http://localhost:8080)
+  --api-key <key>         API key (or set TRACEFORM_API_KEY)
+  --endpoint <url>        API endpoint (or set TRACEFORM_ENDPOINT, default http://localhost:8080)
 
 Examples:
   # Check pass rate and cost
-  agentstack gate --suite my-suite --min-pass-rate 95 --max-cost 500
+  traceform gate --suite my-suite --min-pass-rate 95 --max-cost 500
 
   # Check all gates
-  agentstack gate --suite my-suite --min-pass-rate 95 --max-cost 500 --max-duration 60
+  traceform gate --suite my-suite --min-pass-rate 95 --max-cost 500 --max-duration 60
 
   # JSON output for programmatic consumption
-  agentstack gate --suite my-suite --min-pass-rate 90 --format json
+  traceform gate --suite my-suite --min-pass-rate 90 --format json
 
   # With explicit credentials
-  agentstack gate --suite my-suite --min-pass-rate 95 --api-key sk_test --endpoint https://api.agentstack.dev`)
+  traceform gate --suite my-suite --min-pass-rate 95 --api-key sk_test --endpoint https://api.traceform.dev`)
 }
 
 // gateConfig holds parsed flags for the gate command.
@@ -188,7 +188,7 @@ func parseGateFlags(args []string) gateConfig {
 
 	if cfg.SuiteID == "" {
 		fmt.Fprintln(os.Stderr, "Error: --suite is required")
-		fmt.Fprintln(os.Stderr, "Run 'agentstack gate --help' for usage.")
+		fmt.Fprintln(os.Stderr, "Run 'traceform gate --help' for usage.")
 		os.Exit(1)
 	}
 

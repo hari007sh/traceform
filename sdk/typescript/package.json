@@ -1,7 +1,7 @@
 {
-  "name": "@agentstack/sdk",
+  "name": "@traceform/sdk",
   "version": "0.1.0",
-  "description": "AgentStack SDK for Node.js — AI agent monitoring and self-healing",
+  "description": "Traceform SDK for Node.js — AI agent monitoring and self-healing",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {

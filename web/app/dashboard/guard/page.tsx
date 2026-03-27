@@ -248,7 +248,7 @@ export default function GuardOverviewPage() {
             : "Failed to load guard data";
 
       console.error(
-        `[AgentStack] ${new Date().toISOString()} GuardPage: API call failed. Reason: ${message}`
+        `[Traceform] ${new Date().toISOString()} GuardPage: API call failed. Reason: ${message}`
       );
 
       setFetchError(message);
@@ -377,7 +377,7 @@ export default function GuardOverviewPage() {
               </button>
             </RequireRole>
             <a
-              href="https://docs.agentstack.dev/guard"
+              href="https://docs.traceform.dev/guard"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border-default)] bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] transition-colors"

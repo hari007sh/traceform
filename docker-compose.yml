@@ -3,13 +3,13 @@ services:
     image: postgres:16
     ports: ["5436:5432"]
     environment:
-      POSTGRES_USER: agentstack
-      POSTGRES_PASSWORD: agentstack_dev
-      POSTGRES_DB: agentstack
+      POSTGRES_USER: agentstack  # legacy name, do not change
+      POSTGRES_PASSWORD: traceform_dev
+      POSTGRES_DB: agentstack  # legacy name, do not change
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agentstack"]
+      test: ["CMD-SHELL", "pg_isready -U agentstack  # legacy user"]
       interval: 5s
       timeout: 5s
       retries: 5

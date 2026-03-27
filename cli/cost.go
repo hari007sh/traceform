@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// CostCommand handles all "agentstack cost" subcommands.
+// CostCommand handles all "traceform cost" subcommands.
 func CostCommand(args []string) {
 	if len(args) == 0 {
 		printCostHelp()
@@ -26,13 +26,13 @@ func CostCommand(args []string) {
 		os.Exit(0)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown cost command: %s\n", args[0])
-		fmt.Fprintln(os.Stderr, "Run 'agentstack cost --help' for usage.")
+		fmt.Fprintln(os.Stderr, "Run 'traceform cost --help' for usage.")
 		os.Exit(1)
 	}
 }
 
 func printCostHelp() {
-	fmt.Println(`Usage: agentstack cost <command> [flags]
+	fmt.Println(`Usage: traceform cost <command> [flags]
 
 Commands:
   summary    Show cost summary
@@ -43,21 +43,21 @@ Summary Flags:
   --format <fmt>         Output format: text (default), json
 
 Global Flags:
-  --api-key <key>        API key (or set AGENTSTACK_API_KEY)
-  --endpoint <url>       API endpoint (or set AGENTSTACK_ENDPOINT, default http://localhost:8080)
+  --api-key <key>        API key (or set TRACEFORM_API_KEY)
+  --endpoint <url>       API endpoint (or set TRACEFORM_ENDPOINT, default http://localhost:8080)
 
 Examples:
   # View 7-day cost summary
-  agentstack cost summary
+  traceform cost summary
 
   # View 30-day summary as JSON
-  agentstack cost summary --period 30d --format json
+  traceform cost summary --period 30d --format json
 
   # List budget policies
-  agentstack cost budgets
+  traceform cost budgets
 
   # JSON output for scripts
-  agentstack cost budgets --format json`)
+  traceform cost budgets --format json`)
 }
 
 // costSummaryConfig holds parsed flags for the cost summary command.

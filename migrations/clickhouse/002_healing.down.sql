@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS agentstack.healing_events
+DROP TABLE IF EXISTS traceform.healing_events

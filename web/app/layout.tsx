@@ -18,7 +18,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AgentStack — AI Agent Production Platform",
+  title: "Traceform — AI Agent Production Platform",
   description: "The open-source platform for AI agents in production. Monitor, heal, test, guard, route, and optimize your AI agents.",
 };
 

@@ -1,4 +1,4 @@
-DROP TABLE IF EXISTS agentstack.gateway_requests;
-DROP TABLE IF EXISTS agentstack.events;
-DROP TABLE IF EXISTS agentstack.spans;
-DROP TABLE IF EXISTS agentstack.sessions
+DROP TABLE IF EXISTS traceform.gateway_requests;
+DROP TABLE IF EXISTS traceform.events;
+DROP TABLE IF EXISTS traceform.spans;
+DROP TABLE IF EXISTS traceform.sessions

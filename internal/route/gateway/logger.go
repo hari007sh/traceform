@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/agentstack/agentstack/internal/route/store"
+	"github.com/traceform/traceform/internal/route/store"
 	"github.com/nats-io/nats.go"
 )
 
@@ -110,7 +110,7 @@ func (al *AsyncLogger) flush(batch []*store.GatewayRequest) {
 				al.logger.Error("marshal gateway request for NATS", "error", err)
 				continue
 			}
-			if err := al.natsConn.Publish("agentstack.gateway.requests", data); err != nil {
+			if err := al.natsConn.Publish("traceform.gateway.requests", data); err != nil {
 				al.logger.Error("publish gateway request to NATS", "error", err)
 			}
 		}

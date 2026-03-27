@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"time"
 
-	webhookservice "github.com/agentstack/agentstack/internal/webhook/service"
-	webhookstore "github.com/agentstack/agentstack/internal/webhook/store"
+	webhookservice "github.com/traceform/traceform/internal/webhook/service"
+	webhookstore "github.com/traceform/traceform/internal/webhook/store"
 	"github.com/nats-io/nats.go"
 )
 
@@ -234,35 +234,35 @@ func (ae *AlertEvaluator) evaluatePattern(ctx context.Context, orgID string, cfg
 	var count int
 	switch cfg.PatternCategory {
 	case "error":
-		query := `SELECT count() FROM agentstack.sessions
+		query := `SELECT count() FROM traceform.sessions
 		          WHERE org_id = ? AND started_at >= ? AND status = 'failed'`
 		err := ae.chDB.QueryRowContext(ctx, query, orgID, cutoff).Scan(&count)
 		if err != nil {
 			return false, nil, fmt.Errorf("query error pattern: %w", err)
 		}
 	case "loop":
-		query := `SELECT count() FROM agentstack.sessions
+		query := `SELECT count() FROM traceform.sessions
 		          WHERE org_id = ? AND started_at >= ? AND total_spans > 50`
 		err := ae.chDB.QueryRowContext(ctx, query, orgID, cutoff).Scan(&count)
 		if err != nil {
 			return false, nil, fmt.Errorf("query loop pattern: %w", err)
 		}
 	case "timeout":
-		query := `SELECT count() FROM agentstack.sessions
+		query := `SELECT count() FROM traceform.sessions
 		          WHERE org_id = ? AND started_at >= ? AND status = 'timeout'`
 		err := ae.chDB.QueryRowContext(ctx, query, orgID, cutoff).Scan(&count)
 		if err != nil {
 			return false, nil, fmt.Errorf("query timeout pattern: %w", err)
 		}
 	case "cost":
-		query := `SELECT count() FROM agentstack.sessions
+		query := `SELECT count() FROM traceform.sessions
 		          WHERE org_id = ? AND started_at >= ? AND total_cost_cents > 1000`
 		err := ae.chDB.QueryRowContext(ctx, query, orgID, cutoff).Scan(&count)
 		if err != nil {
 			return false, nil, fmt.Errorf("query cost pattern: %w", err)
 		}
 	case "hallucination":
-		query := `SELECT count() FROM agentstack.sessions
+		query := `SELECT count() FROM traceform.sessions
 		          WHERE org_id = ? AND started_at >= ? AND status = 'failed'
 		          AND (error LIKE '%tool not found%' OR error LIKE '%invalid function%'
 		               OR error LIKE '%does not exist%' OR error LIKE '%hallucin%')`
@@ -294,7 +294,7 @@ func (ae *AlertEvaluator) evaluatePattern(ctx context.Context, orgID string, cfg
 
 func (ae *AlertEvaluator) queryFailureRate(ctx context.Context, orgID string, since time.Time) (float64, error) {
 	query := `SELECT if(count() > 0, countIf(status = 'failed') / count(), 0)
-	          FROM agentstack.sessions
+	          FROM traceform.sessions
 	          WHERE org_id = ? AND started_at >= ?`
 	var rate float64
 	err := ae.chDB.QueryRowContext(ctx, query, orgID, since).Scan(&rate)
@@ -303,7 +303,7 @@ func (ae *AlertEvaluator) queryFailureRate(ctx context.Context, orgID string, si
 
 func (ae *AlertEvaluator) queryAvgCost(ctx context.Context, orgID string, since time.Time) (float64, error) {
 	query := `SELECT if(count() > 0, avg(total_cost_cents), 0)
-	          FROM agentstack.sessions
+	          FROM traceform.sessions
 	          WHERE org_id = ? AND started_at >= ?`
 	var avg float64
 	err := ae.chDB.QueryRowContext(ctx, query, orgID, since).Scan(&avg)
@@ -312,7 +312,7 @@ func (ae *AlertEvaluator) queryAvgCost(ctx context.Context, orgID string, since 
 
 func (ae *AlertEvaluator) queryAvgDuration(ctx context.Context, orgID string, since time.Time) (float64, error) {
 	query := `SELECT if(count() > 0, avg(duration_ms), 0)
-	          FROM agentstack.sessions
+	          FROM traceform.sessions
 	          WHERE org_id = ? AND started_at >= ?`
 	var avg float64
 	err := ae.chDB.QueryRowContext(ctx, query, orgID, since).Scan(&avg)
@@ -321,7 +321,7 @@ func (ae *AlertEvaluator) queryAvgDuration(ctx context.Context, orgID string, si
 
 func (ae *AlertEvaluator) queryTotalTokens(ctx context.Context, orgID string, since time.Time) (float64, error) {
 	query := `SELECT sum(total_tokens)
-	          FROM agentstack.sessions
+	          FROM traceform.sessions
 	          WHERE org_id = ? AND started_at >= ?`
 	var total float64
 	err := ae.chDB.QueryRowContext(ctx, query, orgID, since).Scan(&total)
@@ -330,7 +330,7 @@ func (ae *AlertEvaluator) queryTotalTokens(ctx context.Context, orgID string, si
 
 func (ae *AlertEvaluator) queryErrorCount(ctx context.Context, orgID string, since time.Time) (float64, error) {
 	query := `SELECT countIf(status = 'failed')
-	          FROM agentstack.sessions
+	          FROM traceform.sessions
 	          WHERE org_id = ? AND started_at >= ?`
 	var count float64
 	err := ae.chDB.QueryRowContext(ctx, query, orgID, since).Scan(&count)

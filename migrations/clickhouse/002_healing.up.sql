@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS agentstack.healing_events (
+CREATE TABLE IF NOT EXISTS traceform.healing_events (
     id String,
     session_id String,
     span_id String DEFAULT '',

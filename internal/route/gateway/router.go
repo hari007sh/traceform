@@ -12,9 +12,9 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	"github.com/agentstack/agentstack/internal/route/provider"
-	"github.com/agentstack/agentstack/internal/route/service"
-	"github.com/agentstack/agentstack/internal/route/store"
+	"github.com/traceform/traceform/internal/route/provider"
+	"github.com/traceform/traceform/internal/route/service"
+	"github.com/traceform/traceform/internal/route/store"
 )
 
 // Router handles model/provider selection for incoming gateway requests.

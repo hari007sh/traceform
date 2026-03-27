@@ -1,10 +1,10 @@
-# AgentStack Mac 2 — Test + Cost Modules: Complete Build Spec
+# Traceform Mac 2 — Test + Cost Modules: Complete Build Spec
 
 ## PIVOT INSTRUCTION
 
-**You are pivoting from ShipCredits.** The existing ShipCredits codebase (Go backend, PostgreSQL, Redis, Next.js dashboard, Python+TypeScript+Go SDKs, credit ledger, metering, pricing engine, Stripe integration) is being set aside. You are now building two modules of the **AgentStack** platform: **Test** and **Cost**.
+**You are pivoting from ShipCredits.** The existing ShipCredits codebase (Go backend, PostgreSQL, Redis, Next.js dashboard, Python+TypeScript+Go SDKs, credit ledger, metering, pricing engine, Stripe integration) is being set aside. You are now building two modules of the **Traceform** platform: **Test** and **Cost**.
 
-AgentStack is an open-source AI agent production platform with 6 modules:
+Traceform is an open-source AI agent production platform with 6 modules:
 - **Shield** (self-healing) — Mac 1
 - **Trace** (observability) — Mac 1
 - **Test** (evaluation) — Mac 2 (THIS BUILD)
@@ -16,7 +16,7 @@ All modules output into separate repos for now, to be merged later.
 
 **What to reuse from ShipCredits:** The PostgreSQL and Redis Docker setup patterns, the Go project structure conventions, the Next.js dashboard scaffolding patterns. Do NOT copy ShipCredits business logic.
 
-**New repo name:** `agentstack-test-cost`
+**New repo name:** `traceform-test-cost`
 
 ---
 
@@ -38,7 +38,7 @@ All modules output into separate repos for now, to be merged later.
 ## 1. Project Structure
 
 ```
-agentstack-test-cost/
+traceform-test-cost/
 ├── CLAUDE.md
 ├── docker-compose.yml         # PostgreSQL (port 5434) + Redis (port 6382)
 ├── Makefile
@@ -105,7 +105,7 @@ agentstack-test-cost/
 │       ├── 004_seed_model_pricing.up.sql
 │       └── 004_seed_model_pricing.down.sql
 ├── cli/
-│   ├── main.go                # agentstack-cli binary entrypoint
+│   ├── main.go                # traceform-cli binary entrypoint
 │   ├── root.go                # Root cobra command
 │   ├── test.go                # test run/status/gate commands
 │   └── cost.go                # cost query commands
@@ -201,10 +201,10 @@ agentstack-test-cost/
 Create this file at the repo root. This is the instruction file for any future Claude Code agent working in this repo.
 
 ```markdown
-# AgentStack — Test + Cost Modules
+# Traceform — Test + Cost Modules
 
 ## What This Is
-Two modules of the AgentStack platform:
+Two modules of the Traceform platform:
 - **Test**: Automated testing and evaluation for AI agents ("Cypress for AI agents")
 - **Cost**: Per-outcome cost tracking, budget enforcement, model comparison ("FinOps for AI agents")
 
@@ -231,7 +231,7 @@ make dev
 cd web && npm install && npm run dev
 
 # Build CLI
-cd cli && go build -o agentstack-cli
+cd cli && go build -o traceform-cli
 ```
 
 ## Commands
@@ -243,7 +243,7 @@ cd cli && go build -o agentstack-cli
 - `make lint` — Run golangci-lint
 - `cd web && npm run dev` — Start Next.js dashboard
 - `cd web && npm run build` — Build dashboard for production
-- `cd cli && go build -o agentstack-cli` — Build CLI binary
+- `cd cli && go build -o traceform-cli` — Build CLI binary
 
 ## Design System
 - Dark theme: #0a0a0b background, #ffffff text, Inter font
@@ -290,24 +290,24 @@ version: "3.9"
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: agentstack-tc-postgres
+    container_name: traceform-tc-postgres
     ports:
       - "5434:5432"
     environment:
-      POSTGRES_USER: agentstack
-      POSTGRES_PASSWORD: agentstack_dev
-      POSTGRES_DB: agentstack_test_cost
+      POSTGRES_USER: agentstack  # legacy name, do not change
+      POSTGRES_PASSWORD: traceform_dev
+      POSTGRES_DB: agentstack  # legacy name, do not change_test_cost
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agentstack"]
+      test: ["CMD-SHELL", "pg_isready -U agentstack  # legacy user"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    container_name: agentstack-tc-redis
+    container_name: traceform-tc-redis
     ports:
       - "6382:6379"
     volumes:
@@ -327,7 +327,7 @@ volumes:
 
 ```env
 # Database
-DATABASE_URL=postgres://agentstack:agentstack_dev@localhost:5434/agentstack_test_cost?sslmode=disable
+DATABASE_URL=postgres://agentstack:traceform_dev@localhost:5434/traceform_test_cost?sslmode=disable
 
 # Redis
 REDIS_URL=redis://localhost:6382/0
@@ -367,7 +367,7 @@ build:
 	go build -o bin/server ./cmd/server
 	go build -o bin/worker ./cmd/worker
 	go build -o bin/migrate ./cmd/migrate
-	cd cli && go build -o ../bin/agentstack-cli .
+	cd cli && go build -o ../bin/traceform-cli .
 
 test:
 	go test ./... -v -count=1
@@ -396,7 +396,7 @@ setup:
 ### go.mod dependencies
 
 ```
-module github.com/agentstack/agentstack-test-cost
+module github.com/traceform/traceform-test-cost
 
 go 1.22
 
@@ -424,7 +424,7 @@ require (
 
 ```sql
 -- =============================================
--- AgentStack Test Module — Database Schema
+-- Traceform Test Module — Database Schema
 -- =============================================
 
 -- Organizations config (stores LLM API keys for evaluators)
@@ -582,7 +582,7 @@ DROP TABLE IF EXISTS org_configs CASCADE;
 
 ```sql
 -- =============================================
--- AgentStack Cost Module — Database Schema
+-- Traceform Cost Module — Database Schema
 -- =============================================
 
 -- Cost events (ingested from SDK)
@@ -3148,17 +3148,17 @@ projected_overage = projected_end > limit_cents
 
 ### 8.1 Overview
 
-Build a Go CLI using the `cobra` library. Binary name: `agentstack-cli`. The CLI communicates with the API server over HTTP.
+Build a Go CLI using the `cobra` library. Binary name: `traceform-cli`. The CLI communicates with the API server over HTTP.
 
 ### 8.2 Configuration
 
 The CLI reads config from (in order of precedence):
 1. Command-line flags
 2. Environment variables
-3. Config file `~/.agentstack/config.yaml`
+3. Config file `~/.traceform/config.yaml`
 
 ```yaml
-# ~/.agentstack/config.yaml
+# ~/.traceform/config.yaml
 api_url: http://localhost:8082
 api_key: ask_dev_test_key_12345
 ```
@@ -3168,10 +3168,10 @@ api_key: ask_dev_test_key_12345
 #### Root Command
 
 ```
-agentstack-cli — CLI for AgentStack Test & Cost platform
+traceform-cli — CLI for Traceform Test & Cost platform
 
 Usage:
-  agentstack-cli [command]
+  traceform-cli [command]
 
 Available Commands:
   test        Manage and run agent tests
@@ -3183,23 +3183,23 @@ Flags:
   --api-url string   API server URL (default: from config)
   --api-key string   API key (default: from config)
   --output string    Output format: text, json (default: text)
-  -h, --help         Help for agentstack-cli
+  -h, --help         Help for traceform-cli
 ```
 
 #### test run — Run Tests
 
 ```bash
 # Run a test suite by name
-agentstack-cli test run --suite "regression"
+traceform-cli test run --suite "regression"
 
 # Run with CI context
-agentstack-cli test run --suite "regression" --commit $(git rev-parse HEAD) --branch $(git branch --show-current) --repo $(git remote get-url origin)
+traceform-cli test run --suite "regression" --commit $(git rev-parse HEAD) --branch $(git branch --show-current) --repo $(git remote get-url origin)
 
 # Run and wait for completion (blocking)
-agentstack-cli test run --suite "regression" --wait --timeout 300
+traceform-cli test run --suite "regression" --wait --timeout 300
 
 # Run by suite ID
-agentstack-cli test run --suite-id a1b2c3d4-e5f6-7890-abcd-ef1234567890
+traceform-cli test run --suite-id a1b2c3d4-e5f6-7890-abcd-ef1234567890
 ```
 
 **Flags:**
@@ -3252,7 +3252,7 @@ Exit code: 1 (failures detected)
 #### test status — Check Run Status
 
 ```bash
-agentstack-cli test status --run-id f6a7b8c9-d0e1-2345-f012-345678901234
+traceform-cli test status --run-id f6a7b8c9-d0e1-2345-f012-345678901234
 ```
 
 **Output:**
@@ -3272,10 +3272,10 @@ Completed:  2026-03-19T12:02:30Z
 
 ```bash
 # Fail CI if quality is below threshold
-agentstack-cli test gate --suite "regression" --min-score 0.8 --max-failures 0
+traceform-cli test gate --suite "regression" --min-score 0.8 --max-failures 0
 
 # Gate with auto-run
-agentstack-cli test gate --suite "regression" --min-score 0.8 --max-failures 0 --commit $(git rev-parse HEAD)
+traceform-cli test gate --suite "regression" --min-score 0.8 --max-failures 0 --commit $(git rev-parse HEAD)
 ```
 
 **Flags:**
@@ -3309,7 +3309,7 @@ Exit code: 1
 #### test list — List Suites
 
 ```bash
-agentstack-cli test list
+traceform-cli test list
 ```
 
 **Output:**
@@ -3325,13 +3325,13 @@ Test Suites:
 
 ```bash
 # Current month summary
-agentstack-cli cost summary
+traceform-cli cost summary
 
 # Custom date range
-agentstack-cli cost summary --from 2026-03-01 --to 2026-03-19
+traceform-cli cost summary --from 2026-03-01 --to 2026-03-19
 
 # Filter by agent
-agentstack-cli cost summary --agent support-agent-v2
+traceform-cli cost summary --agent support-agent-v2
 ```
 
 **Output:**
@@ -3358,7 +3358,7 @@ By Agent:
 #### cost budgets — List Budget Status
 
 ```bash
-agentstack-cli cost budgets
+traceform-cli cost budgets
 ```
 
 **Output:**
@@ -3395,7 +3395,7 @@ Budget Policies:
 ### 9.2 Sidebar Navigation
 
 ```
-[AgentStack Logo]
+[Traceform Logo]
 
 Test
   ├── Overview        (/dashboard/test)
@@ -3773,7 +3773,7 @@ Follow this exact sequence. Each phase should be fully working before moving to 
    - Text output with tables, colors (using `lipgloss` or `tablewriter`)
    - JSON output for machine consumption
 
-**Verification:** `./bin/agentstack-cli test run --suite regression --wait` runs and shows results. `./bin/agentstack-cli cost summary` shows analytics.
+**Verification:** `./bin/traceform-cli test run --suite regression --wait` runs and shows results. `./bin/traceform-cli cost summary` shows analytics.
 
 ### Phase 8: Dashboard — Setup & Layout (Day 8)
 
@@ -4267,7 +4267,7 @@ ratelimit:{org_id}:{endpoint}                  — STRING — request count — 
 
 ```
 # Required
-DATABASE_URL=postgres://agentstack:agentstack_dev@localhost:5434/agentstack_test_cost?sslmode=disable
+DATABASE_URL=postgres://agentstack:traceform_dev@localhost:5434/traceform_test_cost?sslmode=disable
 REDIS_URL=redis://localhost:6382/0
 API_PORT=8082
 

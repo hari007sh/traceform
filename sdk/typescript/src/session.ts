@@ -7,7 +7,7 @@ import {
   Span,
   Event,
 } from './types';
-import { AgentStackClient } from './client';
+import { TraceformClient } from './client';
 import { SpanInstance } from './span';
 import { SamplingConfig, DEFAULT_SAMPLING_CONFIG, shouldSendFull } from './sampling';
 
@@ -16,13 +16,13 @@ const BUFFER_CAP = 1000;
 
 /** A buffered item that was intercepted instead of sent immediately. */
 type BufferedItem =
-  | { kind: 'session'; payload: Parameters<AgentStackClient['addSession']>[0] }
+  | { kind: 'session'; payload: Parameters<TraceformClient['addSession']>[0] }
   | { kind: 'event'; payload: Event }
-  | { kind: 'span'; payload: Parameters<AgentStackClient['addSpan']>[0] };
+  | { kind: 'span'; payload: Parameters<TraceformClient['addSpan']>[0] };
 
 export class SessionInstance {
   private data: SessionData;
-  private client: AgentStackClient;
+  private client: TraceformClient;
   private activeSpans: Map<string, SpanInstance> = new Map();
   private completedSpans: Span[] = [];
 
@@ -31,7 +31,7 @@ export class SessionInstance {
   private isBuffering: boolean;
   private buffer: BufferedItem[] = [];
 
-  constructor(client: AgentStackClient, projectId: string, config?: SessionConfig) {
+  constructor(client: TraceformClient, projectId: string, config?: SessionConfig) {
     this.client = client;
 
     // Resolve sampling config — default is rate=1.0 (no buffering)

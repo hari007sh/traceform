@@ -4,8 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/agentstack/agentstack/internal/cost/store"
-	"github.com/agentstack/agentstack/internal/server/httputil"
+	"github.com/traceform/traceform/internal/cost/store"
+	"github.com/traceform/traceform/internal/server/httputil"
 )
 
 // ModelsHandler handles model pricing endpoints.

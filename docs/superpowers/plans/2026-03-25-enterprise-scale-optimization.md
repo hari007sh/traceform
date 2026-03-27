@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add 4 enterprise-scale optimizations to AgentStack: ClickHouse materialized views, hybrid adaptive sampling, payload truncation with blob storage, and TTL-based tiered retention.
+**Goal:** Add 4 enterprise-scale optimizations to Traceform: ClickHouse materialized views, hybrid adaptive sampling, payload truncation with blob storage, and TTL-based tiered retention.
 
 **Architecture:** ClickHouse AggregatingMergeTree MVs replace on-the-fly aggregation for dashboards. SDK buffers session events and makes keep/drop sampling decisions at session end, emitting counter events for dropped sessions. Payloads >4KB are truncated inline and offloaded to content-addressed blob storage. A daily retention worker enforces per-org TTL tiers via partition drops and targeted deletes.
 
@@ -30,7 +30,7 @@
 | `internal/trace/handler/sampling.go` | Sampling config CRUD endpoints |
 | `internal/trace/service/sampling.go` | Sampling config service layer |
 | `internal/trace/store/sampling_pg.go` | PostgreSQL store for sampling_config |
-| `sdk/python/agentstack/sampling.py` | SamplingConfig + decision logic |
+| `sdk/python/traceform/sampling.py` | SamplingConfig + decision logic |
 | `sdk/typescript/src/sampling.ts` | TypeScript SamplingConfig + decision logic |
 
 ### Modified Files
@@ -41,15 +41,15 @@
 | `internal/trace/store/clickhouse.go` | Add MV-backed query methods (GetOverviewFromMV, etc.) |
 | `internal/trace/service/analytics.go` | Switch to MV queries, add counter merge logic |
 | `internal/trace/service/ingest.go` | Add SubjectCounterIngest, server-side sampling check |
-| `internal/trace/handler/ingest.go` | Add X-AgentStack-Sample-Rate header, counter extraction |
+| `internal/trace/handler/ingest.go` | Add X-Traceform-Sample-Rate header, counter extraction |
 | `internal/server/routes.go` | Register payload, sampling endpoints |
 | `cmd/worker/main.go` | Start retention worker |
 | `cmd/migrate/main.go` | Add --backfill-views flag |
 | `internal/config/config.go` | Add BlobStore and sampling config fields |
-| `sdk/python/agentstack/__init__.py` | Add sampling param to init() |
-| `sdk/python/agentstack/session.py` | Add buffer mode for sampling |
-| `sdk/python/agentstack/batch.py` | Add counter event type support (different from normal events) |
-| `sdk/python/agentstack/client.py` | Add counter events, parse X-AgentStack-Sample-Rate |
+| `sdk/python/traceform/__init__.py` | Add sampling param to init() |
+| `sdk/python/traceform/session.py` | Add buffer mode for sampling |
+| `sdk/python/traceform/batch.py` | Add counter event type support (different from normal events) |
+| `sdk/python/traceform/client.py` | Add counter events, parse X-Traceform-Sample-Rate |
 | `sdk/typescript/src/session.ts` | Add buffer mode for sampling |
 | `sdk/typescript/src/client.ts` | Add counter events, parse sample rate header |
 | `web/app/dashboard/sessions/[id]/page.tsx` | Add "Show full payload" button for truncated spans |
@@ -89,15 +89,15 @@ All MVs use explicit `TO` target tables. All aggregate columns use `sumState`/`c
 
 Create `migrations/clickhouse/003_materialized_views.down.sql`:
 ```sql
-DROP VIEW IF EXISTS agentstack.mv_sessions_hourly;
-DROP TABLE IF EXISTS agentstack.mv_sessions_hourly_data;
-DROP VIEW IF EXISTS agentstack.mv_spans_hourly;
-DROP TABLE IF EXISTS agentstack.mv_spans_hourly_data;
-DROP VIEW IF EXISTS agentstack.mv_healing_hourly;
-DROP TABLE IF EXISTS agentstack.mv_healing_hourly_data;
-DROP VIEW IF EXISTS agentstack.mv_cost_daily;
-DROP TABLE IF EXISTS agentstack.mv_cost_daily_data;
-DROP TABLE IF EXISTS agentstack.session_counters;
+DROP VIEW IF EXISTS traceform.mv_sessions_hourly;
+DROP TABLE IF EXISTS traceform.mv_sessions_hourly_data;
+DROP VIEW IF EXISTS traceform.mv_spans_hourly;
+DROP TABLE IF EXISTS traceform.mv_spans_hourly_data;
+DROP VIEW IF EXISTS traceform.mv_healing_hourly;
+DROP TABLE IF EXISTS traceform.mv_healing_hourly_data;
+DROP VIEW IF EXISTS traceform.mv_cost_daily;
+DROP TABLE IF EXISTS traceform.mv_cost_daily_data;
+DROP TABLE IF EXISTS traceform.session_counters;
 -- Note: Cannot easily remove columns in ClickHouse; leave payload columns
 ```
 
@@ -112,7 +112,7 @@ Verify: `curl -s 'http://localhost:8123/' -d "SHOW TABLES FROM agentstack"` — 
 - [ ] **Step 4: Verify MVs populate on new inserts**
 
 Run the agent simulation: `python3 scripts/real_agents.py`
-Then check: `curl -s 'http://localhost:8123/' -d "SELECT countMerge(session_count) FROM agentstack.mv_sessions_hourly_data"`
+Then check: `curl -s 'http://localhost:8123/' -d "SELECT countMerge(session_count) FROM traceform.mv_sessions_hourly_data"`
 Expected: Non-zero count matching new sessions.
 
 - [ ] **Step 5: Commit**
@@ -174,7 +174,7 @@ set -a && source .env && set +a && go run ./cmd/migrate/main.go
 
 Verify (note: Docker maps PG to port 5436):
 ```bash
-PGPASSWORD=agentstack_dev psql -h localhost -p 5436 -U agentstack -d agentstack -c "\d sampling_config"
+PGPASSWORD=traceform_dev psql -h localhost -p 5436 -U agentstack -d agentstack -c "\d sampling_config"
 ```
 
 - [ ] **Step 4: Commit**
@@ -207,7 +207,7 @@ AdaptiveThreshold    int // hourly ingest count threshold for adaptive sampling
 Add to `Load()`:
 ```go
 BlobStoreType:       getEnv("BLOB_STORE_TYPE", "fs"),
-BlobStorePath:       getEnv("BLOB_STORE_PATH", "/tmp/agentstack/payloads"),
+BlobStorePath:       getEnv("BLOB_STORE_PATH", "/tmp/traceform/payloads"),
 DefaultSampleRate:   getEnvFloat("DEFAULT_SAMPLE_RATE", 1.0),
 AdaptiveThreshold:   getEnvInt("ADAPTIVE_THRESHOLD", 100000),
 ```
@@ -230,7 +230,7 @@ Append to `.env`:
 ```
 # Blob Storage
 BLOB_STORE_TYPE=fs
-BLOB_STORE_PATH=/tmp/agentstack/payloads
+BLOB_STORE_PATH=/tmp/traceform/payloads
 
 # Sampling
 DEFAULT_SAMPLE_RATE=1.0
@@ -483,7 +483,7 @@ Subscribe to `trace.ingest.counter` subject. Handler unmarshals `SessionCounter`
 ```go
 // Build a batch INSERT using a UNION ALL of single-row SELECTs
 // For each counter in batch:
-query := `INSERT INTO agentstack.session_counters
+query := `INSERT INTO traceform.session_counters
     SELECT ?, ?, ?, toStartOfHour(?),
         countState(), sumState(toUInt64(?)), sumState(toUInt64(?)),
         sumState(toUInt64(?)), sumState(toUInt32(?))`
@@ -504,7 +504,7 @@ Run the worker, send a large-payload span via the simulation script, verify:
 - `input_truncated = 1` and `input_hash` is populated
 
 ```bash
-curl -s 'http://localhost:8123/' -d "SELECT id, input_truncated, input_hash, length(input) FROM agentstack.spans WHERE input_truncated = 1 LIMIT 5 FORMAT Pretty"
+curl -s 'http://localhost:8123/' -d "SELECT id, input_truncated, input_hash, length(input) FROM traceform.spans WHERE input_truncated = 1 LIMIT 5 FORMAT Pretty"
 ```
 
 - [ ] **Step 6: Commit**
@@ -558,7 +558,7 @@ In `internal/trace/service/analytics.go`, change `GetOverview()` to call `GetOve
 
 Restart the API server with env sourced. Hit the overview endpoint:
 ```bash
-curl -s -H "Authorization: Bearer $(cat /tmp/agentstack_jwt.txt)" http://localhost:8080/v1/analytics/overview | python3 -m json.tool
+curl -s -H "Authorization: Bearer $(cat /tmp/traceform_jwt.txt)" http://localhost:8080/v1/analytics/overview | python3 -m json.tool
 ```
 
 Verify response matches previous values (or is very close — MV data includes only post-migration inserts).
@@ -584,14 +584,14 @@ Add a `-backfill` flag to the migrate command. When set, run `INSERT INTO` for e
 ```go
 func backfillMaterializedViews(chDB *sql.DB) error {
     queries := []string{
-        `INSERT INTO agentstack.mv_sessions_hourly_data
+        `INSERT INTO traceform.mv_sessions_hourly_data
          SELECT org_id, agent_name, toStartOfHour(started_at) AS hour,
             countState() AS session_count, countIfState(status = 'failed') AS failed_count,
             countIfState(status = 'healed') AS healed_count, countIfState(status = 'completed') AS completed_count,
             countIfState(status = 'timeout') AS timeout_count, sumState(total_tokens) AS total_tokens,
             sumState(total_cost_cents) AS total_cost_cents, sumState(duration_ms) AS sum_duration_ms,
             maxState(duration_ms) AS max_duration_ms, minState(duration_ms) AS min_duration_ms
-         FROM agentstack.sessions GROUP BY org_id, agent_name, hour`,
+         FROM traceform.sessions GROUP BY org_id, agent_name, hour`,
         // ... similar for spans, healing, cost
     }
     for _, q := range queries {
@@ -609,7 +609,7 @@ func backfillMaterializedViews(chDB *sql.DB) error {
 set -a && source .env && set +a && go run ./cmd/migrate/main.go -backfill
 ```
 
-Verify: `curl -s 'http://localhost:8123/' -d "SELECT countMerge(session_count) FROM agentstack.mv_sessions_hourly_data"` — should match total sessions count.
+Verify: `curl -s 'http://localhost:8123/' -d "SELECT countMerge(session_count) FROM traceform.mv_sessions_hourly_data"` — should match total sessions count.
 
 - [ ] **Step 3: Commit**
 
@@ -680,13 +680,13 @@ r.Route("/settings/sampling", func(r chi.Router) {
 
 ```bash
 # Create sampling config
-curl -s -X PUT -H "Authorization: Bearer $(cat /tmp/agentstack_jwt.txt)" \
+curl -s -X PUT -H "Authorization: Bearer $(cat /tmp/traceform_jwt.txt)" \
   -H "Content-Type: application/json" \
   http://localhost:8080/v1/settings/sampling \
   -d '{"agent_name":"*","sample_rate":0.1,"always_keep_errors":true}' | python3 -m json.tool
 
 # List configs
-curl -s -H "Authorization: Bearer $(cat /tmp/agentstack_jwt.txt)" \
+curl -s -H "Authorization: Bearer $(cat /tmp/traceform_jwt.txt)" \
   http://localhost:8080/v1/settings/sampling | python3 -m json.tool
 ```
 
@@ -713,11 +713,11 @@ In `internal/trace/service/ingest.go`:
 - Add `samplingService *SamplingService` to `IngestService`
 - In `IngestBatch()`: after parsing sessions, check server-side sampling for each session. If sampled out, extract counter data and publish to counter subject instead of session/span subjects.
 
-- [ ] **Step 2: Add X-AgentStack-Sample-Rate header**
+- [ ] **Step 2: Add X-Traceform-Sample-Rate header**
 
 In `internal/trace/handler/ingest.go`, in `IngestBatch()`:
 - Look up sampling config for the org
-- Set response header: `w.Header().Set("X-AgentStack-Sample-Rate", fmt.Sprintf("%.4f", config.SampleRate))`
+- Set response header: `w.Header().Set("X-Traceform-Sample-Rate", fmt.Sprintf("%.4f", config.SampleRate))`
 
 - [ ] **Step 3: Add adaptive sampling to budget checker worker**
 
@@ -770,7 +770,7 @@ func (h *PayloadHandler) GetPayload(w http.ResponseWriter, r *http.Request) {
     // Query ClickHouse for the hash
     hashCol := field + "_hash"
     var hash string
-    // SELECT {hashCol} FROM agentstack.spans WHERE id = ? AND org_id = ?
+    // SELECT {hashCol} FROM traceform.spans WHERE id = ? AND org_id = ?
     // If hash is empty, return the inline data
     // If hash exists, fetch from blob store
     data, err := h.blobStore.Get(r.Context(), hash)
@@ -786,8 +786,8 @@ In `routes.go`: `r.Get("/v1/spans/{spanID}/payload", payloadHandler.GetPayload)`
 
 After running simulation with large payloads, fetch a truncated span's full payload:
 ```bash
-SPAN_ID=$(curl -s 'http://localhost:8123/' -d "SELECT id FROM agentstack.spans WHERE input_truncated = 1 LIMIT 1" | tr -d '\n')
-curl -s -H "Authorization: Bearer $(cat /tmp/agentstack_jwt.txt)" \
+SPAN_ID=$(curl -s 'http://localhost:8123/' -d "SELECT id FROM traceform.spans WHERE input_truncated = 1 LIMIT 1" | tr -d '\n')
+curl -s -H "Authorization: Bearer $(cat /tmp/traceform_jwt.txt)" \
   "http://localhost:8080/v1/spans/$SPAN_ID/payload?field=input"
 ```
 
@@ -871,10 +871,10 @@ git commit -m "feat(worker): add daily retention worker for TTL enforcement"
 ## Task 13: Python SDK — Sampling Support
 
 **Files:**
-- Create: `sdk/python/agentstack/sampling.py`
-- Modify: `sdk/python/agentstack/__init__.py`
-- Modify: `sdk/python/agentstack/session.py`
-- Modify: `sdk/python/agentstack/client.py`
+- Create: `sdk/python/traceform/sampling.py`
+- Modify: `sdk/python/traceform/__init__.py`
+- Modify: `sdk/python/traceform/session.py`
+- Modify: `sdk/python/traceform/client.py`
 
 - [ ] **Step 1: Create sampling.py**
 
@@ -903,7 +903,7 @@ class SamplingConfig:
 
 - [ ] **Step 2: Add buffer mode to Session**
 
-In `sdk/python/agentstack/session.py`:
+In `sdk/python/traceform/session.py`:
 - Add `_sampling_config` and `_buffer` to `__init__`
 - When `sampling_config.rate < 1.0`: buffer events in `_buffer` list instead of calling `client.send_event()`
 - In `end()`: call `should_send_full()`. If True: flush buffer to client. If False: send counter event only.
@@ -911,13 +911,13 @@ In `sdk/python/agentstack/session.py`:
 
 - [ ] **Step 3: Add counter event to Client**
 
-In `sdk/python/agentstack/client.py`:
+In `sdk/python/traceform/client.py`:
 - Add `send_counter(agent_name, status, tokens, cost, duration, spans)` method
-- Parse `X-AgentStack-Sample-Rate` from batch response headers and update sampling config
+- Parse `X-Traceform-Sample-Rate` from batch response headers and update sampling config
 
 - [ ] **Step 3b: Add counter event type to BatchSender**
 
-In `sdk/python/agentstack/batch.py`: the `_send_batch()` method currently classifies events by type. Add handling for `session_counter` type events — these should be sent to a separate `/v1/ingest/counters` path (or included in the batch payload under a `counters` key). The batch sender should recognize counter events and route them correctly.
+In `sdk/python/traceform/batch.py`: the `_send_batch()` method currently classifies events by type. Add handling for `session_counter` type events — these should be sent to a separate `/v1/ingest/counters` path (or included in the batch payload under a `counters` key). The batch sender should recognize counter events and route them correctly.
 
 - [ ] **Step 3c: Write unit tests for sampling**
 
@@ -954,7 +954,7 @@ Run: `cd sdk/python && python -m pytest tests/test_sampling.py -v`
 
 - [ ] **Step 4: Add sampling param to init()**
 
-In `sdk/python/agentstack/__init__.py`:
+In `sdk/python/traceform/__init__.py`:
 ```python
 def init(api_key, endpoint=..., sampling=None, ...):
     global _sampling_config
@@ -967,24 +967,24 @@ Pass `_sampling_config` to `Session()` constructor.
 - [ ] **Step 5: Test**
 
 ```python
-import agentstack
-from agentstack.sampling import SamplingConfig
+import traceform
+from traceform.sampling import SamplingConfig
 
-agentstack.init(
-    api_key="as_sk_test123",
+traceform.init(
+    api_key="tf_sk_test123",
     endpoint="http://localhost:8080",
     sampling=SamplingConfig(rate=0.1)
 )
 
 # Run 20 sessions — expect ~2 fully sent, ~18 as counters
 for i in range(20):
-    with agentstack.session(agent_name="sampling-test") as s:
+    with traceform.session(agent_name="sampling-test") as s:
         with s.span("test", span_type="llm_call") as sp:
             sp.set_tokens(100, 50)
             sp.set_cost(5)
 
-agentstack.flush()
-agentstack.shutdown()
+traceform.flush()
+traceform.shutdown()
 ```
 
 Verify in ClickHouse: ~2 sessions + ~18 counter entries.
@@ -992,8 +992,8 @@ Verify in ClickHouse: ~2 sessions + ~18 counter entries.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add sdk/python/agentstack/sampling.py sdk/python/agentstack/__init__.py \
-  sdk/python/agentstack/session.py sdk/python/agentstack/client.py
+git add sdk/python/traceform/sampling.py sdk/python/traceform/__init__.py \
+  sdk/python/traceform/session.py sdk/python/traceform/client.py
 git commit -m "feat(sdk-python): add hybrid sampling with counter events"
 ```
 
@@ -1014,9 +1014,9 @@ Mirror the Python SamplingConfig as a TypeScript interface + class with `shouldS
 
 Same logic as Python: buffer events when sampling rate < 1.0, flush or counter at `end()`.
 
-- [ ] **Step 3: Add counter event to AgentStackClient**
+- [ ] **Step 3: Add counter event to TraceformClient**
 
-Add `sendCounter()` method and X-AgentStack-Sample-Rate header parsing.
+Add `sendCounter()` method and X-Traceform-Sample-Rate header parsing.
 
 - [ ] **Step 4: Commit**
 

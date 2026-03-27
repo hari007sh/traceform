@@ -11,7 +11,7 @@ import { getGlobalClient, getGlobalSession } from '../index';
  * @example
  * ```ts
  * import Anthropic from '@anthropic-ai/sdk';
- * import { instrumentAnthropic } from '@agentstack/sdk';
+ * import { instrumentAnthropic } from '@traceform/sdk';
  *
  * const anthropic = instrumentAnthropic(new Anthropic({ apiKey: '...' }));
  * // All calls now automatically create spans

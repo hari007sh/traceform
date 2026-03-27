@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make AgentStack survive enterprise-scale load (50K+ events/sec) by fixing OOM risks, scaling the UI to millions of sessions, hardening the gateway for 10K+ concurrent requests, and optimizing ClickHouse for billions of rows.
+**Goal:** Make Traceform survive enterprise-scale load (50K+ events/sec) by fixing OOM risks, scaling the UI to millions of sessions, hardening the gateway for 10K+ concurrent requests, and optimizing ClickHouse for billions of rows.
 
 **Architecture:** 4-phase approach — (1) fix crashes/OOM, (2) scale frontend, (3) harden gateway/SDKs, (4) optimize storage. Each phase produces independently testable changes.
 
@@ -197,7 +197,7 @@ func (w *IngestWriter) flushSessions() {
 }
 
 func (w *IngestWriter) writeDeadLetter(typ string, data interface{}) {
-	dir := "/tmp/agentstack/deadletter"
+	dir := "/tmp/traceform/deadletter"
 	os.MkdirAll(dir, 0755)
 	filename := fmt.Sprintf("%s/%s-%s.jsonl", dir, typ, time.Now().Format("2006-01-02-15"))
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
@@ -371,9 +371,9 @@ services:
     image: postgres:16
     ports: ["5436:5432"]
     environment:
-      POSTGRES_USER: agentstack
-      POSTGRES_PASSWORD: agentstack_dev
-      POSTGRES_DB: agentstack
+      POSTGRES_USER: agentstack  # legacy name, do not change
+      POSTGRES_PASSWORD: traceform_dev
+      POSTGRES_DB: agentstack  # legacy name, do not change
     volumes:
       - pgdata:/var/lib/postgresql/data
     deploy:
@@ -382,7 +382,7 @@ services:
           memory: 1G
           cpus: '1.0'
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agentstack"]
+      test: ["CMD-SHELL", "pg_isready -U agentstack  # legacy user"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -465,9 +465,9 @@ sleep 2
 
 # Start fresh
 set -a && source .env && set +a
-go run ./cmd/server/main.go &>/tmp/agentstack-server.log &
-go run ./cmd/gateway/main.go &>/tmp/agentstack-gateway.log &
-go run ./cmd/worker/main.go &>/tmp/agentstack-worker.log &
+go run ./cmd/server/main.go &>/tmp/traceform-server.log &
+go run ./cmd/gateway/main.go &>/tmp/traceform-gateway.log &
+go run ./cmd/worker/main.go &>/tmp/traceform-worker.log &
 sleep 5
 ```
 
@@ -487,7 +487,7 @@ Expected: All pass.
 # Fire 500 concurrent ingest requests
 for i in $(seq 1 500); do
   curl -s -X POST http://localhost:8080/v1/ingest/sessions \
-    -H "Authorization: Bearer as_sk_test123" \
+    -H "Authorization: Bearer tf_sk_test123" \
     -H "Content-Type: application/json" \
     -d "{\"id\":\"load-test-$i\",\"agent_name\":\"load-test\",\"status\":\"completed\",\"metadata\":\"{}\",\"total_tokens\":100,\"total_cost_cents\":5,\"duration_ms\":500}" &
 done
@@ -495,7 +495,7 @@ wait
 echo "All 500 requests sent"
 ```
 
-Expected: No OOM, no panics. Check `tail -20 /tmp/agentstack-server.log` for errors.
+Expected: No OOM, no panics. Check `tail -20 /tmp/traceform-server.log` for errors.
 
 - [ ] **Step 4: Commit Phase 1 complete marker**
 
@@ -1207,9 +1207,9 @@ git commit -m "feat: singleflight route cache to prevent thundering herd"
 ### Task 14: Python SDK Thread Safety + Shutdown Hook
 
 **Files:**
-- Modify: `sdk/python/agentstack/client.py:68,81`
-- Modify: `sdk/python/agentstack/batch.py:107-109,176-179`
-- Modify: `sdk/python/agentstack/healing.py:102-106,132`
+- Modify: `sdk/python/traceform/client.py:68,81`
+- Modify: `sdk/python/traceform/batch.py:107-109,176-179`
+- Modify: `sdk/python/traceform/healing.py:102-106,132`
 
 - [ ] **Step 1: Fix client.py thread safety**
 
@@ -1219,7 +1219,7 @@ Replace shared `requests.Session` with thread-local:
 import threading
 import atexit
 
-class AgentStackClient:
+class TraceformClient:
     def __init__(self, ...):
         self._local = threading.local()
         atexit.register(self.shutdown)
@@ -1274,7 +1274,7 @@ Expected: All 65 pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add sdk/python/agentstack/client.py sdk/python/agentstack/batch.py sdk/python/agentstack/healing.py
+git add sdk/python/traceform/client.py sdk/python/traceform/batch.py sdk/python/traceform/healing.py
 git commit -m "fix: Python SDK thread safety, bounded retries, shutdown hook"
 ```
 
@@ -1352,25 +1352,25 @@ git commit --allow-empty -m "milestone: Phase 3 complete — gateway and SDKs ha
 
 ```sql
 -- 004_skip_indexes.up.sql
-ALTER TABLE agentstack.sessions ADD INDEX idx_status status TYPE set(10) GRANULARITY 4;
-ALTER TABLE agentstack.sessions ADD INDEX idx_agent agent_name TYPE bloom_filter(0.01) GRANULARITY 4;
-ALTER TABLE agentstack.spans ADD INDEX idx_span_status status TYPE set(10) GRANULARITY 4;
-ALTER TABLE agentstack.spans ADD INDEX idx_model model TYPE bloom_filter(0.01) GRANULARITY 4;
-ALTER TABLE agentstack.spans ADD INDEX idx_span_type span_type TYPE set(10) GRANULARITY 4;
+ALTER TABLE traceform.sessions ADD INDEX idx_status status TYPE set(10) GRANULARITY 4;
+ALTER TABLE traceform.sessions ADD INDEX idx_agent agent_name TYPE bloom_filter(0.01) GRANULARITY 4;
+ALTER TABLE traceform.spans ADD INDEX idx_span_status status TYPE set(10) GRANULARITY 4;
+ALTER TABLE traceform.spans ADD INDEX idx_model model TYPE bloom_filter(0.01) GRANULARITY 4;
+ALTER TABLE traceform.spans ADD INDEX idx_span_type span_type TYPE set(10) GRANULARITY 4;
 ```
 
 - [ ] **Step 2: Create compression migration**
 
 ```sql
 -- 005_compression.up.sql
-ALTER TABLE agentstack.sessions MODIFY COLUMN input CODEC(ZSTD(3));
-ALTER TABLE agentstack.sessions MODIFY COLUMN output CODEC(ZSTD(3));
-ALTER TABLE agentstack.sessions MODIFY COLUMN metadata CODEC(ZSTD(3));
-ALTER TABLE agentstack.sessions MODIFY COLUMN error CODEC(ZSTD(3));
-ALTER TABLE agentstack.spans MODIFY COLUMN input CODEC(ZSTD(3));
-ALTER TABLE agentstack.spans MODIFY COLUMN output CODEC(ZSTD(3));
-ALTER TABLE agentstack.spans MODIFY COLUMN metadata CODEC(ZSTD(3));
-ALTER TABLE agentstack.events MODIFY COLUMN data CODEC(ZSTD(3));
+ALTER TABLE traceform.sessions MODIFY COLUMN input CODEC(ZSTD(3));
+ALTER TABLE traceform.sessions MODIFY COLUMN output CODEC(ZSTD(3));
+ALTER TABLE traceform.sessions MODIFY COLUMN metadata CODEC(ZSTD(3));
+ALTER TABLE traceform.sessions MODIFY COLUMN error CODEC(ZSTD(3));
+ALTER TABLE traceform.spans MODIFY COLUMN input CODEC(ZSTD(3));
+ALTER TABLE traceform.spans MODIFY COLUMN output CODEC(ZSTD(3));
+ALTER TABLE traceform.spans MODIFY COLUMN metadata CODEC(ZSTD(3));
+ALTER TABLE traceform.events MODIFY COLUMN data CODEC(ZSTD(3));
 ```
 
 - [ ] **Step 3: Create down migrations**
@@ -1460,7 +1460,7 @@ git commit -m "feat: separate ingest/analytics connection pools, configurable wo
 -- Migrate spans from monthly to daily partitioning
 
 -- 1. Create new table with daily partitioning
-CREATE TABLE IF NOT EXISTS agentstack.spans_new (
+CREATE TABLE IF NOT EXISTS traceform.spans_new (
     -- same schema as spans but with:
     -- PARTITION BY toYYYYMMDD(started_at)
     -- instead of toYYYYMM(started_at)
@@ -1469,27 +1469,27 @@ PARTITION BY toYYYYMMDD(started_at)
 ORDER BY (org_id, session_id, started_at, id);
 
 -- 2. Copy data
-INSERT INTO agentstack.spans_new SELECT * FROM agentstack.spans;
+INSERT INTO traceform.spans_new SELECT * FROM traceform.spans;
 
 -- 3. Atomic swap
-EXCHANGE TABLES agentstack.spans AND agentstack.spans_new;
+EXCHANGE TABLES traceform.spans AND traceform.spans_new;
 
 -- 4. Drop old
-DROP TABLE IF EXISTS agentstack.spans_new;
+DROP TABLE IF EXISTS traceform.spans_new;
 
 -- Repeat for events table
-CREATE TABLE IF NOT EXISTS agentstack.events_new (
+CREATE TABLE IF NOT EXISTS traceform.events_new (
     -- same schema with PARTITION BY toYYYYMMDD(timestamp)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
 ORDER BY (org_id, session_id, timestamp, id);
 
-INSERT INTO agentstack.events_new SELECT * FROM agentstack.events;
-EXCHANGE TABLES agentstack.events AND agentstack.events_new;
-DROP TABLE IF EXISTS agentstack.events_new;
+INSERT INTO traceform.events_new SELECT * FROM traceform.events;
+EXCHANGE TABLES traceform.events AND traceform.events_new;
+DROP TABLE IF EXISTS traceform.events_new;
 ```
 
-Note: The implementer must copy the exact column definitions from the existing tables. Use `SHOW CREATE TABLE agentstack.spans` to get the current schema and only change the PARTITION BY clause.
+Note: The implementer must copy the exact column definitions from the existing tables. Use `SHOW CREATE TABLE traceform.spans` to get the current schema and only change the PARTITION BY clause.
 
 - [ ] **Step 2: Create down migration**
 
@@ -1503,7 +1503,7 @@ Note: The implementer must copy the exact column definitions from the existing t
 ```bash
 set -a && source .env && set +a && go run ./cmd/migrate/main.go
 # Verify:
-docker exec agentstack-fresh-clickhouse-1 clickhouse-client --query "SELECT partition FROM system.parts WHERE table = 'spans' AND database = 'agentstack' GROUP BY partition ORDER BY partition LIMIT 5"
+docker exec traceform-fresh-clickhouse-1 clickhouse-client --query "SELECT partition FROM system.parts WHERE table = 'spans' AND database = 'agentstack' GROUP BY partition ORDER BY partition LIMIT 5"
 ```
 
 Expected: Daily partitions like `20260320`, `20260321` instead of monthly `202603`.
@@ -1543,7 +1543,7 @@ func (w *RetentionWorker) run() {
 		// Delete from each ClickHouse table
 		for _, table := range []string{"sessions", "spans", "events", "healing_events"} {
 			query := fmt.Sprintf(
-				"ALTER TABLE agentstack.%s DELETE WHERE org_id = ? AND started_at < ?", table)
+				"ALTER TABLE traceform.%s DELETE WHERE org_id = ? AND started_at < ?", table)
 			w.chDB.ExecContext(ctx, query, orgID, cutoff)
 		}
 	}
@@ -1552,7 +1552,7 @@ func (w *RetentionWorker) run() {
 	defaultCutoff := time.Now().AddDate(-1, 0, 0)
 	for _, table := range []string{"sessions", "spans", "events", "healing_events"} {
 		query := fmt.Sprintf(
-			"ALTER TABLE agentstack.%s DELETE WHERE started_at < ?", table)
+			"ALTER TABLE traceform.%s DELETE WHERE started_at < ?", table)
 		w.chDB.ExecContext(ctx, query, defaultCutoff)
 	}
 }
@@ -1588,8 +1588,8 @@ cd ../.. && python3 test_e2e.py
 - [ ] **Step 3: Verify pagination specifically**
 
 ```bash
-curl -s "http://localhost:8080/v1/sessions?page=1&per_page=25" -H "Authorization: Bearer as_sk_test123" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'Page 1: {len(d[\"sessions\"])} sessions, meta: {d.get(\"meta\",{})}')"
-curl -s "http://localhost:8080/v1/sessions?page=2&per_page=25" -H "Authorization: Bearer as_sk_test123" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'Page 2: {len(d[\"sessions\"])} sessions')"
+curl -s "http://localhost:8080/v1/sessions?page=1&per_page=25" -H "Authorization: Bearer tf_sk_test123" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'Page 1: {len(d[\"sessions\"])} sessions, meta: {d.get(\"meta\",{})}')"
+curl -s "http://localhost:8080/v1/sessions?page=2&per_page=25" -H "Authorization: Bearer tf_sk_test123" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'Page 2: {len(d[\"sessions\"])} sessions')"
 ```
 
 - [ ] **Step 4: Browser verify all dashboard pages with time range picker**

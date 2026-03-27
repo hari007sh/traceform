@@ -171,7 +171,7 @@ func (s *ClickHouseStore) getApproximateCount(ctx context.Context, orgID string,
 	var count int
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COALESCE(countMerge(session_count), 0)
-		 FROM agentstack.mv_sessions_hourly_data
+		 FROM traceform.mv_sessions_hourly_data
 		 WHERE org_id = ? AND hour >= ? AND hour <= ?`,
 		orgID, start, end).Scan(&count)
 	if err == nil && count > 0 {
@@ -180,7 +180,7 @@ func (s *ClickHouseStore) getApproximateCount(ctx context.Context, orgID string,
 
 	// Fallback: exact count with timeout protection
 	err = s.db.QueryRowContext(ctx,
-		`SELECT count() FROM agentstack.sessions
+		`SELECT count() FROM traceform.sessions
 		 WHERE org_id = ? AND started_at >= ? AND started_at <= ?
 		 SETTINGS max_execution_time=2`,
 		orgID, start, end).Scan(&count)
@@ -228,14 +228,14 @@ func (s *ClickHouseStore) ListSessions(ctx context.Context, orgID string, f Sess
 			total = approx
 		} else {
 			// Fall back to exact count
-			countQuery := fmt.Sprintf("SELECT count() FROM agentstack.sessions WHERE %s", whereClause)
+			countQuery := fmt.Sprintf("SELECT count() FROM traceform.sessions WHERE %s", whereClause)
 			if err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 				return nil, 0, fmt.Errorf("count sessions: %w", err)
 			}
 		}
 	} else {
 		// Filtered queries always use exact count
-		countQuery := fmt.Sprintf("SELECT count() FROM agentstack.sessions WHERE %s", whereClause)
+		countQuery := fmt.Sprintf("SELECT count() FROM traceform.sessions WHERE %s", whereClause)
 		if err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 			return nil, 0, fmt.Errorf("count sessions: %w", err)
 		}
@@ -247,7 +247,7 @@ func (s *ClickHouseStore) ListSessions(ctx context.Context, orgID string, f Sess
 		`SELECT id, org_id, agent_name, agent_id, status, input, output, error,
 		        error_fingerprint, metadata, total_tokens, total_cost_cents, total_spans, duration_ms,
 		        has_healing, tags, started_at, ended_at, created_at
-		 FROM agentstack.sessions
+		 FROM traceform.sessions
 		 WHERE %s
 		 ORDER BY %s
 		 LIMIT ? OFFSET ?`, whereClause, orderClause)
@@ -295,7 +295,7 @@ func (s *ClickHouseStore) GetSession(ctx context.Context, orgID, sessionID strin
 	query := `SELECT id, org_id, agent_name, agent_id, status, input, output, error,
 	                 error_fingerprint, metadata, total_tokens, total_cost_cents, total_spans, duration_ms,
 	                 has_healing, tags, started_at, ended_at, created_at
-	          FROM agentstack.sessions
+	          FROM traceform.sessions
 	          WHERE org_id = ? AND id = ?
 	          LIMIT 1`
 
@@ -329,7 +329,7 @@ func (s *ClickHouseStore) GetSessionSpans(ctx context.Context, orgID, sessionID 
 	                 input, output, error, model, provider,
 	                 input_tokens, output_tokens, total_tokens, cost_cents,
 	                 duration_ms, metadata, started_at, ended_at, created_at
-	          FROM agentstack.spans
+	          FROM traceform.spans
 	          WHERE org_id = ? AND session_id = ?
 	          ORDER BY started_at ASC
 	          LIMIT 1000`
@@ -368,7 +368,7 @@ func (s *ClickHouseStore) GetSessionSpans(ctx context.Context, orgID, sessionID 
 // GetSessionEvents returns all events for a session.
 func (s *ClickHouseStore) GetSessionEvents(ctx context.Context, orgID, sessionID string) ([]Event, error) {
 	query := `SELECT id, session_id, span_id, org_id, type, name, data, created_at
-	          FROM agentstack.events
+	          FROM traceform.events
 	          WHERE org_id = ? AND session_id = ?
 	          ORDER BY created_at ASC`
 
@@ -424,7 +424,7 @@ func (s *ClickHouseStore) GetOverviewStats(ctx context.Context, orgID string, st
 	            sum(total_tokens) AS tokens,
 	            sum(total_cost_cents) AS cost,
 	            countIf(has_healing = 1) AS healed
-	          FROM agentstack.sessions
+	          FROM traceform.sessions
 	          WHERE org_id = ? AND started_at >= ? AND started_at <= ?`
 
 	var stats OverviewStats
@@ -450,7 +450,7 @@ func (s *ClickHouseStore) GetSessionsOverTime(ctx context.Context, orgID string,
 	query := `SELECT
 	            toStartOfInterval(started_at, INTERVAL ? SECOND) AS bucket,
 	            count() AS cnt
-	          FROM agentstack.sessions
+	          FROM traceform.sessions
 	          WHERE org_id = ? AND started_at >= ? AND started_at <= ?
 	          GROUP BY bucket
 	          ORDER BY bucket ASC`
@@ -494,7 +494,7 @@ func (s *ClickHouseStore) GetFailureRateOverTime(ctx context.Context, orgID stri
 	            count() AS total,
 	            countIf(status = 'failed') AS failed,
 	            if(count() > 0, countIf(status = 'failed') / count(), 0) AS rate
-	          FROM agentstack.sessions
+	          FROM traceform.sessions
 	          WHERE org_id = ? AND started_at >= ? AND started_at <= ?
 	          GROUP BY bucket
 	          ORDER BY bucket ASC`
@@ -535,7 +535,7 @@ func (s *ClickHouseStore) GetOverviewFromMV(ctx context.Context, orgID string, s
 	            sumMerge(sum_cost_cents) AS total_cost_cents,
 	            sumMerge(sum_duration_ms) / GREATEST(countMerge(session_count), 1) AS avg_duration_ms,
 	            maxMerge(max_duration_ms) AS max_duration_ms
-	          FROM agentstack.mv_sessions_hourly_data
+	          FROM traceform.mv_sessions_hourly_data
 	          WHERE org_id = ? AND hour >= ? AND hour <= ?`
 
 	var totalSessions, totalFailed, totalHealed int
@@ -579,7 +579,7 @@ func (s *ClickHouseStore) GetSessionsOverTimeFromMV(ctx context.Context, orgID s
 	query := `SELECT
 	            hour AS bucket,
 	            countMerge(session_count) AS cnt
-	          FROM agentstack.mv_sessions_hourly_data
+	          FROM traceform.mv_sessions_hourly_data
 	          WHERE org_id = ? AND hour >= ? AND hour <= ?
 	          GROUP BY hour
 	          ORDER BY hour ASC`
@@ -616,7 +616,7 @@ func (s *ClickHouseStore) GetFailureRateFromMV(ctx context.Context, orgID string
 	            countMerge(failed_count) AS failed,
 	            IF(countMerge(session_count) > 0,
 	               countMerge(failed_count) / countMerge(session_count), 0) AS rate
-	          FROM agentstack.mv_sessions_hourly_data
+	          FROM traceform.mv_sessions_hourly_data
 	          WHERE org_id = ? AND hour >= ? AND hour <= ?
 	          GROUP BY hour
 	          ORDER BY hour ASC`
@@ -655,8 +655,8 @@ func (s *ClickHouseStore) GetOverviewWithCounters(ctx context.Context, orgID str
 	            COALESCE(sumMerge(mv.sum_cost_cents), 0) + COALESCE(sumMerge(c.sum_cost_cents), 0) AS total_cost_cents,
 	            (COALESCE(sumMerge(mv.sum_duration_ms), 0) + COALESCE(sumMerge(c.sum_duration_ms), 0)) /
 	                GREATEST(COALESCE(countMerge(mv.session_count), 0) + COALESCE(countMerge(c.session_count), 0), 1) AS avg_duration_ms
-	          FROM agentstack.mv_sessions_hourly_data mv
-	          FULL OUTER JOIN agentstack.session_counters c
+	          FROM traceform.mv_sessions_hourly_data mv
+	          FULL OUTER JOIN traceform.session_counters c
 	              ON mv.org_id = c.org_id AND mv.agent_name = c.agent_name AND mv.hour = c.hour
 	          WHERE (mv.org_id = ? AND mv.hour >= ? AND mv.hour <= ?)
 	             OR (c.org_id = ? AND c.hour >= ? AND c.hour <= ?)`
@@ -717,7 +717,7 @@ func (s *ClickHouseStore) ListErrorGroups(ctx context.Context, orgID string, sta
 	            min(started_at) as first_seen,
 	            max(started_at) as last_seen,
 	            groupUniqArray(agent_name) as affected_agents
-	          FROM agentstack.sessions
+	          FROM traceform.sessions
 	          WHERE org_id = ? AND error != '' AND error_fingerprint != ''
 	            AND started_at >= ? AND started_at <= ?
 	          GROUP BY error_fingerprint
@@ -766,7 +766,7 @@ func (s *ClickHouseStore) GetErrorGroupSessions(ctx context.Context, orgID, fing
 	}
 
 	// Count
-	countQuery := `SELECT count() FROM agentstack.sessions
+	countQuery := `SELECT count() FROM traceform.sessions
 	               WHERE org_id = ? AND error_fingerprint = ?
 	                 AND started_at >= ? AND started_at <= ?`
 	var total int
@@ -778,7 +778,7 @@ func (s *ClickHouseStore) GetErrorGroupSessions(ctx context.Context, orgID, fing
 	query := `SELECT id, org_id, agent_name, agent_id, status, input, output, error,
 	                 error_fingerprint, metadata, total_tokens, total_cost_cents, total_spans, duration_ms,
 	                 has_healing, tags, started_at, ended_at, created_at
-	          FROM agentstack.sessions
+	          FROM traceform.sessions
 	          WHERE org_id = ? AND error_fingerprint = ?
 	            AND started_at >= ? AND started_at <= ?
 	          ORDER BY started_at DESC

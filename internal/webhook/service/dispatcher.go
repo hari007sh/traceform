@@ -14,7 +14,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/agentstack/agentstack/internal/webhook/store"
+	"github.com/traceform/traceform/internal/webhook/store"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 )
@@ -153,7 +153,7 @@ func (d *Dispatcher) attemptDelivery(ctx context.Context, ep *store.WebhookEndpo
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "AgentStack-Webhook/1.0")
+	req.Header.Set("User-Agent", "Traceform-Webhook/1.0")
 
 	// Add custom headers from endpoint config
 	if ep.Headers != nil {
@@ -168,9 +168,9 @@ func (d *Dispatcher) attemptDelivery(ctx context.Context, ep *store.WebhookEndpo
 	// For generic webhooks, add HMAC signature
 	if ep.Type == "generic" && ep.Secret != "" {
 		sig := computeHMAC(delivery.Payload, ep.Secret)
-		req.Header.Set("X-AgentStack-Signature", "sha256="+sig)
-		req.Header.Set("X-AgentStack-Event", delivery.Event)
-		req.Header.Set("X-AgentStack-Delivery-ID", delivery.ID)
+		req.Header.Set("X-Traceform-Signature", "sha256="+sig)
+		req.Header.Set("X-Traceform-Event", delivery.Event)
+		req.Header.Set("X-Traceform-Delivery-ID", delivery.ID)
 	}
 
 	resp, err := d.httpClient.Do(req)
@@ -312,7 +312,7 @@ func (d *Dispatcher) RetryDelivery(ctx context.Context, orgID, deliveryID string
 // SendTestDelivery sends a test webhook to verify endpoint connectivity.
 func (d *Dispatcher) SendTestDelivery(ctx context.Context, ep *store.WebhookEndpoint) (*store.WebhookDelivery, error) {
 	testPayload := map[string]interface{}{
-		"message": "This is a test webhook from AgentStack",
+		"message": "This is a test webhook from Traceform",
 		"type":    "test",
 	}
 

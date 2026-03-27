@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/agentstack/agentstack/internal/server/middleware"
+	"github.com/traceform/traceform/internal/server/middleware"
 )
 
 // handleLogout revokes the current JWT token by adding its JTI to the Redis blacklist.

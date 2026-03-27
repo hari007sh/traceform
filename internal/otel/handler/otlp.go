@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	otelservice "github.com/agentstack/agentstack/internal/otel/service"
-	"github.com/agentstack/agentstack/internal/server/httputil"
-	"github.com/agentstack/agentstack/internal/server/middleware"
-	"github.com/agentstack/agentstack/internal/trace/service"
+	otelservice "github.com/traceform/traceform/internal/otel/service"
+	"github.com/traceform/traceform/internal/server/httputil"
+	"github.com/traceform/traceform/internal/server/middleware"
+	"github.com/traceform/traceform/internal/trace/service"
 )
 
 // OTLPHandler handles OTLP trace ingestion endpoints.
@@ -28,7 +28,7 @@ func NewOTLPHandler(translator *otelservice.Translator, ingestSvc *service.Inges
 }
 
 // ReceiveTraces handles POST /v1/otlp/v1/traces.
-// Accepts OTLP/HTTP JSON trace exports, translates them to AgentStack spans,
+// Accepts OTLP/HTTP JSON trace exports, translates them to Traceform spans,
 // and publishes to the existing NATS trace ingestion pipeline.
 func (h *OTLPHandler) ReceiveTraces(w http.ResponseWriter, r *http.Request) {
 	orgID := middleware.GetOrgID(r.Context())
@@ -51,7 +51,7 @@ func (h *OTLPHandler) ReceiveTraces(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Translate OTel spans to AgentStack format
+	// Translate OTel spans to Traceform format
 	spans, sessions, err := h.translator.TranslateTraceRequest(orgID, &req)
 	if err != nil {
 		h.logger.Error("failed to translate OTLP traces", "error", err)

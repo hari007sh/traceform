@@ -75,7 +75,7 @@ const allPlans: Record<PlanTier, PlanCard> = {
     limits: { events: "100K/mo", retention: "30 days", members: "5", webhooks: "10" },
     gatedFeatures: { sso: false, auditLog: true, dataExport: true, customRoles: false },
     cta: "Upgrade",
-    stripeUrl: "https://billing.stripe.com/p/login/agentstack-cloud",
+    stripeUrl: "https://billing.stripe.com/p/login/traceform-cloud",
   },
   team: {
     name: "Team",
@@ -95,7 +95,7 @@ const allPlans: Record<PlanTier, PlanCard> = {
     gatedFeatures: { sso: false, auditLog: true, dataExport: true, customRoles: false },
     highlight: true,
     cta: "Upgrade",
-    stripeUrl: "https://billing.stripe.com/p/login/agentstack-team",
+    stripeUrl: "https://billing.stripe.com/p/login/traceform-team",
   },
   enterprise: {
     name: "Enterprise",
@@ -135,14 +135,14 @@ const planDisplayNames: Record<string, string> = {
 function handlePlanAction(tier: PlanTier) {
   const plan = allPlans[tier];
   if (tier === "enterprise") {
-    window.location.href = "mailto:sales@agentstack.dev?subject=AgentStack%20Enterprise%20Inquiry";
+    window.location.href = "mailto:sales@traceform.dev?subject=Traceform%20Enterprise%20Inquiry";
     return;
   }
   if (plan.stripeUrl) {
     window.open(plan.stripeUrl, "_blank");
     return;
   }
-  showSuccess("Contact sales@agentstack.dev to change plans");
+  showSuccess("Contact sales@traceform.dev to change plans");
 }
 
 function formatNumber(n: number): string {

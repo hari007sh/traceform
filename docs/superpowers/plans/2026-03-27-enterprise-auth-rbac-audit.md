@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add SAML/OIDC SSO, role enforcement (owner/admin/viewer), and audit logging to AgentStack for enterprise security compliance.
+**Goal:** Add SAML/OIDC SSO, role enforcement (owner/admin/viewer), and audit logging to Traceform for enterprise security compliance.
 
 **Architecture:** Three layers built bottom-up: (1) database migrations for SSO configs, roles, and audit logs, (2) Go middleware + services for RBAC and audit, (3) SSO auth flows with SAML/OIDC libraries, (4) frontend pages for SSO config, audit log viewer, and role-based UI.
 
@@ -115,7 +115,7 @@ set -a && source .env && set +a && go run ./cmd/migrate/main.go
 
 Verify tables exist:
 ```bash
-PGPASSWORD=agentstack_dev psql -h localhost -p 5436 -U agentstack -d agentstack -c "\dt sso_configs" -c "\dt roles" -c "\dt audit_logs"
+PGPASSWORD=traceform_dev psql -h localhost -p 5436 -U agentstack -d agentstack -c "\dt sso_configs" -c "\dt roles" -c "\dt audit_logs"
 ```
 
 - [ ] **Step 5: Commit**
@@ -427,7 +427,7 @@ import (
     "log/slog"
     "net/http"
 
-    "github.com/agentstack/agentstack/internal/server/middleware"
+    "github.com/traceform/traceform/internal/server/middleware"
 )
 
 type Logger struct {
@@ -478,8 +478,8 @@ import (
     "net/http"
     "strconv"
 
-    "github.com/agentstack/agentstack/internal/server/httputil"
-    "github.com/agentstack/agentstack/internal/server/middleware"
+    "github.com/traceform/traceform/internal/server/httputil"
+    "github.com/traceform/traceform/internal/server/middleware"
 )
 
 type Handler struct {

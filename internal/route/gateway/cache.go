@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/agentstack/agentstack/internal/route/provider"
-	"github.com/agentstack/agentstack/internal/route/store"
+	"github.com/traceform/traceform/internal/route/provider"
+	"github.com/traceform/traceform/internal/route/store"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -63,7 +63,7 @@ func (c *SemanticCache) Get(ctx context.Context, orgID string, req *provider.Cha
 	}
 
 	key := CacheKey(orgID, req)
-	redisKey := fmt.Sprintf("agentstack:cache:%s:%s", orgID, key)
+	redisKey := fmt.Sprintf("traceform:cache:%s:%s", orgID, key)
 
 	// Fast path: Redis lookup
 	data, err := c.redis.Get(ctx, redisKey).Bytes()
@@ -106,7 +106,7 @@ func (c *SemanticCache) Set(ctx context.Context, orgID string, req *provider.Cha
 	}
 
 	key := CacheKey(orgID, req)
-	redisKey := fmt.Sprintf("agentstack:cache:%s:%s", orgID, key)
+	redisKey := fmt.Sprintf("traceform:cache:%s:%s", orgID, key)
 
 	data, err := json.Marshal(resp)
 	if err != nil {

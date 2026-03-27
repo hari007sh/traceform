@@ -11,13 +11,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/agentstack/agentstack/internal/config"
-	costservice "github.com/agentstack/agentstack/internal/cost/service"
-	coststore "github.com/agentstack/agentstack/internal/cost/store"
-	"github.com/agentstack/agentstack/internal/route/gateway"
-	"github.com/agentstack/agentstack/internal/route/service"
-	"github.com/agentstack/agentstack/internal/route/store"
-	"github.com/agentstack/agentstack/internal/server/middleware"
+	"github.com/traceform/traceform/internal/config"
+	costservice "github.com/traceform/traceform/internal/cost/service"
+	coststore "github.com/traceform/traceform/internal/cost/store"
+	"github.com/traceform/traceform/internal/route/gateway"
+	"github.com/traceform/traceform/internal/route/service"
+	"github.com/traceform/traceform/internal/route/store"
+	"github.com/traceform/traceform/internal/server/middleware"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -101,8 +101,8 @@ func main() {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-AgentStack-Org-ID", "X-AgentStack-Feature", "X-AgentStack-Customer", "X-AgentStack-Cache"},
-		ExposedHeaders:   []string{"X-AgentStack-Request-ID", "X-AgentStack-Provider", "X-AgentStack-Model", "X-AgentStack-Cache-Hit", "X-AgentStack-Budget-Warning"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Traceform-Org-ID", "X-Traceform-Feature", "X-Traceform-Customer", "X-Traceform-Cache"},
+		ExposedHeaders:   []string{"X-Traceform-Request-ID", "X-Traceform-Provider", "X-Traceform-Model", "X-Traceform-Cache-Hit", "X-Traceform-Budget-Warning"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))

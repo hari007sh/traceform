@@ -1,0 +1,36 @@
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "traceform.fullname" . }}-server
+  labels:
+    {{- include "traceform.componentLabels" (dict "root" . "component" "server") | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "traceform.selectorLabels" (dict "root" . "component" "server") | nindent 6 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "traceform.fullname" . }}-gateway
+  labels:
+    {{- include "traceform.componentLabels" (dict "root" . "component" "gateway") | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "traceform.selectorLabels" (dict "root" . "component" "gateway") | nindent 6 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "traceform.fullname" . }}-web
+  labels:
+    {{- include "traceform.componentLabels" (dict "root" . "component" "web") | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "traceform.selectorLabels" (dict "root" . "component" "web") | nindent 6 }}

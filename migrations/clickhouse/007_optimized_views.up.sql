@@ -9,7 +9,7 @@
 --    Enables fast cost analytics queries without scanning
 --    the full spans table.
 -- -------------------------------------------------------
-CREATE TABLE IF NOT EXISTS agentstack.mv_cost_hourly_data (
+CREATE TABLE IF NOT EXISTS traceform.mv_cost_hourly_data (
     org_id String,
     model LowCardinality(String),
     hour DateTime,
@@ -21,8 +21,8 @@ CREATE TABLE IF NOT EXISTS agentstack.mv_cost_hourly_data (
 PARTITION BY toYYYYMM(hour)
 ORDER BY (org_id, model, hour);
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS agentstack.mv_cost_hourly
-TO agentstack.mv_cost_hourly_data
+CREATE MATERIALIZED VIEW IF NOT EXISTS traceform.mv_cost_hourly
+TO traceform.mv_cost_hourly_data
 AS SELECT
     org_id,
     model,
@@ -31,7 +31,7 @@ AS SELECT
     sumState(input_tokens) AS total_input_tokens,
     sumState(output_tokens) AS total_output_tokens,
     countState() AS request_count
-FROM agentstack.spans
+FROM traceform.spans
 WHERE cost_cents > 0
 GROUP BY org_id, model, hour;
 
@@ -40,7 +40,7 @@ GROUP BY org_id, model, hour;
 --    Enables fast error group queries and trending without
 --    scanning the full sessions table.
 -- -------------------------------------------------------
-CREATE TABLE IF NOT EXISTS agentstack.mv_errors_daily_data (
+CREATE TABLE IF NOT EXISTS traceform.mv_errors_daily_data (
     org_id String,
     error_fingerprint String,
     day Date,
@@ -51,8 +51,8 @@ CREATE TABLE IF NOT EXISTS agentstack.mv_errors_daily_data (
 PARTITION BY toYYYYMM(day)
 ORDER BY (org_id, error_fingerprint, day);
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS agentstack.mv_errors_daily
-TO agentstack.mv_errors_daily_data
+CREATE MATERIALIZED VIEW IF NOT EXISTS traceform.mv_errors_daily
+TO traceform.mv_errors_daily_data
 AS SELECT
     org_id,
     error_fingerprint,
@@ -60,6 +60,6 @@ AS SELECT
     countState() AS error_count,
     anyState(error) AS sample_error,
     anyState(agent_name) AS sample_agent
-FROM agentstack.sessions
+FROM traceform.sessions
 WHERE status = 'failed' AND error_fingerprint != ''
 GROUP BY org_id, error_fingerprint, day;

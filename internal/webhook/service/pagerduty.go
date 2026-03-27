@@ -33,14 +33,14 @@ func FormatPagerDutyEvent(event string, payload map[string]interface{}, routingK
 		Payload: PagerDutyPayload{
 			Summary:       summary,
 			Severity:      severity,
-			Source:        "agentstack",
+			Source:        "traceform",
 			Component:     component,
 			CustomDetails: payload,
 		},
 	}
 }
 
-// mapEventToSeverity maps AgentStack events to PagerDuty severity levels.
+// mapEventToSeverity maps Traceform events to PagerDuty severity levels.
 func mapEventToSeverity(event string) string {
 	switch event {
 	case "shield.circuit_break", "cost.budget_exceeded", "test.run_failed":
@@ -72,7 +72,7 @@ func mapEventToComponent(event string) string {
 	case len(event) > 8 && event[:8] == "session.":
 		return "trace"
 	default:
-		return "agentstack"
+		return "traceform"
 	}
 }
 
@@ -135,7 +135,7 @@ func buildPDSummary(event string, payload map[string]interface{}) string {
 			getStr(payload, "agent_name"),
 			getStr(payload, "error"))
 	default:
-		return fmt.Sprintf("AgentStack event: %s", event)
+		return fmt.Sprintf("Traceform event: %s", event)
 	}
 }
 

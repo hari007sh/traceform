@@ -155,7 +155,7 @@ export default function HealingPage() {
               : "Failed to load healing data";
 
         console.error(
-          `[AgentStack] ${new Date().toISOString()} HealingPage: API call failed. Reason: ${message}`
+          `[Traceform] ${new Date().toISOString()} HealingPage: API call failed. Reason: ${message}`
         );
 
         setFetchError(message);
@@ -281,9 +281,9 @@ export default function HealingPage() {
               Quick Start
             </div>
             <pre className="px-4 py-3 text-xs leading-relaxed overflow-x-auto font-mono text-[var(--text-secondary)]">
-              <code>{`import agentstack
+              <code>{`import traceform
 
-agentstack.init(
+traceform.init(
     api_key="your-key",
     shield=True
 )`}</code>
@@ -291,7 +291,7 @@ agentstack.init(
           </div>
 
           <a
-            href="https://docs.agentstack.dev/shield"
+            href="https://docs.traceform.dev/shield"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-[var(--accent-blue)] hover:bg-[var(--accent-blue)]/10 transition-colors"

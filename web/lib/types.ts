@@ -1,4 +1,4 @@
-// Shared types for the AgentStack dashboard
+// Shared types for the Traceform dashboard
 
 export interface Session {
   id: string;

@@ -317,7 +317,7 @@ export default function APIKeysPage() {
         <Info className="w-4 h-4 text-[var(--accent-blue)] mt-0.5 flex-shrink-0" />
         <div>
           <p className="text-sm text-[var(--text-primary)]">
-            API keys authenticate your SDK and CLI with AgentStack.
+            API keys authenticate your SDK and CLI with Traceform.
           </p>
           <p className="text-xs text-[var(--text-tertiary)] mt-1">
             Keys are only shown once upon creation. Store them securely in your environment variables.
@@ -377,7 +377,7 @@ export default function APIKeysPage() {
                 {keys.map((key) => {
                   const expiryStatus = getExpiryStatus(key.expires_at);
                   const isVisible = visibleKeys.has(key.id);
-                  const displayPrefix = key.key_prefix || "as_sk_...";
+                  const displayPrefix = key.key_prefix || "tf_sk_...";
                   return (
                     <motion.tr
                       key={key.id}

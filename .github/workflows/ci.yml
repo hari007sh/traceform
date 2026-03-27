@@ -19,9 +19,9 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: agentstack
-          POSTGRES_PASSWORD: agentstack_dev
-          POSTGRES_DB: agentstack
+          POSTGRES_USER: agentstack  # legacy name, do not change
+          POSTGRES_PASSWORD: traceform_dev
+          POSTGRES_DB: agentstack  # legacy name, do not change
         ports: ['5432:5432']
         options: >-
           --health-cmd pg_isready
@@ -52,7 +52,7 @@ jobs:
       - name: Test
         run: go test ./... -v -count=1 -race -coverprofile=coverage.out
         env:
-          DATABASE_URL: postgresql://agentstack:agentstack_dev@localhost:5432/agentstack?sslmode=disable
+          DATABASE_URL: postgresql://agentstack:traceform_dev@localhost:5432/agentstack?sslmode=disable
           REDIS_URL: redis://localhost:6379
           NATS_URL: nats://localhost:4222
           JWT_SECRET: ci-test-secret
@@ -102,9 +102,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build server image
-        run: docker build -f deploy/Dockerfile -t agentstack/server:ci .
+        run: docker build -f deploy/Dockerfile -t traceform/server:ci .
       - name: Build gateway image
-        run: docker build -f deploy/Dockerfile.gateway -t agentstack/gateway:ci .
+        run: docker build -f deploy/Dockerfile.gateway -t traceform/gateway:ci .
 
   e2e-test:
     name: E2E Integration Tests
@@ -114,9 +114,9 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: agentstack
-          POSTGRES_PASSWORD: agentstack_dev
-          POSTGRES_DB: agentstack
+          POSTGRES_USER: agentstack  # legacy name, do not change
+          POSTGRES_PASSWORD: traceform_dev
+          POSTGRES_DB: agentstack  # legacy name, do not change
         ports: ['5432:5432']
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
       clickhouse:
@@ -140,14 +140,14 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Run migrations
         env:
-          DATABASE_URL: postgresql://agentstack:agentstack_dev@localhost:5432/agentstack?sslmode=disable
+          DATABASE_URL: postgresql://agentstack:traceform_dev@localhost:5432/agentstack?sslmode=disable
           CLICKHOUSE_URL: clickhouse://localhost:9000/agentstack
           REDIS_URL: redis://localhost:6379
           NATS_URL: nats://localhost:4222
         run: go run ./cmd/migrate/main.go
       - name: Seed data
         env:
-          DATABASE_URL: postgresql://agentstack:agentstack_dev@localhost:5432/agentstack?sslmode=disable
+          DATABASE_URL: postgresql://agentstack:traceform_dev@localhost:5432/agentstack?sslmode=disable
           CLICKHOUSE_URL: clickhouse://localhost:9000/agentstack
           REDIS_URL: redis://localhost:6379
           NATS_URL: nats://localhost:4222
@@ -156,7 +156,7 @@ jobs:
         env:
           PORT: '8080'
           GATEWAY_PORT: '8090'
-          DATABASE_URL: postgresql://agentstack:agentstack_dev@localhost:5432/agentstack?sslmode=disable
+          DATABASE_URL: postgresql://agentstack:traceform_dev@localhost:5432/agentstack?sslmode=disable
           CLICKHOUSE_URL: clickhouse://localhost:9000/agentstack
           REDIS_URL: redis://localhost:6379
           NATS_URL: nats://localhost:4222
@@ -170,8 +170,8 @@ jobs:
           sleep 10
       - name: Run E2E tests
         env:
-          AGENTSTACK_URL: http://localhost:8080
-          AGENTSTACK_GATEWAY_URL: http://localhost:8090
+          TRACEFORM_URL: http://localhost:8080
+          TRACEFORM_GATEWAY_URL: http://localhost:8090
         run: python3 test_e2e.py
 
   security-scan:
@@ -232,4 +232,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4
       - name: Lint chart
-        run: helm lint deploy/helm/agentstack/ || true
+        run: helm lint deploy/helm/traceform/ || true

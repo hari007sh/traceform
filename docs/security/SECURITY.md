@@ -2,11 +2,11 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in AgentStack, please report it responsibly. **Do not open a public GitHub issue.**
+If you discover a security vulnerability in Traceform, please report it responsibly. **Do not open a public GitHub issue.**
 
 ### Contact
 
-Email: **security@agentstack.dev**
+Email: **security@traceform.dev**
 
 Include the following in your report:
 

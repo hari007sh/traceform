@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	"github.com/agentstack/agentstack/internal/trace/store"
+	"github.com/traceform/traceform/internal/trace/store"
 )
 
 // PatternService manages failure patterns in PostgreSQL.

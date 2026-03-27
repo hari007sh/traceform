@@ -52,7 +52,7 @@ func (j *JWTManager) GenerateToken(userID, orgID, email, role string) (string, e
 			ID:        uuid.New().String(),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(getJWTExpiry())),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "agentstack",
+			Issuer:    "traceform",
 		},
 	}
 

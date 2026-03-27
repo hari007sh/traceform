@@ -6,16 +6,16 @@ import {
   SpanError,
   TokenUsage,
 } from './types';
-import { AgentStackClient } from './client';
+import { TraceformClient } from './client';
 
 export class SpanInstance {
   private data: SpanData;
-  private client: AgentStackClient;
+  private client: TraceformClient;
   private children: SpanInstance[] = [];
   private startTime: number;
 
   constructor(
-    client: AgentStackClient,
+    client: TraceformClient,
     name: string,
     sessionId: string,
     type: SpanType = SpanType.CUSTOM,

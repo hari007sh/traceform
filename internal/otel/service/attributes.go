@@ -21,20 +21,20 @@ const (
 	AttrRPCSystem   = "rpc.system"
 )
 
-// AgentStack custom attributes used in OTel spans.
+// Traceform custom attributes used in OTel spans.
 const (
-	AttrAgentStackOrgID      = "agentstack.org.id"
-	AttrAgentStackAgentID    = "agentstack.agent.id"
-	AttrAgentStackSessionID  = "agentstack.session.id"
-	AttrAgentStackSpanType   = "agentstack.span.type"
-	AttrAgentStackPromptID   = "agentstack.prompt.id"
-	AttrAgentStackPromptVer  = "agentstack.prompt.version"
+	AttrTraceformOrgID      = "traceform.org.id"
+	AttrTraceformAgentID    = "traceform.agent.id"
+	AttrTraceformSessionID  = "traceform.session.id"
+	AttrTraceformSpanType   = "traceform.span.type"
+	AttrTraceformPromptID   = "traceform.prompt.id"
+	AttrTraceformPromptVer  = "traceform.prompt.version"
 )
 
-// DetectSpanType infers the AgentStack span type from OTel attributes.
+// DetectSpanType infers the Traceform span type from OTel attributes.
 func DetectSpanType(attrs map[string]interface{}) string {
-	// If agentstack.span.type is explicitly set, use it
-	if v, ok := attrs[AttrAgentStackSpanType]; ok {
+	// If traceform.span.type is explicitly set, use it
+	if v, ok := attrs[AttrTraceformSpanType]; ok {
 		if s, ok := v.(string); ok && s != "" {
 			return s
 		}

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/agentstack/agentstack/internal/prompt/store"
+	"github.com/traceform/traceform/internal/prompt/store"
 )
 
 // VersionService handles prompt version business logic.

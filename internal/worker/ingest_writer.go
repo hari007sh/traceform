@@ -15,10 +15,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	shieldservice "github.com/agentstack/agentstack/internal/shield/service"
-	shieldstore "github.com/agentstack/agentstack/internal/shield/store"
-	"github.com/agentstack/agentstack/internal/storage"
-	"github.com/agentstack/agentstack/internal/trace/service"
+	shieldservice "github.com/traceform/traceform/internal/shield/service"
+	shieldstore "github.com/traceform/traceform/internal/shield/store"
+	"github.com/traceform/traceform/internal/storage"
+	"github.com/traceform/traceform/internal/trace/service"
 	"github.com/nats-io/nats.go"
 )
 
@@ -422,11 +422,11 @@ func (w *IngestWriter) flushCounters() {
 }
 
 // writeDeadLetter persists a failed batch to disk so it can be replayed later.
-// Files are written to /tmp/agentstack/deadletter/TYPE-YYYY-MM-DD-HH.jsonl.
+// Files are written to /tmp/traceform/deadletter/TYPE-YYYY-MM-DD-HH.jsonl.
 func (w *IngestWriter) writeDeadLetter(typ string, data interface{}) {
 	dir := os.Getenv("DEAD_LETTER_PATH")
 	if dir == "" {
-		dir = "/tmp/agentstack/deadletter"
+		dir = "/tmp/traceform/deadletter"
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		w.logger.Error("failed to create dead-letter dir", "error", err)
@@ -466,7 +466,7 @@ func (w *IngestWriter) writeSessions(ctx context.Context, sessions []service.Ses
 	}
 
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT INTO agentstack.sessions
+		`INSERT INTO traceform.sessions
 		 (id, org_id, agent_name, agent_id, status, input, output, error,
 		  error_fingerprint, metadata, total_tokens, total_cost_cents, total_spans, duration_ms,
 		  has_healing, tags, started_at, ended_at)
@@ -506,7 +506,7 @@ func (w *IngestWriter) writeSpans(ctx context.Context, spans []service.SpanInges
 	}
 
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT INTO agentstack.spans
+		`INSERT INTO traceform.spans
 		 (id, session_id, org_id, parent_id, name, span_type, status,
 		  input, output, error, model, provider,
 		  input_tokens, output_tokens, total_tokens, cost_cents,
@@ -552,7 +552,7 @@ func (w *IngestWriter) writeEvents(ctx context.Context, events []service.EventIn
 	}
 
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT INTO agentstack.events
+		`INSERT INTO traceform.events
 		 (id, session_id, span_id, org_id, type, name, data, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
@@ -618,7 +618,7 @@ func (w *IngestWriter) writeCounters(ctx context.Context, counters []SessionCoun
 	for _, c := range counters {
 		hour := parseTime(c.CreatedAt).Truncate(time.Hour)
 		_, err := tx.ExecContext(ctx,
-			`INSERT INTO agentstack.session_counters
+			`INSERT INTO traceform.session_counters
 			 SELECT ?, ?, ?, ?,
 				 countState(),
 				 sumState(toUInt64(?)),

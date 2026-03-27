@@ -96,9 +96,9 @@ interface ClientConfig {
   debug: boolean;
 }
 
-// ─── AgentStackClient ───────────────────────────────────────────────────────
+// ─── TraceformClient ───────────────────────────────────────────────────────
 
-export class AgentStackClient {
+export class TraceformClient {
   private static readonly MAX_BUFFER_SIZE = 10_000;
 
   private config: ClientConfig;
@@ -112,12 +112,12 @@ export class AgentStackClient {
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private isFlushing = false;
 
-  /** Server-suggested sample rate parsed from the X-AgentStack-Sample-Rate header. */
+  /** Server-suggested sample rate parsed from the X-Traceform-Sample-Rate header. */
   private _serverSampleRate: number | null = null;
 
   constructor(config: Partial<ClientConfig> & { apiKey: string; projectId: string }) {
     this.config = {
-      endpoint: 'https://api.agentstack.dev',
+      endpoint: 'https://api.traceform.dev',
       batchSize: 50,
       flushIntervalMs: 5000,
       maxRetries: 3,
@@ -142,9 +142,9 @@ export class AgentStackClient {
    * exceeds MAX_BUFFER_SIZE.
    */
   private boundedPush<T>(buffer: T[], item: T): void {
-    if (buffer.length >= AgentStackClient.MAX_BUFFER_SIZE) {
+    if (buffer.length >= TraceformClient.MAX_BUFFER_SIZE) {
       buffer.shift();
-      this.log(`Buffer at capacity (${AgentStackClient.MAX_BUFFER_SIZE}), oldest entry dropped`);
+      this.log(`Buffer at capacity (${TraceformClient.MAX_BUFFER_SIZE}), oldest entry dropped`);
     }
     buffer.push(item);
   }
@@ -275,7 +275,7 @@ export class AgentStackClient {
       // Put data back in the buffers on failure.
       // Avoid .unshift(...arr) with spread — large arrays blow the call stack.
       // Concat and slice to respect MAX_BUFFER_SIZE.
-      const max = AgentStackClient.MAX_BUFFER_SIZE;
+      const max = TraceformClient.MAX_BUFFER_SIZE;
       this.sessionBuffer = sessions.concat(this.sessionBuffer).slice(0, max);
       this.spanBuffer = spans.concat(this.spanBuffer).slice(0, max);
       this.eventBuffer = events.concat(this.eventBuffer).slice(0, max);
@@ -367,7 +367,7 @@ export class AgentStackClient {
     }
 
     // Parse server-provided sample rate from response headers
-    const sampleRateHeader = response.headers.get('X-AgentStack-Sample-Rate');
+    const sampleRateHeader = response.headers.get('X-Traceform-Sample-Rate');
     if (sampleRateHeader) {
       const parsed = parseFloat(sampleRateHeader);
       if (!isNaN(parsed) && parsed >= 0 && parsed <= 1) {
@@ -414,7 +414,7 @@ export class AgentStackClient {
 
   private log(message: string): void {
     if (this.config.debug) {
-      console.log(`[agentstack] ${message}`);
+      console.log(`[traceform] ${message}`);
     }
   }
 

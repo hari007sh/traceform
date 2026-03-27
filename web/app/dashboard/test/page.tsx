@@ -206,7 +206,7 @@ export default function TestOverviewPage() {
           : "Failed to load test data";
 
       console.error(
-        `[AgentStack] ${new Date().toISOString()} TestPage: API call failed. Reason: ${message}`
+        `[Traceform] ${new Date().toISOString()} TestPage: API call failed. Reason: ${message}`
       );
 
       setError(message);
@@ -335,7 +335,7 @@ export default function TestOverviewPage() {
               </button>
             </RequireRole>
             <a
-              href="https://docs.agentstack.dev/test/evaluators"
+              href="https://docs.traceform.dev/test/evaluators"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border-default)] bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] transition-colors"

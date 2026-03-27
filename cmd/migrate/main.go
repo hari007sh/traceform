@@ -14,7 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/agentstack/agentstack/internal/config"
+	"github.com/traceform/traceform/internal/config"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -399,7 +399,7 @@ func backfillMaterializedViews() error {
 	}{
 		{
 			name: "mv_sessions_hourly_data",
-			query: `INSERT INTO agentstack.mv_sessions_hourly_data
+			query: `INSERT INTO traceform.mv_sessions_hourly_data
 SELECT org_id, agent_name, toStartOfHour(started_at) AS hour,
     countState() AS session_count,
     countIfState(status = 'failed') AS failed_count,
@@ -411,12 +411,12 @@ SELECT org_id, agent_name, toStartOfHour(started_at) AS hour,
     sumState(duration_ms) AS sum_duration_ms,
     maxState(duration_ms) AS max_duration_ms,
     minState(duration_ms) AS min_duration_ms
-FROM agentstack.sessions
+FROM traceform.sessions
 GROUP BY org_id, agent_name, hour`,
 		},
 		{
 			name: "mv_spans_hourly_data",
-			query: `INSERT INTO agentstack.mv_spans_hourly_data
+			query: `INSERT INTO traceform.mv_spans_hourly_data
 SELECT org_id, model, provider, toString(span_type) AS span_type,
     toStartOfHour(started_at) AS hour,
     countState() AS span_count,
@@ -427,23 +427,23 @@ SELECT org_id, model, provider, toString(span_type) AS span_type,
     sumState(cost_cents) AS sum_cost_cents,
     sumState(duration_ms) AS sum_duration_ms,
     maxState(duration_ms) AS max_duration_ms
-FROM agentstack.spans
+FROM traceform.spans
 GROUP BY org_id, model, provider, span_type, hour`,
 		},
 		{
 			name: "mv_healing_hourly_data",
-			query: `INSERT INTO agentstack.mv_healing_hourly_data
+			query: `INSERT INTO traceform.mv_healing_hourly_data
 SELECT org_id, toString(healing_type) AS healing_type,
     toStartOfHour(created_at) AS hour,
     countState() AS total_count,
     countIfState(success = 1) AS success_count,
     sumState(latency_ms) AS sum_latency_ms
-FROM agentstack.healing_events
+FROM traceform.healing_events
 GROUP BY org_id, healing_type, hour`,
 		},
 		{
 			name: "mv_cost_daily_data",
-			query: `INSERT INTO agentstack.mv_cost_daily_data
+			query: `INSERT INTO traceform.mv_cost_daily_data
 SELECT org_id, model, provider,
     toDate(started_at) AS day,
     countState() AS span_count,
@@ -451,7 +451,7 @@ SELECT org_id, model, provider,
     sumState(output_tokens) AS sum_output_tokens,
     sumState(cost_cents) AS sum_cost_cents,
     avgState(cost_cents) AS avg_cost_cents
-FROM agentstack.spans
+FROM traceform.spans
 WHERE cost_cents > 0
 GROUP BY org_id, model, provider, day`,
 		},

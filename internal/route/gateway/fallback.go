@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/agentstack/agentstack/internal/route/provider"
-	"github.com/agentstack/agentstack/internal/route/store"
+	"github.com/traceform/traceform/internal/route/provider"
+	"github.com/traceform/traceform/internal/route/store"
 )
 
 // FallbackExecutor tries each provider in a fallback chain until one succeeds.

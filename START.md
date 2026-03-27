@@ -1,4 +1,4 @@
-# AgentStack — Fresh Start Guide
+# Traceform — Fresh Start Guide
 
 ## Prerequisites
 
@@ -37,12 +37,12 @@ go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 ```bash
 # 1. Create project directory and copy files
-mkdir -p ~/agentstack
-cp -r /path/to/agentstack-fresh/* ~/agentstack/
-cp -r /path/to/agentstack-fresh/.claude ~/agentstack/.claude
+mkdir -p ~/traceform
+cp -r /path/to/agentstack-fresh/* ~/traceform/
+cp -r /path/to/agentstack-fresh/.claude ~/traceform/.claude
 
 # Verify file structure
-ls -la ~/agentstack/
+ls -la ~/traceform/
 # Should show:
 #   CLAUDE.md
 #   START.md
@@ -55,7 +55,7 @@ ls -la ~/agentstack/
 #   specs/spec-route-guard.md
 
 # 2. Initialize git
-cd ~/agentstack
+cd ~/traceform
 git init
 git add -A
 git commit -m "chore: initial project specs and claude configuration"
@@ -64,7 +64,7 @@ git commit -m "chore: initial project specs and claude configuration"
 open -a "Google Chrome" http://localhost:3000
 
 # 4. Start Claude Code
-cd ~/agentstack
+cd ~/traceform
 claude
 ```
 
@@ -73,7 +73,7 @@ claude
 Paste this into the Claude Code session:
 
 ```
-Read CLAUDE.md completely. This is the master specification for AgentStack — an open-source AI agent production platform with 6 modules (Shield, Trace, Test, Guard, Route, Cost).
+Read CLAUDE.md completely. This is the master specification for Traceform — an open-source AI agent production platform with 6 modules (Shield, Trace, Test, Guard, Route, Cost).
 
 Also read .claude/CLAUDE.md for project-level coding standards, UI/UX requirements, testing requirements, and the mandatory verification workflow.
 

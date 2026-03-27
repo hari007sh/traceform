@@ -8,7 +8,7 @@
 
 ## 1. Context
 
-AgentStack ingests trace data (sessions, spans, events) from AI agent SDKs. Current architecture:
+Traceform ingests trace data (sessions, spans, events) from AI agent SDKs. Current architecture:
 
 - **SDK** batches events (50 per batch, 5s flush) and sends to API
 - **API** (Go, port 8080) validates and publishes to NATS per-entity
@@ -42,7 +42,7 @@ target table. This is required because ClickHouse MVs only trigger on new INSERT
 to the source table — they cannot retroactively process existing data.
 
 ```sql
-CREATE TABLE agentstack.mv_sessions_hourly_data (
+CREATE TABLE traceform.mv_sessions_hourly_data (
     org_id UUID,
     agent_name LowCardinality(String),
     hour DateTime,
@@ -60,8 +60,8 @@ CREATE TABLE agentstack.mv_sessions_hourly_data (
 PARTITION BY toYYYYMM(hour)
 ORDER BY (org_id, hour, agent_name);
 
-CREATE MATERIALIZED VIEW agentstack.mv_sessions_hourly
-TO agentstack.mv_sessions_hourly_data
+CREATE MATERIALIZED VIEW traceform.mv_sessions_hourly
+TO traceform.mv_sessions_hourly_data
 AS SELECT
     org_id,
     agent_name,
@@ -76,7 +76,7 @@ AS SELECT
     sumState(duration_ms) AS sum_duration_ms,
     maxState(duration_ms) AS max_duration_ms,
     minState(duration_ms) AS min_duration_ms
-FROM agentstack.sessions
+FROM traceform.sessions
 GROUP BY org_id, agent_name, hour;
 ```
 
@@ -86,17 +86,17 @@ combine `avgMerge` from one table with raw sums from another).
 
 Backfill command inserts directly into the target table:
 ```sql
-INSERT INTO agentstack.mv_sessions_hourly_data
+INSERT INTO traceform.mv_sessions_hourly_data
 SELECT org_id, agent_name, toStartOfHour(started_at) AS hour,
     countState() AS session_count, ...
-FROM agentstack.sessions
+FROM traceform.sessions
 GROUP BY org_id, agent_name, hour;
 ```
 
 **`mv_spans_hourly`** — Aggregate span metrics per org, model, provider, span_type, hour.
 
 ```sql
-CREATE TABLE agentstack.mv_spans_hourly_data (
+CREATE TABLE traceform.mv_spans_hourly_data (
     org_id UUID,
     model LowCardinality(String),
     provider LowCardinality(String),
@@ -114,8 +114,8 @@ CREATE TABLE agentstack.mv_spans_hourly_data (
 PARTITION BY toYYYYMM(hour)
 ORDER BY (org_id, hour, model, provider);
 
-CREATE MATERIALIZED VIEW agentstack.mv_spans_hourly
-TO agentstack.mv_spans_hourly_data
+CREATE MATERIALIZED VIEW traceform.mv_spans_hourly
+TO traceform.mv_spans_hourly_data
 AS SELECT
     org_id,
     model,
@@ -130,14 +130,14 @@ AS SELECT
     sumState(cost_cents) AS total_cost_cents,
     sumState(duration_ms) AS sum_duration_ms,
     maxState(duration_ms) AS max_duration_ms
-FROM agentstack.spans
+FROM traceform.spans
 GROUP BY org_id, model, provider, span_type, hour;
 ```
 
 **`mv_healing_hourly`** — Aggregate healing metrics per org, healing_type, hour.
 
 ```sql
-CREATE TABLE agentstack.mv_healing_hourly_data (
+CREATE TABLE traceform.mv_healing_hourly_data (
     org_id UUID,
     healing_type LowCardinality(String),
     hour DateTime,
@@ -148,8 +148,8 @@ CREATE TABLE agentstack.mv_healing_hourly_data (
 PARTITION BY toYYYYMM(hour)
 ORDER BY (org_id, hour, healing_type);
 
-CREATE MATERIALIZED VIEW agentstack.mv_healing_hourly
-TO agentstack.mv_healing_hourly_data
+CREATE MATERIALIZED VIEW traceform.mv_healing_hourly
+TO traceform.mv_healing_hourly_data
 AS SELECT
     org_id,
     healing_type,
@@ -157,7 +157,7 @@ AS SELECT
     countState() AS total_count,
     countIfState(success = 1) AS success_count,
     sumState(latency_ms) AS sum_latency_ms
-FROM agentstack.healing_events
+FROM traceform.healing_events
 GROUP BY org_id, healing_type, hour;
 ```
 
@@ -168,7 +168,7 @@ the API layer joins this view with session data or uses `mv_sessions_hourly` for
 agent-level cost. This view focuses on model-level cost attribution.
 
 ```sql
-CREATE TABLE agentstack.mv_cost_daily_data (
+CREATE TABLE traceform.mv_cost_daily_data (
     org_id UUID,
     model LowCardinality(String),
     provider LowCardinality(String),
@@ -182,8 +182,8 @@ CREATE TABLE agentstack.mv_cost_daily_data (
 PARTITION BY toYYYYMM(day)
 ORDER BY (org_id, day, model, provider);
 
-CREATE MATERIALIZED VIEW agentstack.mv_cost_daily
-TO agentstack.mv_cost_daily_data
+CREATE MATERIALIZED VIEW traceform.mv_cost_daily
+TO traceform.mv_cost_daily_data
 AS SELECT
     org_id,
     model,
@@ -194,7 +194,7 @@ AS SELECT
     sumState(output_tokens) AS total_output_tokens,
     sumState(cost_cents) AS total_cost_cents,
     avgState(cost_cents) AS avg_cost_cents
-FROM agentstack.spans
+FROM traceform.spans
 WHERE cost_cents > 0
 GROUP BY org_id, model, provider, day;
 ```
@@ -209,7 +209,7 @@ SELECT
     countMerge(failed_count) AS total_failed,
     sumMerge(total_cost_cents) AS total_cost,
     sumMerge(sum_duration_ms) / countMerge(session_count) AS avg_duration
-FROM agentstack.mv_sessions_hourly_data
+FROM traceform.mv_sessions_hourly_data
 WHERE org_id = ? AND hour >= ? AND hour <= ?
 ```
 
@@ -221,7 +221,7 @@ WHERE org_id = ? AND hour >= ? AND hour <= ?
 
 ### 2.5 Backfill
 
-New CLI command: `agentstack migrate --backfill-views` that runs `INSERT INTO mv_sessions_hourly SELECT ...` from existing raw data. Only needed once after migration.
+New CLI command: `traceform migrate --backfill-views` that runs `INSERT INTO mv_sessions_hourly SELECT ...` from existing raw data. Only needed once after migration.
 
 ---
 
@@ -232,7 +232,7 @@ New CLI command: `agentstack migrate --backfill-views` that runs `INSERT INTO mv
 New `SamplingConfig` dataclass added to SDK init:
 
 ```python
-agentstack.init(
+traceform.init(
     api_key="...",
     sampling=SamplingConfig(
         rate=0.1,                 # Keep 10% of successful sessions
@@ -324,7 +324,7 @@ CREATE TABLE sampling_config (
 2. If session status is error/healed/timeout → always accept
 3. If session is successful → accept probabilistically based on server rate
 4. Rejected sessions: extract counter data, publish to `trace.ingest.counter`
-5. Return `X-AgentStack-Sample-Rate: 0.1` header so SDK can adapt
+5. Return `X-Traceform-Sample-Rate: 0.1` header so SDK can adapt
 
 **API endpoints:**
 
@@ -349,7 +349,7 @@ summable metrics (tokens, cost, count) and non-summable metrics (duration for av
 ORDER BY uses bucketed `hour` (not raw timestamp) so rows actually merge.
 
 ```sql
-CREATE TABLE agentstack.session_counters (
+CREATE TABLE traceform.session_counters (
     org_id UUID,
     agent_name LowCardinality(String),
     status LowCardinality(String),
@@ -366,7 +366,7 @@ ORDER BY (org_id, agent_name, status, hour);
 
 Counter events are inserted via:
 ```sql
-INSERT INTO agentstack.session_counters
+INSERT INTO traceform.session_counters
 SELECT
     org_id, agent_name, status,
     toStartOfHour(created_at) AS hour,
@@ -395,8 +395,8 @@ SELECT
     sumMerge(mv.total_cost_cents) + sumMerge(c.sum_cost_cents) AS total_cost,
     (sumMerge(mv.sum_duration_ms) + sumMerge(c.sum_duration_ms))
         / (countMerge(mv.session_count) + countMerge(c.session_count)) AS avg_duration
-FROM agentstack.mv_sessions_hourly_data mv
-FULL OUTER JOIN agentstack.session_counters c
+FROM traceform.mv_sessions_hourly_data mv
+FULL OUTER JOIN traceform.session_counters c
     ON mv.org_id = c.org_id AND mv.agent_name = c.agent_name AND mv.hour = c.hour
 WHERE mv.org_id = ? AND mv.hour >= ? AND mv.hour <= ?
    OR c.org_id = ? AND c.hour >= ? AND c.hour <= ?
@@ -418,7 +418,7 @@ WHERE mv.org_id = ? AND mv.hour >= ? AND mv.hour <= ?
 ### 4.2 New ClickHouse Columns
 
 ```sql
-ALTER TABLE agentstack.spans
+ALTER TABLE traceform.spans
     ADD COLUMN input_truncated UInt8 DEFAULT 0,
     ADD COLUMN output_truncated UInt8 DEFAULT 0,
     ADD COLUMN input_hash String DEFAULT '',
@@ -445,7 +445,7 @@ Config via env:
 ```
 BLOB_STORE_TYPE=fs          # fs | s3
 BLOB_STORE_PATH=/data/payloads   # for fs
-BLOB_STORE_BUCKET=agentstack     # for s3
+BLOB_STORE_BUCKET=traceform     # for s3
 BLOB_STORE_REGION=us-east-1      # for s3
 ```
 
@@ -519,19 +519,19 @@ Per-org shorter retention is enforced by the retention worker.
 This prevents enterprise customer data from being deleted prematurely.
 
 ```sql
-ALTER TABLE agentstack.sessions
+ALTER TABLE traceform.sessions
     MODIFY TTL started_at + INTERVAL 365 DAY DELETE;
 
-ALTER TABLE agentstack.spans
+ALTER TABLE traceform.spans
     MODIFY TTL started_at + INTERVAL 365 DAY DELETE;
 
-ALTER TABLE agentstack.events
+ALTER TABLE traceform.events
     MODIFY TTL created_at + INTERVAL 365 DAY DELETE;
 
-ALTER TABLE agentstack.healing_events
+ALTER TABLE traceform.healing_events
     MODIFY TTL created_at + INTERVAL 365 DAY DELETE;
 
-ALTER TABLE agentstack.gateway_requests
+ALTER TABLE traceform.gateway_requests
     MODIFY TTL created_at + INTERVAL 365 DAY DELETE;
 ```
 
@@ -552,7 +552,7 @@ and targeted DELETE mutations only for downsampling (not updates).
 -- Delete 90% of successful sessions past the hot boundary.
 -- Uses lightweight DELETE (not ALTER TABLE UPDATE) and runs once daily.
 -- cityHash64(id) % 10 is deterministic — same session always kept or dropped.
-DELETE FROM agentstack.sessions
+DELETE FROM traceform.sessions
 WHERE
     org_id = ?
     AND status = 'completed'
@@ -561,11 +561,11 @@ WHERE
     AND cityHash64(id) % 10 != 0;             -- keep 1 in 10
 
 -- Also delete corresponding spans for removed sessions
-DELETE FROM agentstack.spans
+DELETE FROM traceform.spans
 WHERE
     org_id = ?
     AND session_id IN (
-        SELECT id FROM agentstack.sessions
+        SELECT id FROM traceform.sessions
         WHERE org_id = ? AND status = 'completed'
         AND started_at < now() - INTERVAL ? DAY
         AND started_at >= now() - INTERVAL ? DAY
@@ -586,7 +586,7 @@ partition is expired (near-instant, no mutation overhead):
 ```go
 // If all data in a monthly partition is older than warm_retention_days:
 // DROP PARTITION is O(1) — deletes entire data parts instantly
-ALTER TABLE agentstack.sessions DROP PARTITION '202601';
+ALTER TABLE traceform.sessions DROP PARTITION '202601';
 ```
 
 For partial-month deletions (when warm boundary falls mid-month), use DELETE mutation
@@ -625,7 +625,7 @@ Failed, healed, and timeout sessions are NEVER downsampled. They are only delete
 | `internal/trace/handler/sampling.go` | Sampling config CRUD endpoints |
 | `internal/trace/service/sampling.go` | Sampling config service |
 | `internal/trace/store/sampling_pg.go` | PostgreSQL store for sampling config |
-| `sdk/python/agentstack/sampling.py` | SamplingConfig + decision logic |
+| `sdk/python/traceform/sampling.py` | SamplingConfig + decision logic |
 | `sdk/typescript/src/sampling.ts` | TypeScript SamplingConfig + decision logic |
 
 ## 7. Modified Files
@@ -636,18 +636,18 @@ Failed, healed, and timeout sessions are NEVER downsampled. They are only delete
 | `internal/trace/store/clickhouse.go` | New MV-backed query methods |
 | `internal/trace/service/analytics.go` | Switch to MV queries with raw fallback |
 | `internal/trace/service/ingest.go` | Server-side sampling, counter events, sample rate header |
-| `internal/trace/handler/ingest.go` | Sampling check, X-AgentStack-Sample-Rate header |
+| `internal/trace/handler/ingest.go` | Sampling check, X-Traceform-Sample-Rate header |
 | `internal/server/routes.go` | Register new endpoints (payload, sampling) |
 | `cmd/worker/main.go` | Start retention worker |
 | `cmd/migrate/main.go` | Backfill command for MVs |
 | `internal/config/config.go` | Blob store config, sampling defaults |
-| `sdk/python/agentstack/__init__.py` | Sampling config in init() |
-| `sdk/python/agentstack/session.py` | Sampling decision at session.end() |
-| `sdk/python/agentstack/client.py` | Counter events, X-AgentStack-Sample-Rate header parsing |
-| `sdk/python/agentstack/batch.py` | Counter event support |
+| `sdk/python/traceform/__init__.py` | Sampling config in init() |
+| `sdk/python/traceform/session.py` | Sampling decision at session.end() |
+| `sdk/python/traceform/client.py` | Counter events, X-Traceform-Sample-Rate header parsing |
+| `sdk/python/traceform/batch.py` | Counter event support |
 | `web/app/dashboard/sessions/[id]/page.tsx` | "Show full payload" button |
 | `sdk/typescript/src/session.ts` | Session buffering + sampling decision |
-| `sdk/typescript/src/client.ts` | Counter events, X-AgentStack-Sample-Rate header parsing |
+| `sdk/typescript/src/client.ts` | Counter events, X-Traceform-Sample-Rate header parsing |
 | `web/app/dashboard/settings/page.tsx` | Retention period config (hot/warm) |
 
 ---
@@ -668,7 +668,7 @@ Failed, healed, and timeout sessions are NEVER downsampled. They are only delete
 | Retention Mutation Perf | Load | Run retention worker against 100K sessions, verify completion <60s |
 | Migration Rollback | Integration | Run up migration, verify tables/views exist, run down, verify clean state |
 | SDK Session Buffering | Unit | Verify buffer cap (1000 events), flush-on-keep, discard-on-drop, memory bounds |
-| SDK Sampling Override | Integration | Server returns X-AgentStack-Sample-Rate, SDK respects it on next session |
+| SDK Sampling Override | Integration | Server returns X-Traceform-Sample-Rate, SDK respects it on next session |
 
 ---
 

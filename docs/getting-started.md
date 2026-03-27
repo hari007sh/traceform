@@ -1,6 +1,6 @@
-# Getting Started with AgentStack
+# Getting Started with Traceform
 
-AgentStack is an open-source platform for running AI agents in production. It replaces five or six separate tools (Langfuse, DeepEval, Portkey, Guardrails AI, and custom glue code) with a single unified system covering observability, self-healing, testing, guardrails, model routing, and cost intelligence.
+Traceform is an open-source platform for running AI agents in production. It replaces five or six separate tools (Langfuse, DeepEval, Portkey, Guardrails AI, and custom glue code) with a single unified system covering observability, self-healing, testing, guardrails, model routing, and cost intelligence.
 
 ---
 
@@ -30,8 +30,8 @@ AgentStack is an open-source platform for running AI agents in production. It re
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/agentstack/agentstack.git
-cd agentstack
+git clone https://github.com/traceform/traceform.git
+cd traceform
 ```
 
 ### 2. Start infrastructure services
@@ -83,16 +83,16 @@ Navigate to [http://localhost:3000](http://localhost:3000) in your browser.
 ### Install
 
 ```bash
-pip install agentstack
+pip install traceform
 ```
 
 ### Initialize the SDK
 
 ```python
-import agentstack
+import traceform
 
-agentstack.init(
-    api_key="as_sk_your_api_key_here",
+traceform.init(
+    api_key="tf_sk_your_api_key_here",
     endpoint="http://localhost:8080",  # omit for cloud
 )
 ```
@@ -100,7 +100,7 @@ agentstack.init(
 ### Create a traced session
 
 ```python
-with agentstack.session(agent_name="my-agent") as session:
+with traceform.session(agent_name="my-agent") as session:
     with session.span("llm-call", span_type="llm_call") as span:
         span.set_input({"prompt": "Summarize this document"})
         result = call_your_llm(...)
@@ -111,7 +111,7 @@ with agentstack.session(agent_name="my-agent") as session:
 ### Use the `@trace` decorator
 
 ```python
-@agentstack.trace(span_type="llm_call")
+@traceform.trace(span_type="llm_call")
 def call_gpt(prompt: str) -> str:
     response = openai.chat.completions.create(
         model="gpt-4o",
@@ -127,7 +127,7 @@ Every call to `call_gpt` is automatically traced with timing, token counts, and 
 Shield detects and auto-fixes loops, hallucinations, cost overruns, and timeouts at runtime.
 
 ```python
-agentstack.protect({
+traceform.protect({
     "loop_threshold": 3,       # break after 3 repeated outputs
     "cost_limit_cents": 500,   # halt if session exceeds $5.00
     "timeout_seconds": 120,    # kill stuck calls after 2 minutes
@@ -141,7 +141,7 @@ Once enabled, Shield wraps all traced spans and intervenes automatically.
 ```python
 import asyncio
 
-result = asyncio.run(agentstack.guard.check(
+result = asyncio.run(traceform.guard.check(
     content="The user's SSN is 123-45-6789",
     rules=["pii_detection"],
 ))
@@ -157,16 +157,16 @@ if not result["passed"]:
 ### Install
 
 ```bash
-npm install @agentstack/sdk
+npm install @traceform/sdk
 ```
 
 ### Initialize the SDK
 
 ```typescript
-import { init, session, protect } from '@agentstack/sdk';
+import { init, session, protect } from '@traceform/sdk';
 
 init({
-  apiKey: process.env.AGENTSTACK_API_KEY!,
+  apiKey: process.env.TRACEFORM_API_KEY!,
   projectId: 'my-project',
   endpoint: 'http://localhost:8080', // omit for cloud
 });
@@ -175,7 +175,7 @@ init({
 ### Create a traced session
 
 ```typescript
-import { session, SpanType } from '@agentstack/sdk';
+import { session, SpanType } from '@traceform/sdk';
 
 const sess = session({ agentName: 'my-agent' });
 sess.start();
@@ -205,7 +205,7 @@ protect({
 ### Run a guardrail check
 
 ```typescript
-import { guard } from '@agentstack/sdk';
+import { guard } from '@traceform/sdk';
 
 const result = await guard.check({
   content: "The user's SSN is 123-45-6789",
@@ -227,7 +227,7 @@ The gateway is an OpenAI-compatible proxy that adds model routing, provider fail
 
 ```bash
 curl -X POST http://localhost:8080/v1/gateway/providers \
-  -H "Authorization: Bearer as_sk_your_api_key" \
+  -H "Authorization: Bearer tf_sk_your_api_key" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "openai-primary",
@@ -242,7 +242,7 @@ curl -X POST http://localhost:8080/v1/gateway/providers \
 
 ```bash
 curl -X POST http://localhost:8080/v1/gateway/routes \
-  -H "Authorization: Bearer as_sk_your_api_key" \
+  -H "Authorization: Bearer tf_sk_your_api_key" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "default-route",
@@ -259,12 +259,12 @@ The gateway listens on port 8090 and is a drop-in replacement for the OpenAI API
 
 ```bash
 curl http://localhost:8090/v1/chat/completions \
-  -H "Authorization: Bearer as_sk_your_api_key" \
+  -H "Authorization: Bearer tf_sk_your_api_key" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4o",
     "messages": [
-      {"role": "user", "content": "What is AgentStack?"}
+      {"role": "user", "content": "What is Traceform?"}
     ]
   }'
 ```
@@ -275,7 +275,7 @@ To use the gateway from the OpenAI Python SDK, just change the base URL:
 import openai
 
 client = openai.OpenAI(
-    api_key="as_sk_your_api_key",
+    api_key="tf_sk_your_api_key",
     base_url="http://localhost:8090/v1",
 )
 
@@ -343,7 +343,7 @@ Filter by status (completed, failed, timeout, healed), agent name, date range, o
 
 ## API Authentication
 
-AgentStack supports three authentication methods.
+Traceform supports three authentication methods.
 
 ### GitHub OAuth
 
@@ -360,7 +360,7 @@ SSO_PROVIDER=okta              # or "azure-ad", "google-workspace", "custom"
 SSO_ISSUER_URL=https://your-idp.example.com
 SSO_CLIENT_ID=your-client-id
 SSO_CLIENT_SECRET=your-client-secret
-SSO_CALLBACK_URL=https://app.agentstack.dev/auth/sso/callback
+SSO_CALLBACK_URL=https://app.traceform.dev/auth/sso/callback
 ```
 
 Users hitting `/auth/sso` are redirected to the identity provider. On success they receive a JWT just like the OAuth flow.
@@ -386,7 +386,7 @@ Response:
 ```json
 {
   "id": "ak_abc123",
-  "key": "as_sk_live_xxxxxxxxxxxxxxxxxxxx",
+  "key": "tf_sk_live_xxxxxxxxxxxxxxxxxxxx",
   "name": "production-ingest",
   "scopes": ["ingest", "query"],
   "created_at": "2025-01-15T10:30:00Z"
@@ -396,7 +396,7 @@ Response:
 **Use the key** by passing it in the `Authorization` header:
 
 ```bash
-curl -H "Authorization: Bearer as_sk_live_xxxxxxxxxxxxxxxxxxxx" \
+curl -H "Authorization: Bearer tf_sk_live_xxxxxxxxxxxxxxxxxxxx" \
   http://localhost:8080/v1/sessions
 ```
 
@@ -427,7 +427,7 @@ Available scopes:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql://agentstack:agentstack_dev@localhost:5432/agentstack?sslmode=disable` | PostgreSQL connection string |
+| `DATABASE_URL` | `postgresql://agentstack:traceform_dev@localhost:5432/agentstack?sslmode=disable` | PostgreSQL connection string |
 | `CLICKHOUSE_URL` | `clickhouse://localhost:9000/agentstack` | ClickHouse connection string |
 | `REDIS_URL` | `redis://localhost:6379` | Redis connection string |
 | `NATS_URL` | `nats://localhost:4222` | NATS connection string |
@@ -453,14 +453,14 @@ Available scopes:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SENDGRID_API_KEY` | — | SendGrid API key for email alerts |
-| `FROM_EMAIL` | `alerts@agentstack.dev` | Sender address for alert emails |
+| `FROM_EMAIL` | `alerts@traceform.dev` | Sender address for alert emails |
 
 #### Storage and Sampling
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BLOB_STORE_TYPE` | `fs` | `fs` for filesystem, `s3` for S3-compatible storage |
-| `BLOB_STORE_PATH` | `/tmp/agentstack/payloads` | Filesystem path when using `fs` storage |
+| `BLOB_STORE_PATH` | `/tmp/traceform/payloads` | Filesystem path when using `fs` storage |
 | `DEFAULT_SAMPLE_RATE` | `1.0` | Trace sampling rate (0.0 to 1.0) |
 | `ADAPTIVE_THRESHOLD` | `100000` | Hourly ingest count before adaptive sampling kicks in |
 
@@ -490,11 +490,11 @@ docker compose up -d
 
 #### Helm Chart
 
-A Helm chart is available in `deploy/helm/agentstack/`:
+A Helm chart is available in `deploy/helm/traceform/`:
 
 ```bash
-helm install agentstack deploy/helm/agentstack \
-  --namespace agentstack \
+helm install traceform deploy/helm/traceform \
+  --namespace traceform \
   --create-namespace \
   --set config.jwtSecret="$(openssl rand -hex 32)" \
   --set config.encryptionKey="$(openssl rand -hex 16)" \
@@ -522,14 +522,14 @@ Three Dockerfiles are provided in `deploy/`:
 
 | Dockerfile | Image | Description |
 |------------|-------|-------------|
-| `Dockerfile` | `agentstack/api` | Multi-stage Go build for the API server + worker |
+| `Dockerfile` | `traceform/api` | Multi-stage Go build for the API server + worker |
 | `Dockerfile.gateway` | `agentstack/gateway` | Gateway proxy binary |
 | `Dockerfile.web` | `agentstack/web` | Next.js production build |
 
 Build and run:
 
 ```bash
-docker build -f deploy/Dockerfile -t agentstack/api .
-docker build -f deploy/Dockerfile.gateway -t agentstack/gateway .
-docker build -f deploy/Dockerfile.web -t agentstack/web .
+docker build -f deploy/Dockerfile -t traceform/api .
+docker build -f deploy/Dockerfile.gateway -t traceform/gateway .
+docker build -f deploy/Dockerfile.web -t traceform/web .
 ```

@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/agentstack/agentstack/internal/cost/service"
-	"github.com/agentstack/agentstack/internal/cost/store"
+	"github.com/traceform/traceform/internal/cost/service"
+	"github.com/traceform/traceform/internal/cost/store"
 )
 
 const budgetCheckInterval = 60 * time.Second

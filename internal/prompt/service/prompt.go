@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/agentstack/agentstack/internal/prompt/store"
+	"github.com/traceform/traceform/internal/prompt/store"
 )
 
 // slugRegex validates slug format: lowercase letters, numbers, hyphens only.

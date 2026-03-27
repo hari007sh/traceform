@@ -1,5 +1,5 @@
 -- =============================================
--- AgentStack Dataset Management — Database Schema
+-- Traceform Dataset Management — Database Schema
 -- =============================================
 
 CREATE TABLE datasets (

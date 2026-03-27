@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// Organization represents a team or company using AgentStack.
+// Organization represents a team or company using Traceform.
 type Organization struct {
 	ID        string    `json:"id" db:"id"`
 	Name      string    `json:"name" db:"name"`

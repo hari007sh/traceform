@@ -1,10 +1,10 @@
-# AgentStack — Master Build Document
+# Traceform — Master Build Document
 
 This is the MASTER document. Read this FIRST before writing any code.
 
-## 1. What is AgentStack
+## 1. What is Traceform
 
-AgentStack is an open-source AI agent production platform. It replaces 5-6 separate tools (Langfuse, DeepEval, Portkey, Guardrails AI, custom code) with one unified platform. Tagline: "The open-source platform for AI agents in production." It consists of six modules: **Shield** (self-healing SDK that auto-fixes loops, hallucinations, cost overruns, and timeouts — the unique differentiator nobody else offers), **Trace** (observability with session replay, tracing, failure patterns, and alerts), **Test** (evaluation with 15+ evaluators, CI/CD quality gates, regression tests, and CLI), **Guard** (guardrails for PII detection, toxicity filtering, prompt injection, and hallucination detection), **Route** (gateway with model routing, provider failover, semantic caching, and load balancing), and **Cost** (cost intelligence with per-outcome cost tracking, budget enforcement, and model comparison).
+Traceform is an open-source AI agent production platform. It replaces 5-6 separate tools (Langfuse, DeepEval, Portkey, Guardrails AI, custom code) with one unified platform. Tagline: "The open-source platform for AI agents in production." It consists of six modules: **Shield** (self-healing SDK that auto-fixes loops, hallucinations, cost overruns, and timeouts — the unique differentiator nobody else offers), **Trace** (observability with session replay, tracing, failure patterns, and alerts), **Test** (evaluation with 15+ evaluators, CI/CD quality gates, regression tests, and CLI), **Guard** (guardrails for PII detection, toxicity filtering, prompt injection, and hallucination detection), **Route** (gateway with model routing, provider failover, semantic caching, and load balancing), and **Cost** (cost intelligence with per-outcome cost tracking, budget enforcement, and model comparison).
 
 ---
 
@@ -14,7 +14,7 @@ Six modules connected through a unified API server, gateway proxy, and shared in
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│                    AgentStack SDK                       │
+│                    Traceform SDK                       │
 │          (Python + TypeScript — pip/npm install)        │
 │                                                        │
 │   ┌──────────┐  ┌──────────┐  ┌──────────┐            │
@@ -25,7 +25,7 @@ Six modules connected through a unified API server, gateway proxy, and shared in
          │              │              │
          ▼              ▼              ▼
 ┌────────────────────────────────────────────────────────┐
-│              AgentStack API Server (Go)                 │
+│              Traceform API Server (Go)                 │
 │                   Port 8080                             │
 │                                                        │
 │   /v1/ingest/*     → Trace module (sessions, spans)    │
@@ -117,7 +117,7 @@ Six modules connected through a unified API server, gateway proxy, and shared in
 ## 4. Project Structure
 
 ```
-agentstack/
+traceform/
 ├── CLAUDE.md
 ├── docker-compose.yml
 ├── docker-compose.prod.yml
@@ -132,7 +132,7 @@ agentstack/
 │   ├── gateway/main.go         # Route proxy server (port 8090)
 │   ├── worker/main.go          # Background workers
 │   ├── migrate/main.go         # Database migrations
-│   └── cli/main.go             # agentstack CLI tool
+│   └── cli/main.go             # traceform CLI tool
 │
 ├── internal/
 │   ├── config/config.go        # Environment-based config
@@ -284,15 +284,15 @@ agentstack/
 ├── sdk/
 │   ├── python/
 │   │   ├── pyproject.toml
-│   │   ├── agentstack/
-│   │   │   ├── __init__.py       # agentstack.init(), agentstack.protect()
+│   │   ├── traceform/
+│   │   │   ├── __init__.py       # traceform.init(), traceform.protect()
 │   │   │   ├── client.py         # HTTP client
 │   │   │   ├── session.py        # Session context manager
 │   │   │   ├── span.py           # Span tracking
 │   │   │   ├── trace.py          # @trace decorator
 │   │   │   ├── healing.py        # HealingEngine, HealingConfig
-│   │   │   ├── guard.py          # agentstack.guard.check()
-│   │   │   ├── cost.py           # agentstack.cost.track()
+│   │   │   ├── guard.py          # traceform.guard.check()
+│   │   │   ├── cost.py           # traceform.cost.track()
 │   │   │   ├── batch.py          # Batch event sender
 │   │   │   └── instruments/
 │   │   │       ├── openai.py
@@ -375,8 +375,8 @@ agentstack/
 │
 ├── cli/
 │   ├── main.go
-│   ├── test.go                     # agentstack test run/status/gate
-│   └── cost.go                     # agentstack cost summary
+│   ├── test.go                     # traceform test run/status/gate
+│   └── cost.go                     # traceform cost summary
 │
 ├── seed/
 │   ├── failure_patterns.json       # 50+ agent failure patterns
@@ -401,7 +401,7 @@ Build in this EXACT order. Each phase depends on the previous.
 
 Read: This CLAUDE.md
 
-1. Initialize Go module: `go mod init github.com/agentstack/agentstack`
+1. Initialize Go module: `go mod init github.com/traceform/traceform`
 2. Create docker-compose.yml with PostgreSQL, ClickHouse, Redis, NATS
 3. Create .env.example with all environment variables
 4. Create Makefile with: dev, build, test, migrate, seed targets
@@ -473,7 +473,7 @@ Read: `specs/spec-test-cost.md` (Test sections)
 7. Test runs API (create, status, results)
 8. Auto-regression: create test case from production session
 9. CI/CD endpoint (POST /v1/test/ci/run)
-10. CLI tool: agentstack test run/status/gate
+10. CLI tool: traceform test run/status/gate
 11. Dashboard: Test overview page
 12. Dashboard: Suite detail page
 13. Dashboard: Run detail page (progress bar, results table, evaluator scores)
@@ -496,7 +496,7 @@ Read: `specs/spec-route-guard.md` (Guard sections)
 12. Guard check API (POST /v1/guard/check)
 13. Guard events API
 14. Guard analytics API
-15. Python SDK: agentstack.guard.check()
+15. Python SDK: traceform.guard.check()
 16. Dashboard: Guard overview page
 17. Dashboard: Guard rule detail + test UI
 
@@ -534,7 +534,7 @@ Read: `specs/spec-test-cost.md` (Cost sections)
 5. Budget enforcer worker (periodic checks)
 6. Model pricing table + seed data
 7. Cost alerts
-8. CLI: agentstack cost summary/budgets
+8. CLI: traceform cost summary/budgets
 9. Dashboard: Cost overview page (spend, avg cost/session, cost/outcome, budget utilization)
 10. Dashboard: Model comparison page (cost vs quality, what-if calculator)
 11. Dashboard: Budget policies page (progress bars, alert history)
@@ -577,13 +577,13 @@ services:
     image: postgres:16
     ports: ["5432:5432"]
     environment:
-      POSTGRES_USER: agentstack
-      POSTGRES_PASSWORD: agentstack_dev
-      POSTGRES_DB: agentstack
+      POSTGRES_USER: agentstack  # legacy name, do not change
+      POSTGRES_PASSWORD: traceform_dev
+      POSTGRES_DB: agentstack  # legacy name, do not change
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agentstack"]
+      test: ["CMD-SHELL", "pg_isready -U agentstack  # legacy user"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -646,7 +646,7 @@ GATEWAY_PORT=8090
 ENVIRONMENT=development
 
 # Database
-DATABASE_URL=postgresql://agentstack:agentstack_dev@localhost:5432/agentstack?sslmode=disable
+DATABASE_URL=postgresql://agentstack:traceform_dev@localhost:5432/agentstack?sslmode=disable
 CLICKHOUSE_URL=clickhouse://localhost:9000/agentstack
 REDIS_URL=redis://localhost:6379
 NATS_URL=nats://localhost:4222
@@ -662,7 +662,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8080
 
 # Email (for alerts)
 SENDGRID_API_KEY=
-FROM_EMAIL=alerts@agentstack.dev
+FROM_EMAIL=alerts@traceform.dev
 
 # Encryption (for provider API keys in Route module)
 ENCRYPTION_KEY= # 32-byte hex string for AES-256-GCM

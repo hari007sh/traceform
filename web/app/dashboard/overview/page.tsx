@@ -418,7 +418,7 @@ function OnboardingCard() {
           <Rocket className="w-6 h-6 text-[var(--accent-blue)]" />
         </div>
         <h3 className="text-[15px] font-semibold text-[var(--text-primary)] mb-1.5">
-          Get started with AgentStack
+          Get started with Traceform
         </h3>
         <p className="text-[13px] text-[var(--text-secondary)] mb-6">
           Install the SDK and start monitoring your AI agents in minutes.
@@ -429,19 +429,19 @@ function OnboardingCard() {
             <span className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium">
               Install
             </span>
-            <CopyButton text={"pip install agentstack\n# or\nnpm install @agentstack/sdk"} />
+            <CopyButton text={"pip install traceform\n# or\nnpm install @traceform/sdk"} />
           </div>
           <pre className="px-4 py-3 text-[12px] leading-relaxed font-mono text-[var(--text-secondary)] text-left overflow-x-auto">
             <code>
-              <span className="text-[var(--accent-green)]">pip install</span> agentstack{"\n"}
+              <span className="text-[var(--accent-green)]">pip install</span> traceform{"\n"}
               <span className="text-[var(--text-tertiary)]"># or</span>{"\n"}
-              <span className="text-[var(--accent-green)]">npm install</span> @agentstack/sdk
+              <span className="text-[var(--accent-green)]">npm install</span> @traceform/sdk
             </code>
           </pre>
         </div>
 
         <a
-          href="https://docs.agentstack.dev"
+          href="https://docs.traceform.dev"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium text-[var(--accent-blue)] bg-[var(--accent-blue)]/10 border border-[var(--accent-blue)]/20 hover:bg-[var(--accent-blue)]/15 transition-colors"
@@ -479,7 +479,7 @@ function EmptyRecentSessions() {
               Sessions will appear here once your agents start running.
             </p>
             <a
-              href="https://docs.agentstack.dev/quickstart"
+              href="https://docs.traceform.dev/quickstart"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--accent-blue)] hover:text-[var(--accent-blue)]/80 transition-colors"

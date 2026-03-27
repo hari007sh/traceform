@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/agentstack/agentstack/internal/server/httputil"
-	"github.com/agentstack/agentstack/internal/server/middleware"
-	"github.com/agentstack/agentstack/internal/trace/service"
-	"github.com/agentstack/agentstack/internal/trace/store"
+	"github.com/traceform/traceform/internal/server/httputil"
+	"github.com/traceform/traceform/internal/server/middleware"
+	"github.com/traceform/traceform/internal/trace/service"
+	"github.com/traceform/traceform/internal/trace/store"
 	"github.com/go-chi/chi/v5"
 )
 

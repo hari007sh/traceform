@@ -44,7 +44,7 @@ func Load() (*Config, error) {
 		GatewayPort: getEnvInt("GATEWAY_PORT", 8090),
 		Environment: getEnv("ENVIRONMENT", "development"),
 
-		DatabaseURL:   getEnv("DATABASE_URL", "postgresql://agentstack:agentstack_dev@localhost:5432/agentstack?sslmode=disable"),
+		DatabaseURL:   getEnv("DATABASE_URL", "postgresql://agentstack:traceform_dev@localhost:5432/agentstack?sslmode=disable"),
 		ClickhouseURL: getEnv("CLICKHOUSE_URL", "clickhouse://localhost:9000/agentstack"),
 		RedisURL:      getEnv("REDIS_URL", "redis://localhost:6379"),
 		NatsURL:       getEnv("NATS_URL", "nats://localhost:4222"),
@@ -56,12 +56,12 @@ func Load() (*Config, error) {
 		FrontendURL: getEnv("FRONTEND_URL", "http://localhost:3000"),
 
 		SendGridAPIKey: getEnv("SENDGRID_API_KEY", ""),
-		FromEmail:      getEnv("FROM_EMAIL", "alerts@agentstack.dev"),
+		FromEmail:      getEnv("FROM_EMAIL", "alerts@traceform.dev"),
 
 		EncryptionKey: getEnv("ENCRYPTION_KEY", ""),
 
 		BlobStoreType:     getEnv("BLOB_STORE_TYPE", "fs"),
-		BlobStorePath:     getEnv("BLOB_STORE_PATH", "/tmp/agentstack/payloads"),
+		BlobStorePath:     getEnv("BLOB_STORE_PATH", "/tmp/traceform/payloads"),
 		DefaultSampleRate: getEnvFloat("DEFAULT_SAMPLE_RATE", 1.0),
 		AdaptiveThreshold: getEnvInt("ADAPTIVE_THRESHOLD", 100000),
 	}

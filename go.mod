@@ -1,4 +1,4 @@
-module github.com/agentstack/agentstack
+module github.com/traceform/traceform
 
 go 1.26.1
 

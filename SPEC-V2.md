@@ -1,4 +1,4 @@
-# AgentStack V2 — Feature Expansion Spec
+# Traceform V2 — Feature Expansion Spec
 
 **Version:** 2.0
 **Date:** 2026-03-20
@@ -11,7 +11,7 @@
 
 ### The Core Loop
 
-Every feature in AgentStack must serve this loop:
+Every feature in Traceform must serve this loop:
 
 ```
 DEVELOP → DEPLOY → OBSERVE → HEAL → IMPROVE → (repeat)
@@ -56,7 +56,7 @@ Mapped to modules:
 | 1 | **Prompt Management + Versioning** | DEVELOP | **KEEP** | Prompts are the primary artifact developers iterate on. Version control for prompts closes the loop from IMPROVE back to DEVELOP. Without this, prompt changes are untracked code edits — the feedback loop is broken. |
 | 2 | **Playground/Prompt Testing UI** | DEVELOP | **KEEP** | The fastest inner loop. Developer changes a prompt, tests it immediately against real models, sees results. Without a playground, iteration requires redeploying the agent — friction kills the loop. |
 | 3 | **Dataset Management for Evals** | IMPROVE | **KEEP** | Test module is already built, but without managed datasets, every test run requires ad-hoc data. Datasets let you capture production failures and replay them as test cases. This is the bridge from OBSERVE to IMPROVE. |
-| 4 | **OpenTelemetry Native Support** | DEPLOY/OBSERVE | **KEEP** | Most production teams already have OTel infrastructure. If AgentStack cannot ingest OTel spans, teams must run two tracing systems. This is an adoption blocker. |
+| 4 | **OpenTelemetry Native Support** | DEPLOY/OBSERVE | **KEEP** | Most production teams already have OTel infrastructure. If Traceform cannot ingest OTel spans, teams must run two tracing systems. This is an adoption blocker. |
 | 7 | **Webhook/Notification Integrations** | HEAL | **KEEP** | Alerts already exist in Trace, but they currently go nowhere actionable. Slack/PagerDuty webhooks make Shield healing events and Guard violations visible to the team in real-time. Without notifications, the OBSERVE stage is passive — you only find problems when you open the dashboard. |
 
 #### CUT — Does not serve the core loop tightly enough
@@ -138,7 +138,7 @@ agentstack/
 │   │   ├── handler/
 │   │   │   └── otlp.go               # OTLP HTTP + gRPC receivers
 │   │   ├── service/
-│   │   │   ├── translator.go         # OTel span → AgentStack span
+│   │   │   ├── translator.go         # OTel span → Traceform span
 │   │   │   └── attributes.go        # Semantic convention mapping
 │   │   └── proto/                     # Compiled protobuf (vendored)
 │   │       └── ... (OTLP proto files)
@@ -266,7 +266,7 @@ type PromptVersion struct {
 
 ```sql
 -- =============================================
--- AgentStack Prompt Management — Database Schema
+-- Traceform Prompt Management — Database Schema
 -- =============================================
 
 CREATE TABLE prompts (
@@ -433,7 +433,7 @@ All endpoints scoped to org via API key authentication. Handler file noted in pa
             "version": 3,
             "model": "gpt-4o",
             "change_note": "Added conversation history variable and empathy instruction",
-            "created_by": "as_sk_prod",
+            "created_by": "tf_sk_prod",
             "created_at": "2026-03-20T00:00:00Z"
         },
         {
@@ -442,7 +442,7 @@ All endpoints scoped to org via API key authentication. Handler file noted in pa
             "version": 2,
             "model": "gpt-4o",
             "change_note": "Improved tone",
-            "created_by": "as_sk_prod",
+            "created_by": "tf_sk_prod",
             "created_at": "2026-03-19T00:00:00Z"
         }
     ],
@@ -479,11 +479,11 @@ func (r *Renderer) Render(template string, variables map[string]interface{}, sch
 
 The SDKs fetch prompts at runtime via the API. This allows prompt updates without redeploying code.
 
-**Python SDK addition (`sdk/python/agentstack/prompt.py`):**
+**Python SDK addition (`sdk/python/traceform/prompt.py`):**
 
 ```python
 # Usage:
-# prompt = agentstack.prompt.get("customer-support-reply")
+# prompt = traceform.prompt.get("customer-support-reply")
 # rendered = prompt.render(company_name="Acme", customer_message="...")
 # response = openai.chat.completions.create(
 #     model=prompt.model,
@@ -499,7 +499,7 @@ The SDKs fetch prompts at runtime via the API. This allows prompt updates withou
 
 ```typescript
 // Usage:
-// const prompt = await agentstack.prompt.get("customer-support-reply");
+// const prompt = await traceform.prompt.get("customer-support-reply");
 // const rendered = prompt.render({ company_name: "Acme", customer_message: "..." });
 ```
 
@@ -572,7 +572,7 @@ r.Route("/v1/prompts", func(r chi.Router) {
 
 | Source | Target | Integration |
 |--------|--------|-------------|
-| Prompt | Trace | When SDK fetches a prompt, the prompt_id and version are attached to the trace span as attributes (`agentstack.prompt.id`, `agentstack.prompt.version`). This lets you see which prompt version produced which trace. |
+| Prompt | Trace | When SDK fetches a prompt, the prompt_id and version are attached to the trace span as attributes (`traceform.prompt.id`, `traceform.prompt.version`). This lets you see which prompt version produced which trace. |
 | Prompt | Playground | Playground loads prompts by ID, renders variables, and executes against models. |
 | Prompt | Test | Test cases can reference a prompt_id. When the test runs, it uses the active version of the prompt. |
 
@@ -848,7 +848,7 @@ type DatasetSuiteLink struct {
 
 ```sql
 -- =============================================
--- AgentStack Dataset Management — Database Schema
+-- Traceform Dataset Management — Database Schema
 -- =============================================
 
 CREATE TABLE datasets (
@@ -1122,26 +1122,26 @@ As noted in the analysis, RAG evaluation metrics belong as evaluator configs, no
 
 ### 6.1 Why
 
-Most production teams already run OpenTelemetry collectors. If AgentStack can only ingest its proprietary span format, teams must instrument twice. OTel support means: (1) teams with existing OTel instrumentation can send spans to AgentStack with zero code changes, and (2) AgentStack's own SDKs can export to OTel-compatible backends for teams that want dual-write. This removes the biggest adoption barrier for teams with existing observability stacks.
+Most production teams already run OpenTelemetry collectors. If Traceform can only ingest its proprietary span format, teams must instrument twice. OTel support means: (1) teams with existing OTel instrumentation can send spans to Traceform with zero code changes, and (2) Traceform's own SDKs can export to OTel-compatible backends for teams that want dual-write. This removes the biggest adoption barrier for teams with existing observability stacks.
 
 ### 6.2 Architecture
 
 ```
 ┌─────────────────────┐     ┌──────────────────────────────────┐
-│ OTel-instrumented    │     │ AgentStack API Server             │
+│ OTel-instrumented    │     │ Traceform API Server             │
 │ application          │     │                                    │
 │                      │     │  /v1/ingest/* (existing)           │
 │  OTel SDK            │────▶│  /v1/otlp/v1/traces (NEW — OTLP)  │
 │  (traces/spans)      │     │                                    │
 └─────────────────────┘     │  OTel Translator Service           │
-                             │  OTel Span → AgentStack Span       │
+                             │  OTel Span → Traceform Span       │
 ┌─────────────────────┐     │                                    │
 │ OTel Collector       │────▶│  Same ClickHouse destination       │
 │ (OTLP exporter)      │     │  Same NATS async pipeline          │
 └─────────────────────┘     └──────────────────────────────────┘
 ```
 
-AgentStack accepts OTLP/HTTP traces at `/v1/otlp/v1/traces`. It translates OTel spans into AgentStack's native span format and feeds them into the same NATS → ClickHouse pipeline. No separate storage or query path — OTel spans appear in the same sessions, same dashboard, same analytics.
+Traceform accepts OTLP/HTTP traces at `/v1/otlp/v1/traces`. It translates OTel spans into Traceform's native span format and feeds them into the same NATS → ClickHouse pipeline. No separate storage or query path — OTel spans appear in the same sessions, same dashboard, same analytics.
 
 ### 6.3 API Endpoints
 
@@ -1162,13 +1162,13 @@ This endpoint implements the [OTLP/HTTP specification](https://opentelemetry.io/
             "resource": {
                 "attributes": [
                     {"key": "service.name", "value": {"stringValue": "my-agent"}},
-                    {"key": "agentstack.agent.id", "value": {"stringValue": "uuid"}}
+                    {"key": "traceform.agent.id", "value": {"stringValue": "uuid"}}
                 ]
             },
             "scopeSpans": [
                 {
                     "scope": {
-                        "name": "agentstack-sdk",
+                        "name": "traceform-sdk",
                         "version": "1.0.0"
                     },
                     "spans": [
@@ -1210,34 +1210,34 @@ This endpoint implements the [OTLP/HTTP specification](https://opentelemetry.io/
 
 ### 6.4 Service Layer — OTel Translator
 
-**`internal/otel/service/translator.go`** — Converts OTel spans to AgentStack spans:
+**`internal/otel/service/translator.go`** — Converts OTel spans to Traceform spans:
 
 ```go
-// Translator converts OpenTelemetry spans to AgentStack's native span format.
-// It maps OTel semantic conventions to AgentStack fields.
+// Translator converts OpenTelemetry spans to Traceform's native span format.
+// It maps OTel semantic conventions to Traceform fields.
 //
 // Key mappings:
-//   OTel traceId       → AgentStack session_id (one trace = one session)
-//   OTel spanId        → AgentStack span_id
-//   OTel parentSpanId  → AgentStack parent_span_id
-//   OTel name          → AgentStack span_name
-//   OTel startTime     → AgentStack started_at
-//   OTel endTime       → AgentStack ended_at
-//   OTel status.code   → AgentStack status (OK=completed, ERROR=failed)
+//   OTel traceId       → Traceform session_id (one trace = one session)
+//   OTel spanId        → Traceform span_id
+//   OTel parentSpanId  → Traceform parent_span_id
+//   OTel name          → Traceform span_name
+//   OTel startTime     → Traceform started_at
+//   OTel endTime       → Traceform ended_at
+//   OTel status.code   → Traceform status (OK=completed, ERROR=failed)
 //
 // GenAI semantic convention mappings (https://opentelemetry.io/docs/specs/semconv/gen-ai/):
-//   gen_ai.system              → AgentStack provider
-//   gen_ai.request.model       → AgentStack model
-//   gen_ai.usage.input_tokens  → AgentStack tokens_in
-//   gen_ai.usage.output_tokens → AgentStack tokens_out
-//   gen_ai.response.finish_reasons → AgentStack finish_reason
+//   gen_ai.system              → Traceform provider
+//   gen_ai.request.model       → Traceform model
+//   gen_ai.usage.input_tokens  → Traceform tokens_in
+//   gen_ai.usage.output_tokens → Traceform tokens_out
+//   gen_ai.response.finish_reasons → Traceform finish_reason
 //
 // Resource attribute mappings:
-//   service.name               → AgentStack agent_name
-//   agentstack.agent.id        → AgentStack agent_id
-//   agentstack.org.id          → AgentStack org_id (alternative to API key auth)
+//   service.name               → Traceform agent_name
+//   traceform.agent.id        → Traceform agent_id
+//   traceform.org.id          → Traceform org_id (alternative to API key auth)
 //
-// All unmapped attributes are stored in AgentStack span's metadata JSONB field.
+// All unmapped attributes are stored in Traceform span's metadata JSONB field.
 
 type Translator struct{}
 
@@ -1260,21 +1260,21 @@ const (
     AttrGenAIMaxTokens       = "gen_ai.request.max_tokens"
 )
 
-// AgentStack custom attributes (used in OTel spans to pass AgentStack-specific data)
+// Traceform custom attributes (used in OTel spans to pass Traceform-specific data)
 const (
-    AttrAgentStackOrgID      = "agentstack.org.id"
-    AttrAgentStackAgentID    = "agentstack.agent.id"
-    AttrAgentStackSessionID  = "agentstack.session.id"
-    AttrAgentStackSpanType   = "agentstack.span.type"      // llm_call, tool_call, agent_step, etc.
-    AttrAgentStackPromptID   = "agentstack.prompt.id"
-    AttrAgentStackPromptVer  = "agentstack.prompt.version"
+    AttrTraceformOrgID      = "traceform.org.id"
+    AttrTraceformAgentID    = "traceform.agent.id"
+    AttrTraceformSessionID  = "traceform.session.id"
+    AttrTraceformSpanType   = "traceform.span.type"      // llm_call, tool_call, agent_step, etc.
+    AttrTraceformPromptID   = "traceform.prompt.id"
+    AttrTraceformPromptVer  = "traceform.prompt.version"
 )
 
 // SpanType detection from OTel span attributes
 func DetectSpanType(attrs map[string]interface{}) string {
     // If gen_ai.system is present → "llm_call"
     // If rpc.system == "tool" → "tool_call"
-    // If agentstack.span.type is set → use that value
+    // If traceform.span.type is set → use that value
     // Default → "custom"
 }
 ```
@@ -1299,9 +1299,9 @@ OTel spans are authenticated the same way as native ingestion: via `Authorizatio
 ```yaml
 exporters:
   otlphttp:
-    endpoint: https://api.agentstack.dev/v1/otlp
+    endpoint: https://api.traceform.dev/v1/otlp
     headers:
-      Authorization: "Bearer as_sk_prod_abc123"
+      Authorization: "Bearer tf_sk_prod_abc123"
 ```
 
 **OTel SDK (Python) config example:**
@@ -1310,8 +1310,8 @@ exporters:
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
 exporter = OTLPSpanExporter(
-    endpoint="https://api.agentstack.dev/v1/otlp/v1/traces",
-    headers={"Authorization": "Bearer as_sk_prod_abc123"}
+    endpoint="https://api.traceform.dev/v1/otlp/v1/traces",
+    headers={"Authorization": "Bearer tf_sk_prod_abc123"}
 )
 ```
 
@@ -1326,21 +1326,21 @@ r.Route("/v1/otlp", func(r chi.Router) {
 
 ### 6.8 SDK Enhancement
 
-Add OTel export support to AgentStack SDKs so they can dual-write to both AgentStack and any OTel-compatible backend:
+Add OTel export support to Traceform SDKs so they can dual-write to both Traceform and any OTel-compatible backend:
 
-**Python SDK (`sdk/python/agentstack/otel.py`):**
+**Python SDK (`sdk/python/traceform/otel.py`):**
 
 ```python
 # Optional OTel integration — only active if opentelemetry-sdk is installed
 # Usage:
-#   agentstack.init(
-#       api_key="as_sk_...",
+#   traceform.init(
+#       api_key="tf_sk_...",
 #       otel_export=True,  # also export spans as OTel spans
 #       otel_endpoint="http://localhost:4318/v1/traces"  # optional: OTel collector
 #   )
 #
-# This wraps AgentStack's span creation to also create OTel spans,
-# so teams can see AgentStack data in both AgentStack dashboard AND
+# This wraps Traceform's span creation to also create OTel spans,
+# so teams can see Traceform data in both Traceform dashboard AND
 # their existing OTel backend (Jaeger, Datadog, Honeycomb, etc.)
 ```
 
@@ -1365,10 +1365,10 @@ No new dashboard pages are needed. The only UI change is adding an "OTel" badge 
 
 | Source | Target | Integration |
 |--------|--------|-------------|
-| OTel | Trace | OTel spans are translated and stored as native AgentStack spans. Same ClickHouse tables, same NATS pipeline. |
+| OTel | Trace | OTel spans are translated and stored as native Traceform spans. Same ClickHouse tables, same NATS pipeline. |
 | OTel | Shield | If an OTel span has error status, Shield healing rules still apply (if the org has Shield enabled). |
 | OTel | Cost | If OTel spans include token counts (gen_ai.usage.*), cost events are auto-generated. |
-| OTel | Prompt | If OTel spans include `agentstack.prompt.id` attribute, the span is linked to the prompt version. |
+| OTel | Prompt | If OTel spans include `traceform.prompt.id` attribute, the span is linked to the prompt version. |
 
 ---
 
@@ -1376,7 +1376,7 @@ No new dashboard pages are needed. The only UI change is adding an "OTel" badge 
 
 ### 7.1 Why
 
-AgentStack already has alert rules in the Trace module (e.g., "alert when failure rate > 10%"). But alerts currently have no delivery mechanism — they fire into the void. Webhooks make alerts actionable: Shield auto-heals a failure and the team gets a Slack message, Guard blocks a PII leak and PagerDuty creates an incident, a budget threshold is crossed and the finance channel gets notified. Without notifications, the OBSERVE and HEAL stages are passive — teams only discover issues when they open the dashboard.
+Traceform already has alert rules in the Trace module (e.g., "alert when failure rate > 10%"). But alerts currently have no delivery mechanism — they fire into the void. Webhooks make alerts actionable: Shield auto-heals a failure and the team gets a Slack message, Guard blocks a PII leak and PagerDuty creates an incident, a budget threshold is crossed and the finance channel gets notified. Without notifications, the OBSERVE and HEAL stages are passive — teams only discover issues when they open the dashboard.
 
 ### 7.2 Data Models
 
@@ -1439,7 +1439,7 @@ type WebhookDelivery struct {
 
 ```sql
 -- =============================================
--- AgentStack Webhook Integrations — Database Schema
+-- Traceform Webhook Integrations — Database Schema
 -- =============================================
 
 CREATE TABLE webhook_endpoints (
@@ -1543,7 +1543,7 @@ DROP TABLE IF EXISTS webhook_endpoints;
 {
     "name": "Custom Integration",
     "type": "generic",
-    "url": "https://my-api.example.com/webhooks/agentstack",
+    "url": "https://my-api.example.com/webhooks/traceform",
     "secret": "whsec_abc123",
     "headers": {
         "X-Custom-Header": "value"
@@ -1616,7 +1616,7 @@ func FormatSlackMessage(event string, payload map[string]interface{}) SlackMessa
 //         {
 //           "type": "button",
 //           "text": {"type": "plain_text", "text": "View Session"},
-//           "url": "https://app.agentstack.dev/sessions/abc123"
+//           "url": "https://app.traceform.dev/sessions/abc123"
 //         }
 //       ]
 //     }
@@ -1639,7 +1639,7 @@ func FormatPagerDutyEvent(event string, payload map[string]interface{}, routingK
 //   "payload": {
 //     "summary": "Budget 'Production Monthly' exceeded: $523.40 / $500.00",
 //     "severity": "critical",
-//     "source": "agentstack",
+//     "source": "traceform",
 //     "component": "cost",
 //     "custom_details": {
 //       "budget_name": "Production Monthly",
@@ -1673,12 +1673,12 @@ For `type: "generic"` webhooks, the payload is a standard JSON envelope:
 }
 ```
 
-Generic webhooks include an `X-AgentStack-Signature` header: HMAC-SHA256 of the payload body using the endpoint's `secret`. Recipients can verify authenticity:
+Generic webhooks include an `X-Traceform-Signature` header: HMAC-SHA256 of the payload body using the endpoint's `secret`. Recipients can verify authenticity:
 
 ```
-X-AgentStack-Signature: sha256=<hex-encoded-hmac>
-X-AgentStack-Event: alert.fired
-X-AgentStack-Delivery-ID: <delivery-uuid>
+X-Traceform-Signature: sha256=<hex-encoded-hmac>
+X-Traceform-Event: alert.fired
+X-Traceform-Delivery-ID: <delivery-uuid>
 ```
 
 ### 7.7 Worker — Webhook Sender
@@ -1840,7 +1840,7 @@ All existing V1 critical rules (section 12 of CLAUDE.md) still apply. Additional
 
 1. **Prompt slugs are immutable after creation.** Slug is the stable identifier SDKs use. Changing it would break deployed agents.
 2. **Prompt version numbers auto-increment.** Never allow gaps or manual version numbers.
-3. **Playground execution uses the org's provider API keys** from the providers table (Route module). It does NOT use AgentStack's keys.
+3. **Playground execution uses the org's provider API keys** from the providers table (Route module). It does NOT use Traceform's keys.
 4. **Dataset imports are synchronous for files under 1MB, async (via NATS worker) for larger files.** The 10MB file size limit is hard-enforced.
 5. **OTel spans are translated once at ingest time.** After translation, they are indistinguishable from native spans. No special query paths.
 6. **Webhook deliveries are fire-and-forget from the caller's perspective.** `dispatcher.Dispatch()` publishes to NATS and returns immediately. Never block business logic on webhook delivery.
@@ -1880,7 +1880,7 @@ All existing V1 critical rules (section 12 of CLAUDE.md) still apply. Additional
 
 #### Phase 12 (OTel)
 - OTLP/HTTP: protobuf and JSON encoding
-- Translator: OTel span → AgentStack span field mapping
+- Translator: OTel span → Traceform span field mapping
 - GenAI semantic conventions: token counts, model, provider extraction
 - Authentication: API key in Authorization header
 - Spans appear in existing Trace queries after ingestion
@@ -1914,7 +1914,7 @@ Same as V1 (section 14 of CLAUDE.md). After building each page, take a screensho
 
 ## 13. Summary — What V2 Delivers
 
-After V2, AgentStack has a complete closed-loop platform:
+After V2, Traceform has a complete closed-loop platform:
 
 ```
 ┌─────────────────────────────────────────────────────────┐

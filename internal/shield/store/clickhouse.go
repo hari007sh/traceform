@@ -68,7 +68,7 @@ func (s *ClickHouseStore) InsertHealingEvents(ctx context.Context, events []Heal
 	}
 
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT INTO agentstack.healing_events
+		`INSERT INTO traceform.healing_events
 		 (id, session_id, span_id, org_id, agent_name, healing_type,
 		  trigger_reason, action_taken, original_state, healed_state,
 		  success, latency_ms, metadata, created_at)
@@ -109,7 +109,7 @@ func (s *ClickHouseStore) GetHealingBySession(ctx context.Context, orgID, sessio
 	query := `SELECT id, session_id, span_id, org_id, agent_name, healing_type,
 	                 trigger_reason, action_taken, original_state, healed_state,
 	                 success, latency_ms, metadata, created_at
-	          FROM agentstack.healing_events
+	          FROM traceform.healing_events
 	          WHERE org_id = ? AND session_id = ?
 	          ORDER BY created_at ASC`
 
@@ -151,7 +151,7 @@ func (s *ClickHouseStore) GetHealingStats(ctx context.Context, orgID string, sta
 	            count() AS total,
 	            countIf(success = 1) AS successes,
 	            if(count() > 0, countIf(success = 1) / count(), 0) AS success_rate
-	          FROM agentstack.healing_events
+	          FROM traceform.healing_events
 	          WHERE org_id = ? AND created_at >= ? AND created_at <= ?`
 
 	var stats HealingStats
@@ -170,7 +170,7 @@ func (s *ClickHouseStore) GetHealingByType(ctx context.Context, orgID string, st
 	            healing_type,
 	            count() AS cnt,
 	            if(count() > 0, countIf(success = 1) / count(), 0) AS success_rate
-	          FROM agentstack.healing_events
+	          FROM traceform.healing_events
 	          WHERE org_id = ? AND created_at >= ? AND created_at <= ?
 	          GROUP BY healing_type
 	          ORDER BY cnt DESC`
@@ -205,7 +205,7 @@ func (s *ClickHouseStore) GetHealingOverTime(ctx context.Context, orgID string, 
 	            toStartOfInterval(created_at, INTERVAL ? SECOND) AS bucket,
 	            count() AS cnt,
 	            countIf(success = 1) AS successes
-	          FROM agentstack.healing_events
+	          FROM traceform.healing_events
 	          WHERE org_id = ? AND created_at >= ? AND created_at <= ?
 	          GROUP BY bucket
 	          ORDER BY bucket ASC`

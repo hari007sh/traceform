@@ -9,8 +9,8 @@ import (
 	"time"
 
 	_ "github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/agentstack/agentstack/internal/config"
-	"github.com/agentstack/agentstack/internal/server"
+	"github.com/traceform/traceform/internal/config"
+	"github.com/traceform/traceform/internal/server"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
@@ -103,7 +103,7 @@ func main() {
 		opts = append(opts, server.WithClickHouse(chDB))
 	}
 	srv := server.New(cfg, db, redisClient, natsConn, opts...)
-	logger.Info("starting AgentStack API server", "port", cfg.Port)
+	logger.Info("starting Traceform API server", "port", cfg.Port)
 	if err := srv.Run(); err != nil {
 		log.Fatalf("server error: %v", err)
 	}

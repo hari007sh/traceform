@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/agentstack/agentstack/internal/trace/store"
+	"github.com/traceform/traceform/internal/trace/store"
 )
 
 // AnalyticsService computes analytics from ClickHouse trace data.

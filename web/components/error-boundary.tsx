@@ -16,7 +16,7 @@ interface ErrorBoundaryState {
 }
 
 function formatErrorLog(component: string, error: Error): string {
-  return `[AgentStack] ${new Date().toISOString()} ${component} ${error.name}: ${error.message}`;
+  return `[Traceform] ${new Date().toISOString()} ${component} ${error.name}: ${error.message}`;
 }
 
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
@@ -38,7 +38,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       .split(" ")[0] ?? "Unknown";
 
     console.error(formatErrorLog(componentName, error));
-    console.error("[AgentStack] Component stack:", errorInfo.componentStack);
+    console.error("[Traceform] Component stack:", errorInfo.componentStack);
   }
 
   handleRetry = (): void => {
@@ -72,7 +72,7 @@ interface ErrorCardProps {
 }
 
 function ErrorCard({ error, showStack, onToggleStack, onRetry }: ErrorCardProps) {
-  const issueUrl = `https://github.com/agentstack/agentstack/issues/new?title=${encodeURIComponent(
+  const issueUrl = `https://github.com/traceform/traceform/issues/new?title=${encodeURIComponent(
     `[Dashboard] ${error?.message ?? "Unknown error"}`
   )}&body=${encodeURIComponent(
     `## Error\n\n\`\`\`\n${error?.message ?? "Unknown"}\n\`\`\`\n\n## Stack Trace\n\n\`\`\`\n${error?.stack ?? "N/A"}\n\`\`\`\n\n## Steps to Reproduce\n\n1. \n`

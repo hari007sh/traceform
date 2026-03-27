@@ -3,16 +3,16 @@
 **Template version:** 1.0
 **Last updated:** 2025-01-15
 
-> This is a template DPA for AgentStack customers. Replace bracketed placeholders with the appropriate values before signing.
+> This is a template DPA for Traceform customers. Replace bracketed placeholders with the appropriate values before signing.
 
 ---
 
 ## 1. Parties
 
 - **Data Controller** ("Customer"): [Customer Legal Name], [Address]
-- **Data Processor** ("AgentStack"): AgentStack, Inc., [Address]
+- **Data Processor** ("Traceform"): Traceform, Inc., [Address]
 
-This DPA forms part of the service agreement ("Agreement") between the Customer and AgentStack for the use of the AgentStack platform ("Service").
+This DPA forms part of the service agreement ("Agreement") between the Customer and Traceform for the use of the Traceform platform ("Service").
 
 ---
 
@@ -22,14 +22,14 @@ This DPA forms part of the service agreement ("Agreement") between the Customer 
 |------|-----------|
 | **Personal Data** | Any information relating to an identified or identifiable natural person, as defined by applicable data protection laws (GDPR Art. 4(1), CCPA, etc.) |
 | **Processing** | Any operation performed on Personal Data, including collection, storage, retrieval, analysis, and deletion |
-| **Sub-processor** | A third party engaged by AgentStack to process Personal Data on behalf of the Customer |
+| **Sub-processor** | A third party engaged by Traceform to process Personal Data on behalf of the Customer |
 | **Data Subject** | The individual to whom Personal Data relates |
 
 ---
 
 ## 3. Data Collected
 
-AgentStack processes the following categories of data on behalf of the Customer:
+Traceform processes the following categories of data on behalf of the Customer:
 
 ### 3.1 Data the Customer Sends via the SDK
 
@@ -50,10 +50,10 @@ AgentStack processes the following categories of data on behalf of the Customer:
 | **Usage metadata** | API request counts, timestamps, IP addresses | Rate limiting, security, analytics |
 | **Audit logs** | Actions performed, actor identity, timestamps | Security and compliance |
 
-### 3.3 Data AgentStack Does NOT Collect
+### 3.3 Data Traceform Does NOT Collect
 
-- AgentStack does not independently collect Personal Data from end users of the Customer's AI agents.
-- All LLM inputs and outputs are sent to AgentStack only because the Customer configured the SDK to transmit them.
+- Traceform does not independently collect Personal Data from end users of the Customer's AI agents.
+- All LLM inputs and outputs are sent to Traceform only because the Customer configured the SDK to transmit them.
 - The Customer controls what data is included in trace spans and can exclude sensitive fields via SDK configuration.
 
 ---
@@ -69,16 +69,16 @@ AgentStack processes the following categories of data on behalf of the Customer:
 | **Analysis** | Aggregation for analytics dashboards, pattern matching for failure detection, evaluation scoring |
 | **Guardrail enforcement** | Content is checked against configured rules (PII detection, toxicity, etc.) |
 | **Gateway proxying** | LLM requests routed through the gateway are logged for cost tracking and observability |
-| **Display** | Data is rendered in the AgentStack dashboard for authorized users |
+| **Display** | Data is rendered in the Traceform dashboard for authorized users |
 
 ### 4.2 Processing Locations
 
-- **Self-hosted deployments**: Data is processed and stored entirely within the Customer's infrastructure. AgentStack has no access to the data.
+- **Self-hosted deployments**: Data is processed and stored entirely within the Customer's infrastructure. Traceform has no access to the data.
 - **Cloud deployments**: Data is processed in [Region, e.g., US-East-1 (AWS)]. The Customer may request a specific region.
 
 ### 4.3 Processing Lawfulness
 
-AgentStack processes Personal Data solely on documented instructions from the Customer (i.e., the Customer's use of the SDK and API constitutes the instruction). AgentStack does not process Personal Data for its own purposes beyond providing the Service.
+Traceform processes Personal Data solely on documented instructions from the Customer (i.e., the Customer's use of the SDK and API constitutes the instruction). Traceform does not process Personal Data for its own purposes beyond providing the Service.
 
 ---
 
@@ -117,7 +117,7 @@ Deletions are:
 
 ### 6.2 Data Subject Requests
 
-If a Data Subject exercises their right to erasure (GDPR Art. 17), the Customer is responsible for initiating the deletion via the API. AgentStack will assist upon request.
+If a Data Subject exercises their right to erasure (GDPR Art. 17), the Customer is responsible for initiating the deletion via the API. Traceform will assist upon request.
 
 ### 6.3 Account Closure
 
@@ -125,7 +125,7 @@ When the Customer terminates the Agreement:
 
 1. The Customer has 30 days to export their data via `GET /v1/gdpr/export/{user_id}`.
 2. After 30 days, all Customer data is permanently deleted from all systems.
-3. AgentStack provides written confirmation of deletion upon request.
+3. Traceform provides written confirmation of deletion upon request.
 
 ### 6.4 Backup Deletion
 
@@ -135,7 +135,7 @@ Deleted data may persist in encrypted backups for up to 7 days. Backups are auto
 
 ## 7. Sub-processors
 
-AgentStack uses the following sub-processors for the cloud-hosted service:
+Traceform uses the following sub-processors for the cloud-hosted service:
 
 | Sub-processor | Purpose | Data Processed | Location |
 |---------------|---------|---------------|----------|
@@ -144,11 +144,11 @@ AgentStack uses the following sub-processors for the cloud-hosted service:
 
 ### 7.1 Self-Hosted Deployments
 
-When the Customer self-hosts AgentStack, no sub-processors are used. All data remains within the Customer's infrastructure.
+When the Customer self-hosts Traceform, no sub-processors are used. All data remains within the Customer's infrastructure.
 
 ### 7.2 Changes to Sub-processors
 
-AgentStack will notify the Customer at least 30 days before engaging a new sub-processor. The Customer may object in writing within 15 days. If the objection cannot be resolved, the Customer may terminate the Agreement.
+Traceform will notify the Customer at least 30 days before engaging a new sub-processor. The Customer may object in writing within 15 days. If the objection cannot be resolved, the Customer may terminate the Agreement.
 
 ### 7.3 Sub-processor Obligations
 
@@ -158,7 +158,7 @@ Each sub-processor is bound by a data processing agreement that imposes obligati
 
 ## 8. Security Measures
 
-AgentStack implements the following technical and organizational measures:
+Traceform implements the following technical and organizational measures:
 
 ### Technical Measures
 
@@ -188,21 +188,21 @@ AgentStack implements the following technical and organizational measures:
 
 In the event of a Personal Data breach:
 
-1. AgentStack will notify the Customer without undue delay, and no later than **72 hours** after becoming aware of the breach.
+1. Traceform will notify the Customer without undue delay, and no later than **72 hours** after becoming aware of the breach.
 2. The notification will include:
    - Nature of the breach (categories and approximate number of records affected)
    - Name and contact details of the point of contact
    - Likely consequences of the breach
    - Measures taken or proposed to address the breach
-3. AgentStack will cooperate with the Customer's investigation and any notification obligations to supervisory authorities or Data Subjects.
+3. Traceform will cooperate with the Customer's investigation and any notification obligations to supervisory authorities or Data Subjects.
 
 ---
 
 ## 10. Data Subject Rights
 
-AgentStack will assist the Customer in responding to Data Subject requests, including:
+Traceform will assist the Customer in responding to Data Subject requests, including:
 
-| Right | How AgentStack Supports It |
+| Right | How Traceform Supports It |
 |-------|---------------------------|
 | Access (Art. 15) | Data export API: `GET /v1/gdpr/export/{user_id}` |
 | Rectification (Art. 16) | Customer can update data via the API and dashboard |
@@ -217,7 +217,7 @@ AgentStack will assist the Customer in responding to Data Subject requests, incl
 
 If Personal Data is transferred outside the European Economic Area (EEA):
 
-- AgentStack relies on **Standard Contractual Clauses (SCCs)** as adopted by the European Commission.
+- Traceform relies on **Standard Contractual Clauses (SCCs)** as adopted by the European Commission.
 - The Customer may request a copy of the executed SCCs.
 - For self-hosted deployments, no international transfer occurs unless the Customer deploys outside the EEA.
 
@@ -225,9 +225,9 @@ If Personal Data is transferred outside the European Economic Area (EEA):
 
 ## 12. Audit Rights
 
-The Customer may audit AgentStack's compliance with this DPA:
+The Customer may audit Traceform's compliance with this DPA:
 
-- By reviewing AgentStack's SOC 2 report (when available) and security documentation.
+- By reviewing Traceform's SOC 2 report (when available) and security documentation.
 - By requesting answers to a written security questionnaire (up to once per year).
 - By conducting or commissioning an on-site audit with 30 days written notice, at the Customer's expense, during normal business hours.
 
@@ -236,14 +236,14 @@ The Customer may audit AgentStack's compliance with this DPA:
 ## 13. Term and Termination
 
 - This DPA is effective for the duration of the Agreement.
-- Upon termination, AgentStack will delete all Customer data as described in Section 6.3.
+- Upon termination, Traceform will delete all Customer data as described in Section 6.3.
 - Sections 6 (Deletion), 8 (Security), 9 (Breach Notification), and 12 (Audit) survive termination.
 
 ---
 
 ## Signatures
 
-| | Data Controller (Customer) | Data Processor (AgentStack) |
+| | Data Controller (Customer) | Data Processor (Traceform) |
 |-|----------------------------|----------------------------|
 | Name | __________________________ | __________________________ |
 | Title | __________________________ | __________________________ |

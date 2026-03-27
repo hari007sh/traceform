@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/agentstack/agentstack/internal/storage"
+	"github.com/traceform/traceform/internal/storage"
 )
 
 // RetentionWorker runs daily (configurable) and enforces per-org data retention
@@ -117,10 +117,10 @@ func (rw *RetentionWorker) enforce(ctx context.Context) {
 func (rw *RetentionWorker) downsampleWarmSessions(ctx context.Context, orgID string, hotDays, warmDays int) {
 	// Delete spans for sessions that will be downsampled.
 	// We delete spans first to avoid orphans.
-	spanQuery := fmt.Sprintf(`ALTER TABLE agentstack.spans DELETE WHERE
+	spanQuery := fmt.Sprintf(`ALTER TABLE traceform.spans DELETE WHERE
 		org_id = '%s'
 		AND session_id IN (
-			SELECT id FROM agentstack.sessions
+			SELECT id FROM traceform.sessions
 			WHERE org_id = '%s'
 			  AND status = 'completed'
 			  AND started_at < now() - INTERVAL %d DAY
@@ -136,7 +136,7 @@ func (rw *RetentionWorker) downsampleWarmSessions(ctx context.Context, orgID str
 	}
 
 	// Delete the downsampled sessions themselves.
-	sessionQuery := fmt.Sprintf(`ALTER TABLE agentstack.sessions DELETE WHERE
+	sessionQuery := fmt.Sprintf(`ALTER TABLE traceform.sessions DELETE WHERE
 		org_id = '%s'
 		AND status = 'completed'
 		AND started_at < now() - INTERVAL %d DAY
@@ -165,10 +165,10 @@ func (rw *RetentionWorker) cleanupBlobs(ctx context.Context, orgID string, blobD
 	}
 
 	// Find all distinct hashes from expired spans.
-	hashQuery := fmt.Sprintf(`SELECT DISTINCT input_hash FROM agentstack.spans
+	hashQuery := fmt.Sprintf(`SELECT DISTINCT input_hash FROM traceform.spans
 		WHERE org_id = '%s' AND input_hash != '' AND started_at < now() - INTERVAL %d DAY
 		UNION ALL
-		SELECT DISTINCT output_hash FROM agentstack.spans
+		SELECT DISTINCT output_hash FROM traceform.spans
 		WHERE org_id = '%s' AND output_hash != '' AND started_at < now() - INTERVAL %d DAY`,
 		orgID, blobDays, orgID, blobDays)
 
@@ -208,7 +208,7 @@ func (rw *RetentionWorker) cleanupBlobs(ctx context.Context, orgID string, blobD
 	for _, hash := range uniqueCandidates {
 		// Check if any non-expired span still references this hash.
 		var refCount int
-		countQuery := fmt.Sprintf(`SELECT count() FROM agentstack.spans
+		countQuery := fmt.Sprintf(`SELECT count() FROM traceform.spans
 			WHERE (input_hash = '%s' OR output_hash = '%s') AND started_at >= now() - INTERVAL %d DAY`,
 			hash, hash, blobDays)
 

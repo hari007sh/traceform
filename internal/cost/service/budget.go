@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/agentstack/agentstack/internal/cost/store"
+	"github.com/traceform/traceform/internal/cost/store"
 )
 
 // BudgetService handles budget enforcement and spend tracking.

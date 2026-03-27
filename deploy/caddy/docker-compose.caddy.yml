@@ -1,5 +1,5 @@
 # =============================================================================
-# AgentStack — Caddy TLS Reverse Proxy (Docker Compose)
+# Traceform — Caddy TLS Reverse Proxy (Docker Compose)
 # =============================================================================
 #
 # Run alongside the main docker-compose.yml to add TLS termination:

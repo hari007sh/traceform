@@ -85,8 +85,8 @@ func TestValidateToken(t *testing.T) {
 		if claims.Role != "admin" {
 			t.Errorf("Role = %q, want %q", claims.Role, "admin")
 		}
-		if claims.Issuer != "agentstack" {
-			t.Errorf("Issuer = %q, want %q", claims.Issuer, "agentstack")
+		if claims.Issuer != "traceform" {
+			t.Errorf("Issuer = %q, want %q", claims.Issuer, "traceform")
 		}
 	})
 
@@ -127,7 +127,7 @@ func TestValidateToken(t *testing.T) {
 			RegisteredClaims: jwt.RegisteredClaims{
 				ExpiresAt: jwt.NewNumericDate(time.Now().Add(-1 * time.Hour)),
 				IssuedAt:  jwt.NewNumericDate(time.Now().Add(-2 * time.Hour)),
-				Issuer:    "agentstack",
+				Issuer:    "traceform",
 			},
 		}
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -152,7 +152,7 @@ func TestValidateToken(t *testing.T) {
 			RegisteredClaims: jwt.RegisteredClaims{
 				ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
 				IssuedAt:  jwt.NewNumericDate(time.Now()),
-				Issuer:    "agentstack",
+				Issuer:    "traceform",
 			},
 		}
 		token := jwt.NewWithClaims(jwt.SigningMethodNone, claims)

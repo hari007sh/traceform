@@ -1,6 +1,6 @@
 # Compliance Overview
 
-This document describes the security controls and compliance posture of AgentStack. It is intended for security teams evaluating AgentStack for production use.
+This document describes the security controls and compliance posture of Traceform. It is intended for security teams evaluating Traceform for production use.
 
 ---
 
@@ -49,7 +49,7 @@ All external communication uses TLS 1.2 or higher.
 
 ## 2. Authentication
 
-AgentStack supports three authentication methods:
+Traceform supports three authentication methods:
 
 ### JWT (Session-based)
 
@@ -61,7 +61,7 @@ AgentStack supports three authentication methods:
 
 ### API Keys
 
-- Prefixed with `as_sk_` for identification.
+- Prefixed with `tf_sk_` for identification.
 - Stored as SHA-256 hashes in PostgreSQL; the plaintext key is shown once at creation time and never stored.
 - Scoped to specific permissions: `ingest`, `query`, `admin`, `gateway`.
 - No expiration by default; can be revoked at any time.
@@ -71,14 +71,14 @@ AgentStack supports three authentication methods:
 
 - Supports enterprise identity providers: Okta, Azure AD, Google Workspace.
 - Configured via environment variables (`SSO_PROVIDER`, `SSO_ISSUER_URL`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`).
-- Tokens from the IdP are validated server-side before issuing an AgentStack JWT.
+- Tokens from the IdP are validated server-side before issuing an Traceform JWT.
 - Supports Just-In-Time user provisioning.
 
 ---
 
 ## 3. Authorization
 
-AgentStack uses role-based access control (RBAC) at the organization level.
+Traceform uses role-based access control (RBAC) at the organization level.
 
 | Role | Permissions |
 |------|-------------|
@@ -124,7 +124,7 @@ AgentStack uses role-based access control (RBAC) at the organization level.
 
 ### Organization-Level Isolation
 
-All data in AgentStack is scoped to an organization.
+All data in Traceform is scoped to an organization.
 
 - Every database table that stores user data includes an `org_id` column.
 - Every query includes an `org_id` filter derived from the authenticated user's JWT or API key.
@@ -144,7 +144,7 @@ All data in AgentStack is scoped to an organization.
 
 ## 6. Data Deletion (GDPR)
 
-AgentStack provides endpoints for GDPR-compliant data deletion.
+Traceform provides endpoints for GDPR-compliant data deletion.
 
 ### Endpoints
 
@@ -212,14 +212,14 @@ The API server exposes a `/metrics` endpoint in Prometheus format:
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `agentstack_http_requests_total` | Counter | Total HTTP requests by method, path, and status code |
-| `agentstack_http_request_duration_seconds` | Histogram | Request latency distribution |
-| `agentstack_ingest_events_total` | Counter | Total ingested events by type |
-| `agentstack_ingest_batch_size` | Histogram | Batch sizes written to ClickHouse |
-| `agentstack_gateway_requests_total` | Counter | Gateway proxy requests by provider and model |
-| `agentstack_gateway_latency_seconds` | Histogram | Gateway proxy latency (excluding upstream LLM time) |
-| `agentstack_guard_checks_total` | Counter | Guardrail checks by rule and result (pass/block) |
-| `agentstack_nats_pending_messages` | Gauge | Messages pending in NATS JetStream |
+| `traceform_http_requests_total` | Counter | Total HTTP requests by method, path, and status code |
+| `traceform_http_request_duration_seconds` | Histogram | Request latency distribution |
+| `traceform_ingest_events_total` | Counter | Total ingested events by type |
+| `traceform_ingest_batch_size` | Histogram | Batch sizes written to ClickHouse |
+| `traceform_gateway_requests_total` | Counter | Gateway proxy requests by provider and model |
+| `traceform_gateway_latency_seconds` | Histogram | Gateway proxy latency (excluding upstream LLM time) |
+| `traceform_guard_checks_total` | Counter | Guardrail checks by rule and result (pass/block) |
+| `traceform_nats_pending_messages` | Gauge | Messages pending in NATS JetStream |
 
 ### Health Checks
 

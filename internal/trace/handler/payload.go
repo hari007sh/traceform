@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/agentstack/agentstack/internal/server/httputil"
-	"github.com/agentstack/agentstack/internal/server/middleware"
-	"github.com/agentstack/agentstack/internal/storage"
+	"github.com/traceform/traceform/internal/server/httputil"
+	"github.com/traceform/traceform/internal/server/middleware"
+	"github.com/traceform/traceform/internal/storage"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -47,7 +47,7 @@ func (h *PayloadHandler) GetPayload(w http.ResponseWriter, r *http.Request) {
 	var truncated uint8
 	var inlineData string
 
-	query := "SELECT " + hashCol + ", " + truncatedCol + ", " + field + " FROM agentstack.spans WHERE id = ? AND org_id = ? LIMIT 1"
+	query := "SELECT " + hashCol + ", " + truncatedCol + ", " + field + " FROM traceform.spans WHERE id = ? AND org_id = ? LIMIT 1"
 	row := h.chDB.QueryRowContext(r.Context(), query, spanID, orgID)
 	if err := row.Scan(&hash, &truncated, &inlineData); err != nil {
 		if err == sql.ErrNoRows {

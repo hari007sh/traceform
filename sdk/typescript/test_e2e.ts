@@ -1,5 +1,5 @@
 /**
- * End-to-end test for @agentstack/sdk TypeScript SDK.
+ * End-to-end test for @traceform/sdk TypeScript SDK.
  *
  * Tests the full lifecycle against a running backend at http://localhost:8080:
  * 1. Initialize SDK with JWT auth
@@ -34,7 +34,7 @@ import {
 // ─── Config ────────────────────────────────────────────────────────────────
 
 const ENDPOINT = 'http://localhost:8080';
-const JWT_PATH = '/tmp/agentstack_jwt.txt';
+const JWT_PATH = '/tmp/traceform_jwt.txt';
 
 let jwtToken: string;
 try {
@@ -98,11 +98,11 @@ async function testSessionLifecycle(): Promise<void> {
   assert(llmSpan.type === SpanType.LLM, `LLM span type is llm_call`);
   assert(llmSpan.status === SpanStatus.RUNNING, `LLM span status is RUNNING`);
 
-  llmSpan.setInput({ messages: [{ role: 'user', content: 'What is AgentStack?' }] });
+  llmSpan.setInput({ messages: [{ role: 'user', content: 'What is Traceform?' }] });
   llmSpan.setModel('gpt-4');
   llmSpan.setTokens(150, 300);
   llmSpan.setOutput({
-    choices: [{ message: { role: 'assistant', content: 'AgentStack is an AI agent production platform.' } }],
+    choices: [{ message: { role: 'assistant', content: 'Traceform is an AI agent production platform.' } }],
   });
   const llmData = llmSpan.end();
 
@@ -113,7 +113,7 @@ async function testSessionLifecycle(): Promise<void> {
 
   // Create a TOOL span
   const toolSpan = sess.createSpan('search-database', SpanType.TOOL);
-  toolSpan.setInput({ query: 'AgentStack features' });
+  toolSpan.setInput({ query: 'Traceform features' });
   toolSpan.setOutput({ results: ['Shield', 'Trace', 'Test', 'Guard', 'Route', 'Cost'] });
   toolSpan.setMetadata({ tool: 'postgres', latency: 42 });
   toolSpan.end();
@@ -452,7 +452,7 @@ async function testBatchIngestion(): Promise<void> {
 // ─── Run All Tests ─────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  console.log('=== AgentStack TypeScript SDK — End-to-End Tests ===');
+  console.log('=== Traceform TypeScript SDK — End-to-End Tests ===');
   console.log(`Endpoint: ${ENDPOINT}`);
   console.log(`JWT: ${jwtToken.slice(0, 20)}...${jwtToken.slice(-10)}`);
 

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/agentstack/agentstack/internal/server/middleware"
+	"github.com/traceform/traceform/internal/server/middleware"
 )
 
 // gdprDeleteResponse is the JSON response for the full org data deletion endpoint.
@@ -58,7 +58,7 @@ func (s *Server) handleDeleteOrgData(w http.ResponseWriter, r *http.Request) {
 	if s.clickhouseDB != nil {
 		chTables := []string{"sessions", "spans", "events", "healing_events", "gateway_requests"}
 		for _, table := range chTables {
-			query := fmt.Sprintf("ALTER TABLE agentstack.%s DELETE WHERE org_id = ?", table)
+			query := fmt.Sprintf("ALTER TABLE traceform.%s DELETE WHERE org_id = ?", table)
 			_, err := s.clickhouseDB.ExecContext(ctx, query, orgID)
 			if err != nil {
 				s.logger.Error("GDPR: failed to delete from ClickHouse table",
@@ -187,10 +187,10 @@ func (s *Server) handleDeleteOrgSessions(w http.ResponseWriter, r *http.Request)
 		name  string
 		query string
 	}{
-		{"spans", "ALTER TABLE agentstack.spans DELETE WHERE org_id = ? AND started_at < ?"},
-		{"events", "ALTER TABLE agentstack.events DELETE WHERE org_id = ? AND timestamp < ?"},
-		{"sessions", "ALTER TABLE agentstack.sessions DELETE WHERE org_id = ? AND started_at < ?"},
-		{"healing_events", "ALTER TABLE agentstack.healing_events DELETE WHERE org_id = ? AND created_at < ?"},
+		{"spans", "ALTER TABLE traceform.spans DELETE WHERE org_id = ? AND started_at < ?"},
+		{"events", "ALTER TABLE traceform.events DELETE WHERE org_id = ? AND timestamp < ?"},
+		{"sessions", "ALTER TABLE traceform.sessions DELETE WHERE org_id = ? AND started_at < ?"},
+		{"healing_events", "ALTER TABLE traceform.healing_events DELETE WHERE org_id = ? AND created_at < ?"},
 	}
 
 	for _, d := range chDeletions {

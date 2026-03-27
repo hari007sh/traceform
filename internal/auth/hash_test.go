@@ -11,8 +11,8 @@ func TestGenerateAPIKey(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GenerateAPIKey() returned error: %v", err)
 		}
-		if !strings.HasPrefix(key, "as_sk_") {
-			t.Errorf("expected key to start with 'as_sk_', got %q", key)
+		if !strings.HasPrefix(key, "tf_sk_") {
+			t.Errorf("expected key to start with 'tf_sk_', got %q", key)
 		}
 	})
 
@@ -21,7 +21,7 @@ func TestGenerateAPIKey(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GenerateAPIKey() returned error: %v", err)
 		}
-		// "as_sk_" (6 chars) + 64 hex chars (32 bytes) = 70
+		// "tf_sk_" (6 chars) + 64 hex chars (32 bytes) = 70
 		if len(key) != 70 {
 			t.Errorf("expected key length 70, got %d: %q", len(key), key)
 		}
@@ -46,7 +46,7 @@ func TestGenerateAPIKey(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GenerateAPIKey() returned error: %v", err)
 		}
-		hexPart := key[6:] // Strip "as_sk_"
+		hexPart := key[6:] // Strip "tf_sk_"
 		for _, c := range hexPart {
 			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
 				t.Errorf("invalid hex character %q in key hex part %q", string(c), hexPart)
@@ -57,7 +57,7 @@ func TestGenerateAPIKey(t *testing.T) {
 
 func TestHashAPIKey(t *testing.T) {
 	t.Run("produces consistent hash", func(t *testing.T) {
-		key := "as_sk_test1234567890abcdef"
+		key := "tf_sk_test1234567890abcdef"
 		hash1 := HashAPIKey(key)
 		hash2 := HashAPIKey(key)
 		if hash1 != hash2 {
@@ -66,15 +66,15 @@ func TestHashAPIKey(t *testing.T) {
 	})
 
 	t.Run("produces 64 character hex hash", func(t *testing.T) {
-		hash := HashAPIKey("as_sk_somekey")
+		hash := HashAPIKey("tf_sk_somekey")
 		if len(hash) != 64 {
 			t.Errorf("expected hash length 64, got %d: %q", len(hash), hash)
 		}
 	})
 
 	t.Run("different keys produce different hashes", func(t *testing.T) {
-		hash1 := HashAPIKey("as_sk_key_one")
-		hash2 := HashAPIKey("as_sk_key_two")
+		hash1 := HashAPIKey("tf_sk_key_one")
+		hash2 := HashAPIKey("tf_sk_key_two")
 		if hash1 == hash2 {
 			t.Error("different keys produced the same hash")
 		}
@@ -96,18 +96,18 @@ func TestKeyPrefix(t *testing.T) {
 	}{
 		{
 			name:     "full key returns first 14 chars",
-			key:      "as_sk_abcdef1234567890",
-			expected: "as_sk_abcdef12",
+			key:      "tf_sk_abcdef1234567890",
+			expected: "tf_sk_abcdef12",
 		},
 		{
 			name:     "short key returns entire key",
-			key:      "as_sk_abc",
-			expected: "as_sk_abc",
+			key:      "tf_sk_abc",
+			expected: "tf_sk_abc",
 		},
 		{
 			name:     "exactly 14 chars returns full key",
-			key:      "as_sk_abcdef12",
-			expected: "as_sk_abcdef12",
+			key:      "tf_sk_abcdef12",
+			expected: "tf_sk_abcdef12",
 		},
 		{
 			name:     "empty key returns empty",

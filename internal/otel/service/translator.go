@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/agentstack/agentstack/internal/trace/service"
+	"github.com/traceform/traceform/internal/trace/service"
 	"github.com/google/uuid"
 )
 
@@ -98,7 +98,7 @@ type PartialSuccess struct {
 	ErrorMessage  string `json:"errorMessage"`
 }
 
-// Translator converts OpenTelemetry spans to AgentStack native span format.
+// Translator converts OpenTelemetry spans to Traceform native span format.
 type Translator struct {
 	logger *slog.Logger
 }
@@ -108,7 +108,7 @@ func NewTranslator(logger *slog.Logger) *Translator {
 	return &Translator{logger: logger}
 }
 
-// TranslateTraceRequest converts an OTLP trace request into AgentStack span ingest requests.
+// TranslateTraceRequest converts an OTLP trace request into Traceform span ingest requests.
 func (t *Translator) TranslateTraceRequest(orgID string, req *OTLPExportTraceServiceRequest) ([]service.SpanIngestRequest, []service.SessionIngestRequest, error) {
 	var spans []service.SpanIngestRequest
 	var sessions []service.SessionIngestRequest
@@ -118,7 +118,7 @@ func (t *Translator) TranslateTraceRequest(orgID string, req *OTLPExportTraceSer
 		// Extract resource attributes
 		resourceAttrs := keyValuesToMap(rs.Resource.Attributes)
 		agentName := ExtractStringAttr(resourceAttrs, AttrServiceName)
-		agentID := ExtractStringAttr(resourceAttrs, AttrAgentStackAgentID)
+		agentID := ExtractStringAttr(resourceAttrs, AttrTraceformAgentID)
 
 		for _, ss := range rs.ScopeSpans {
 			for _, span := range ss.Spans {
@@ -130,8 +130,8 @@ func (t *Translator) TranslateTraceRequest(orgID string, req *OTLPExportTraceSer
 				// Extract span attributes
 				spanAttrs := keyValuesToMap(span.Attributes)
 
-				// Merge resource-level agentstack attributes
-				if v := ExtractStringAttr(resourceAttrs, AttrAgentStackSessionID); v != "" {
+				// Merge resource-level traceform attributes
+				if v := ExtractStringAttr(resourceAttrs, AttrTraceformSessionID); v != "" {
 					sessionID = v
 				}
 
@@ -319,10 +319,10 @@ func buildMetadata(spanAttrs, resourceAttrs map[string]interface{}) string {
 		AttrGenAIFinishReasons:  true,
 		AttrGenAIPrompt:         true,
 		AttrGenAICompletion:     true,
-		AttrAgentStackOrgID:     true,
-		AttrAgentStackAgentID:   true,
-		AttrAgentStackSessionID: true,
-		AttrAgentStackSpanType:  true,
+		AttrTraceformOrgID:     true,
+		AttrTraceformAgentID:   true,
+		AttrTraceformSessionID: true,
+		AttrTraceformSpanType:  true,
 		AttrServiceName:         true,
 	}
 

@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	costservice "github.com/agentstack/agentstack/internal/cost/service"
-	coststore "github.com/agentstack/agentstack/internal/cost/store"
-	"github.com/agentstack/agentstack/internal/route/provider"
-	"github.com/agentstack/agentstack/internal/route/store"
+	costservice "github.com/traceform/traceform/internal/cost/service"
+	coststore "github.com/traceform/traceform/internal/cost/store"
+	"github.com/traceform/traceform/internal/route/provider"
+	"github.com/traceform/traceform/internal/route/store"
 )
 
 // Proxy is the core gateway proxy handler.
@@ -53,9 +53,9 @@ func (p *Proxy) SetCostTracker(ct *costservice.TrackerService) {
 // HandleChatCompletion handles POST /v1/chat/completions.
 func (p *Proxy) HandleChatCompletion(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	orgID := r.Header.Get("X-AgentStack-Org-ID")
+	orgID := r.Header.Get("X-Traceform-Org-ID")
 	if orgID == "" {
-		writeProxyError(w, http.StatusUnauthorized, "missing X-AgentStack-Org-ID header")
+		writeProxyError(w, http.StatusUnauthorized, "missing X-Traceform-Org-ID header")
 		return
 	}
 
@@ -88,17 +88,17 @@ func (p *Proxy) HandleChatCompletion(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		} else if budgetResult.Action == "throttle" {
-			w.Header().Set("X-AgentStack-Budget-Warning", "approaching limit")
+			w.Header().Set("X-Traceform-Budget-Warning", "approaching limit")
 		}
 	}
 
 	// 2. Check semantic cache
-	cacheDisabled := r.Header.Get("X-AgentStack-Cache") == "false"
+	cacheDisabled := r.Header.Get("X-Traceform-Cache") == "false"
 	if !cacheDisabled && p.cache != nil && !req.Stream {
 		cached, hit, err := p.cache.Get(r.Context(), orgID, &req)
 		if err == nil && hit {
 			p.logRequest(orgID, req.Model, req.Model, "cache", 0, 0, 0, int(time.Since(start).Milliseconds()), true, "success", nil)
-			w.Header().Set("X-AgentStack-Cache-Hit", "true")
+			w.Header().Set("X-Traceform-Cache-Hit", "true")
 			writeJSON(w, http.StatusOK, cached)
 			return
 		}
@@ -116,9 +116,9 @@ func (p *Proxy) HandleChatCompletion(w http.ResponseWriter, r *http.Request) {
 	originalModel := req.Model
 	req.Model = result.TargetModel
 
-	w.Header().Set("X-AgentStack-Provider", result.ProviderName)
-	w.Header().Set("X-AgentStack-Model", result.TargetModel)
-	w.Header().Set("X-AgentStack-Cache-Hit", "false")
+	w.Header().Set("X-Traceform-Provider", result.ProviderName)
+	w.Header().Set("X-Traceform-Model", result.TargetModel)
+	w.Header().Set("X-Traceform-Cache-Hit", "false")
 
 	// 4. Streaming request
 	if req.Stream {
@@ -246,9 +246,9 @@ func (p *Proxy) estimateCost(ctx context.Context, providerName, model string, to
 
 // HandleEmbeddings handles POST /v1/embeddings (pass-through to provider).
 func (p *Proxy) HandleEmbeddings(w http.ResponseWriter, r *http.Request) {
-	orgID := r.Header.Get("X-AgentStack-Org-ID")
+	orgID := r.Header.Get("X-Traceform-Org-ID")
 	if orgID == "" {
-		writeProxyError(w, http.StatusUnauthorized, "missing X-AgentStack-Org-ID header")
+		writeProxyError(w, http.StatusUnauthorized, "missing X-Traceform-Org-ID header")
 		return
 	}
 

@@ -1,5 +1,5 @@
 -- =============================================
--- AgentStack Prompt Management — Database Schema
+-- Traceform Prompt Management — Database Schema
 -- =============================================
 
 CREATE TABLE prompts (

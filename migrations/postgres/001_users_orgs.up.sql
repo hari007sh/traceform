@@ -49,14 +49,14 @@ INSERT INTO organizations (id, name, slug, plan)
 VALUES ('00000000-0000-0000-0000-000000000001', 'Default Org', 'default', 'team')
 ON CONFLICT DO NOTHING;
 
--- Create a default API key (as_sk_test123) for development
--- Hash of "as_sk_test123"
+-- Create a default API key (tf_sk_test123) for development
+-- Hash of "tf_sk_test123"
 INSERT INTO api_keys (id, org_id, name, key_hash, key_prefix)
 VALUES (
     '00000000-0000-0000-0000-000000000002',
     '00000000-0000-0000-0000-000000000001',
     'Development Key',
     '91371e1de4b474dcb35f8e1fa7786964b71f244c45c401d4dc197664b48fa71e',
-    'as_sk_test1'
+    'tf_sk_test1'
 )
 ON CONFLICT DO NOTHING;

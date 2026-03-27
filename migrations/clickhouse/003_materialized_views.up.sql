@@ -7,7 +7,7 @@
 -- -------------------------------------------------------
 -- 1. mv_sessions_hourly: hourly session aggregates
 -- -------------------------------------------------------
-CREATE TABLE IF NOT EXISTS agentstack.mv_sessions_hourly_data (
+CREATE TABLE IF NOT EXISTS traceform.mv_sessions_hourly_data (
     org_id String,
     agent_name LowCardinality(String),
     hour DateTime,
@@ -25,8 +25,8 @@ CREATE TABLE IF NOT EXISTS agentstack.mv_sessions_hourly_data (
 PARTITION BY toYYYYMM(hour)
 ORDER BY (org_id, hour, agent_name);
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS agentstack.mv_sessions_hourly
-TO agentstack.mv_sessions_hourly_data
+CREATE MATERIALIZED VIEW IF NOT EXISTS traceform.mv_sessions_hourly
+TO traceform.mv_sessions_hourly_data
 AS SELECT
     org_id,
     agent_name,
@@ -41,13 +41,13 @@ AS SELECT
     sumState(duration_ms) AS sum_duration_ms,
     maxState(duration_ms) AS max_duration_ms,
     minState(duration_ms) AS min_duration_ms
-FROM agentstack.sessions
+FROM traceform.sessions
 GROUP BY org_id, agent_name, hour;
 
 -- -------------------------------------------------------
 -- 2. mv_spans_hourly: hourly span aggregates
 -- -------------------------------------------------------
-CREATE TABLE IF NOT EXISTS agentstack.mv_spans_hourly_data (
+CREATE TABLE IF NOT EXISTS traceform.mv_spans_hourly_data (
     org_id String,
     model LowCardinality(String),
     provider LowCardinality(String),
@@ -65,8 +65,8 @@ CREATE TABLE IF NOT EXISTS agentstack.mv_spans_hourly_data (
 PARTITION BY toYYYYMM(hour)
 ORDER BY (org_id, hour, model, provider);
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS agentstack.mv_spans_hourly
-TO agentstack.mv_spans_hourly_data
+CREATE MATERIALIZED VIEW IF NOT EXISTS traceform.mv_spans_hourly
+TO traceform.mv_spans_hourly_data
 AS SELECT
     org_id,
     model,
@@ -81,13 +81,13 @@ AS SELECT
     sumState(cost_cents) AS sum_cost_cents,
     sumState(duration_ms) AS sum_duration_ms,
     maxState(duration_ms) AS max_duration_ms
-FROM agentstack.spans
+FROM traceform.spans
 GROUP BY org_id, model, provider, span_type, hour;
 
 -- -------------------------------------------------------
 -- 3. mv_healing_hourly: hourly healing event aggregates
 -- -------------------------------------------------------
-CREATE TABLE IF NOT EXISTS agentstack.mv_healing_hourly_data (
+CREATE TABLE IF NOT EXISTS traceform.mv_healing_hourly_data (
     org_id String,
     healing_type LowCardinality(String),
     hour DateTime,
@@ -98,8 +98,8 @@ CREATE TABLE IF NOT EXISTS agentstack.mv_healing_hourly_data (
 PARTITION BY toYYYYMM(hour)
 ORDER BY (org_id, hour, healing_type);
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS agentstack.mv_healing_hourly
-TO agentstack.mv_healing_hourly_data
+CREATE MATERIALIZED VIEW IF NOT EXISTS traceform.mv_healing_hourly
+TO traceform.mv_healing_hourly_data
 AS SELECT
     org_id,
     toString(healing_type) AS healing_type,
@@ -107,13 +107,13 @@ AS SELECT
     countState() AS total_count,
     countIfState(success = 1) AS success_count,
     sumState(latency_ms) AS sum_latency_ms
-FROM agentstack.healing_events
+FROM traceform.healing_events
 GROUP BY org_id, healing_type, hour;
 
 -- -------------------------------------------------------
 -- 4. mv_cost_daily: daily cost aggregates from spans
 -- -------------------------------------------------------
-CREATE TABLE IF NOT EXISTS agentstack.mv_cost_daily_data (
+CREATE TABLE IF NOT EXISTS traceform.mv_cost_daily_data (
     org_id String,
     model LowCardinality(String),
     provider LowCardinality(String),
@@ -127,8 +127,8 @@ CREATE TABLE IF NOT EXISTS agentstack.mv_cost_daily_data (
 PARTITION BY toYYYYMM(day)
 ORDER BY (org_id, day, model, provider);
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS agentstack.mv_cost_daily
-TO agentstack.mv_cost_daily_data
+CREATE MATERIALIZED VIEW IF NOT EXISTS traceform.mv_cost_daily
+TO traceform.mv_cost_daily_data
 AS SELECT
     org_id,
     model,
@@ -139,14 +139,14 @@ AS SELECT
     sumState(output_tokens) AS sum_output_tokens,
     sumState(cost_cents) AS sum_cost_cents,
     avgState(cost_cents) AS avg_cost_cents
-FROM agentstack.spans
+FROM traceform.spans
 WHERE cost_cents > 0
 GROUP BY org_id, model, provider, day;
 
 -- -------------------------------------------------------
 -- 5. session_counters: pre-aggregated session metrics
 -- -------------------------------------------------------
-CREATE TABLE IF NOT EXISTS agentstack.session_counters (
+CREATE TABLE IF NOT EXISTS traceform.session_counters (
     org_id String,
     agent_name LowCardinality(String),
     status LowCardinality(String),
@@ -163,16 +163,16 @@ ORDER BY (org_id, agent_name, status, hour);
 -- -------------------------------------------------------
 -- 6. Payload columns on spans table
 -- -------------------------------------------------------
-ALTER TABLE agentstack.spans ADD COLUMN IF NOT EXISTS input_truncated UInt8 DEFAULT 0;
-ALTER TABLE agentstack.spans ADD COLUMN IF NOT EXISTS output_truncated UInt8 DEFAULT 0;
-ALTER TABLE agentstack.spans ADD COLUMN IF NOT EXISTS input_hash String DEFAULT '';
-ALTER TABLE agentstack.spans ADD COLUMN IF NOT EXISTS output_hash String DEFAULT '';
+ALTER TABLE traceform.spans ADD COLUMN IF NOT EXISTS input_truncated UInt8 DEFAULT 0;
+ALTER TABLE traceform.spans ADD COLUMN IF NOT EXISTS output_truncated UInt8 DEFAULT 0;
+ALTER TABLE traceform.spans ADD COLUMN IF NOT EXISTS input_hash String DEFAULT '';
+ALTER TABLE traceform.spans ADD COLUMN IF NOT EXISTS output_hash String DEFAULT '';
 
 -- -------------------------------------------------------
 -- 7. TTL policies (365-day hard ceiling)
 -- -------------------------------------------------------
-ALTER TABLE agentstack.sessions MODIFY TTL started_at + INTERVAL 365 DAY DELETE;
-ALTER TABLE agentstack.spans MODIFY TTL started_at + INTERVAL 365 DAY DELETE;
-ALTER TABLE agentstack.events MODIFY TTL created_at + INTERVAL 365 DAY DELETE;
-ALTER TABLE agentstack.healing_events MODIFY TTL created_at + INTERVAL 365 DAY DELETE;
-ALTER TABLE agentstack.gateway_requests MODIFY TTL created_at + INTERVAL 365 DAY DELETE;
+ALTER TABLE traceform.sessions MODIFY TTL started_at + INTERVAL 365 DAY DELETE;
+ALTER TABLE traceform.spans MODIFY TTL started_at + INTERVAL 365 DAY DELETE;
+ALTER TABLE traceform.events MODIFY TTL created_at + INTERVAL 365 DAY DELETE;
+ALTER TABLE traceform.healing_events MODIFY TTL created_at + INTERVAL 365 DAY DELETE;
+ALTER TABLE traceform.gateway_requests MODIFY TTL created_at + INTERVAL 365 DAY DELETE;

@@ -5,7 +5,7 @@ import {
   shutdown,
   trace,
   _resetForTesting,
-  AgentStackClient,
+  TraceformClient,
   SessionInstance,
   SpanInstance,
   HealingEngine,
@@ -44,7 +44,7 @@ import type {
 const TEST_CONFIG: InitConfig = {
   apiKey: 'test-api-key-123',
   projectId: 'test-project',
-  endpoint: 'https://test.agentstack.dev',
+  endpoint: 'https://test.traceform.dev',
   batchSize: 100,
   flushIntervalMs: 0, // disable auto-flush in tests
   maxRetries: 1,
@@ -72,7 +72,7 @@ describe('Client Initialization', () => {
   });
 
   test('session() throws before init()', () => {
-    expect(() => session()).toThrow('AgentStack SDK not initialized');
+    expect(() => session()).toThrow('Traceform SDK not initialized');
   });
 
   test('init() with healing config', () => {
@@ -88,8 +88,8 @@ describe('Client Initialization', () => {
     expect(sess).toBeDefined();
   });
 
-  test('AgentStackClient stores config correctly', () => {
-    const client = new AgentStackClient({
+  test('TraceformClient stores config correctly', () => {
+    const client = new TraceformClient({
       apiKey: 'key',
       projectId: 'proj',
       endpoint: 'https://custom.endpoint.dev',
@@ -576,6 +576,6 @@ describe('Shutdown', () => {
     await shutdown();
 
     // After shutdown, session() should throw
-    expect(() => session()).toThrow('AgentStack SDK not initialized');
+    expect(() => session()).toThrow('Traceform SDK not initialized');
   });
 });

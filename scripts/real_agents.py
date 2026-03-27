@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-AgentStack — Real Agent Simulation with LM Studio
+Traceform — Real Agent Simulation with LM Studio
 
 Creates realistic AI agent scenarios that make REAL LLM calls to a local
-LM Studio instance and traces everything through AgentStack.
+LM Studio instance and traces everything through Traceform.
 
 Agents:
   1. Customer Support Agent   — answers support tickets with RAG
@@ -39,13 +39,13 @@ LLM_MODEL = "qwen3-30b-a3b-instruct-2507-mlx"
 LLM_MODEL_SMALL = "google/gemma-3-4b"
 
 # Auth — prefer JWT over API key
-_jwt_file = "/tmp/agentstack_jwt.txt"
+_jwt_file = "/tmp/traceform_jwt.txt"
 if os.path.exists(_jwt_file):
     with open(_jwt_file) as f:
         AUTH_TOKEN = f.read().strip()
     print(f"[auth] Using JWT token")
 else:
-    AUTH_TOKEN = os.environ.get("AGENTSTACK_API_KEY", "as_sk_test123")
+    AUTH_TOKEN = os.environ.get("TRACEFORM_API_KEY", "tf_sk_test123")
     print(f"[auth] Using API key: {AUTH_TOKEN[:20]}...")
 
 HEADERS = {"Authorization": f"Bearer {AUTH_TOKEN}", "Content-Type": "application/json"}
@@ -895,7 +895,7 @@ def register_agents():
 
 def main():
     print("=" * 60)
-    print("  AgentStack — Real Agent Simulation")
+    print("  Traceform — Real Agent Simulation")
     print(f"  LLM: {LLM_MODEL} via LM Studio")
     print(f"  API: {API_URL}")
     print("=" * 60)

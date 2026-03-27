@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/agentstack/agentstack/internal/billing"
-	"github.com/agentstack/agentstack/internal/server/httputil"
-	"github.com/agentstack/agentstack/internal/server/middleware"
-	"github.com/agentstack/agentstack/internal/trace/service"
+	"github.com/traceform/traceform/internal/billing"
+	"github.com/traceform/traceform/internal/server/httputil"
+	"github.com/traceform/traceform/internal/server/middleware"
+	"github.com/traceform/traceform/internal/trace/service"
 )
 
 // IngestHandler handles trace data ingestion endpoints.
@@ -227,7 +227,7 @@ func (h *IngestHandler) IngestBatch(w http.ResponseWriter, r *http.Request) {
 	if h.sampling != nil {
 		config, _ := h.sampling.GetEffectiveConfig(r.Context(), orgID, "")
 		if config != nil {
-			w.Header().Set("X-AgentStack-Sample-Rate", fmt.Sprintf("%.4f", config.SampleRate))
+			w.Header().Set("X-Traceform-Sample-Rate", fmt.Sprintf("%.4f", config.SampleRate))
 		}
 	}
 

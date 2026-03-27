@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/agentstack/agentstack/cli"
+	"github.com/traceform/traceform/cli"
 )
 
 const version = "0.2.0"
@@ -21,7 +21,7 @@ func main() {
 		printUsage()
 		os.Exit(0)
 	case "--version", "-v", "version":
-		fmt.Printf("agentstack %s\n", version)
+		fmt.Printf("traceform %s\n", version)
 		os.Exit(0)
 	}
 
@@ -46,15 +46,15 @@ func main() {
 		cli.GateCommand(remaining)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
-		fmt.Fprintln(os.Stderr, "Run 'agentstack --help' for usage.")
+		fmt.Fprintln(os.Stderr, "Run 'traceform --help' for usage.")
 		os.Exit(1)
 	}
 }
 
 func printUsage() {
-	fmt.Printf(`AgentStack CLI v%s — AI agent production platform
+	fmt.Printf(`Traceform CLI v%s — AI agent production platform
 
-Usage: agentstack <command> [flags]
+Usage: traceform <command> [flags]
 
 Commands:
   test       Run test suites and view results
@@ -63,23 +63,23 @@ Commands:
   version    Print version information
 
 Global Flags:
-  --api-key <key>     API key (or set AGENTSTACK_API_KEY env var)
-  --endpoint <url>    API endpoint (or set AGENTSTACK_ENDPOINT env var)
+  --api-key <key>     API key (or set TRACEFORM_API_KEY env var)
+  --endpoint <url>    API endpoint (or set TRACEFORM_ENDPOINT env var)
                       Default: http://localhost:8080
 
 Examples:
   # Run tests in CI mode with JUnit output
-  agentstack test run --suite my-suite --ci --threshold 95 --format junit > results.xml
+  traceform test run --suite my-suite --ci --threshold 95 --format junit > results.xml
 
   # Quality gate check for CI/CD pipelines
-  agentstack gate --suite my-suite --min-pass-rate 95 --max-cost 500
+  traceform gate --suite my-suite --min-pass-rate 95 --max-cost 500
 
   # View cost summary as JSON
-  agentstack cost summary --period 7d --format json
+  traceform cost summary --period 7d --format json
 
   # Use explicit API key and endpoint
-  agentstack --api-key sk_test123 --endpoint https://api.agentstack.dev test run --suite my-suite
+  traceform --api-key sk_test123 --endpoint https://api.traceform.dev test run --suite my-suite
 
-Run 'agentstack <command> --help' for more information on a command.
+Run 'traceform <command> --help' for more information on a command.
 `, version)
 }

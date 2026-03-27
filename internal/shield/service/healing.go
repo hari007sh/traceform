@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/agentstack/agentstack/internal/shield/store"
+	"github.com/traceform/traceform/internal/shield/store"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 )

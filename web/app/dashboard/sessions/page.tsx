@@ -92,10 +92,10 @@ function CopyButton({
 // Empty state
 // ---------------------------------------------------------------------------
 
-const SETUP_CODE = `import agentstack
-agentstack.init(api_key="your-key", endpoint="http://localhost:8080")
+const SETUP_CODE = `import traceform
+traceform.init(api_key="your-key", endpoint="http://localhost:8080")
 
-with agentstack.session(agent_name="my-agent") as session:
+with traceform.session(agent_name="my-agent") as session:
     # Your agent code here
     pass`;
 
@@ -129,7 +129,7 @@ function EmptySessionsState() {
             <code>
               <span className="text-[var(--accent-purple)]">import</span>{" "}
               agentstack{"\n"}
-              agentstack.
+              traceform.
               <span className="text-[var(--accent-blue)]">init</span>(api_key=
               <span className="text-[var(--accent-green)]">
                 &quot;your-key&quot;
@@ -141,7 +141,7 @@ function EmptySessionsState() {
               ){"\n"}
               {"\n"}
               <span className="text-[var(--accent-purple)]">with</span>{" "}
-              agentstack.
+              traceform.
               <span className="text-[var(--accent-blue)]">session</span>
               (agent_name=
               <span className="text-[var(--accent-green)]">
@@ -163,7 +163,7 @@ function EmptySessionsState() {
         <div className="flex items-center gap-3">
           <CopyButton text={SETUP_CODE} label="Copy Setup Code" />
           <a
-            href="https://docs.agentstack.dev"
+            href="https://docs.traceform.dev"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-[var(--accent-blue)] bg-[var(--accent-blue)]/10 border border-[var(--accent-blue)]/20 hover:bg-[var(--accent-blue)]/15 transition-colors"
@@ -329,7 +329,7 @@ function SessionsContent() {
               : "Failed to load sessions";
 
         console.error(
-          "[AgentStack] SessionsPage: API fetch failed:",
+          "[Traceform] SessionsPage: API fetch failed:",
           message
         );
         if (!append) {

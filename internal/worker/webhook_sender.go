@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	webhookservice "github.com/agentstack/agentstack/internal/webhook/service"
-	webhookstore "github.com/agentstack/agentstack/internal/webhook/store"
+	webhookservice "github.com/traceform/traceform/internal/webhook/service"
+	webhookstore "github.com/traceform/traceform/internal/webhook/store"
 	"github.com/nats-io/nats.go"
 )
 

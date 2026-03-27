@@ -1,6 +1,6 @@
-# AgentStack Operational Runbook
+# Traceform Operational Runbook
 
-This runbook covers common operational scenarios for the AgentStack platform. Each section describes the symptoms, diagnosis steps, and resolution procedures.
+This runbook covers common operational scenarios for the Traceform platform. Each section describes the symptoms, diagnosis steps, and resolution procedures.
 
 ---
 
@@ -12,7 +12,7 @@ This runbook covers common operational scenarios for the AgentStack platform. Ea
 
 1. Check the process logs for startup errors:
    ```bash
-   journalctl -u agentstack-server --since "5 minutes ago"
+   journalctl -u traceform-server --since "5 minutes ago"
    # or if running via Docker:
    docker compose logs server --tail=50
    ```
@@ -68,7 +68,7 @@ This runbook covers common operational scenarios for the AgentStack platform. Ea
 
 3. If running in Kubernetes, check pod resource usage:
    ```bash
-   kubectl top pods -l app=agentstack-server
+   kubectl top pods -l app=traceform-server
    ```
 
 4. Check for goroutine leaks with pprof:
@@ -123,11 +123,11 @@ This runbook covers common operational scenarios for the AgentStack platform. Ea
 
 - **Missing skip index:** Add a minmax or set skip index on the filtered column. Example:
   ```sql
-  ALTER TABLE agentstack.spans ADD INDEX idx_org_id org_id TYPE set(100) GRANULARITY 4;
-  ALTER TABLE agentstack.spans MATERIALIZE INDEX idx_org_id;
+  ALTER TABLE traceform.spans ADD INDEX idx_org_id org_id TYPE set(100) GRANULARITY 4;
+  ALTER TABLE traceform.spans MATERIALIZE INDEX idx_org_id;
   ```
 - **Unoptimized materialized view:** Check that materialized views use the correct `ORDER BY` matching common query patterns.
-- **Too many parts:** Run `OPTIMIZE TABLE agentstack.spans FINAL` to merge parts. Consider increasing `merge_max_block_size`.
+- **Too many parts:** Run `OPTIMIZE TABLE traceform.spans FINAL` to merge parts. Consider increasing `merge_max_block_size`.
 - **Increase memory for large aggregations:** Set per-query memory limit:
   ```bash
   clickhouse-client --max_memory_usage=10000000000 --query "..."
@@ -143,14 +143,14 @@ This runbook covers common operational scenarios for the AgentStack platform. Ea
 
 1. Check NATS stream info:
    ```bash
-   nats stream info agentstack-events
+   nats stream info traceform-events
    # Or via HTTP monitoring:
    curl -s http://localhost:8222/jsz | python3 -m json.tool
    ```
 
 2. Check consumer lag:
    ```bash
-   nats consumer info agentstack-events agentstack-worker
+   nats consumer info traceform-events traceform-worker
    ```
 
 3. Check worker health:
@@ -164,19 +164,19 @@ This runbook covers common operational scenarios for the AgentStack platform. Ea
 - **Worker not running:** Restart the worker: `docker compose restart worker`.
 - **Worker processing slowly:** Scale workers horizontally. In Kubernetes:
   ```bash
-  kubectl scale deployment agentstack-worker --replicas=3
+  kubectl scale deployment traceform-worker --replicas=3
   ```
 - **Consumer stuck:** Reset the consumer to replay from a specific sequence:
   ```bash
-  nats consumer edit agentstack-events agentstack-worker --deliver=last
+  nats consumer edit traceform-events traceform-worker --deliver=last
   ```
 - **Dead letter messages:** Check the dead letter subject for poison messages that repeatedly fail:
   ```bash
-  nats sub "agentstack.deadletter.>" --count=10
+  nats sub "traceform.deadletter.>" --count=10
   ```
 - **Stream storage full:** Increase the stream limits or reduce retention:
   ```bash
-  nats stream edit agentstack-events --max-msgs=10000000 --max-age=72h
+  nats stream edit traceform-events --max-msgs=10000000 --max-age=72h
   ```
 
 ---
@@ -247,7 +247,7 @@ This runbook covers common operational scenarios for the AgentStack platform. Ea
 
 1. Check error rate from Prometheus:
    ```bash
-   curl -s http://localhost:8080/metrics | grep agentstack_http_requests_total
+   curl -s http://localhost:8080/metrics | grep traceform_http_requests_total
    ```
 
 2. Check recent server logs for errors:
@@ -257,7 +257,7 @@ This runbook covers common operational scenarios for the AgentStack platform. Ea
 
 3. Check which endpoints are failing:
    ```bash
-   curl -s 'http://localhost:9090/api/v1/query?query=topk(5,rate(agentstack_http_requests_total{status=~"5.."}[5m]))'
+   curl -s 'http://localhost:9090/api/v1/query?query=topk(5,rate(traceform_http_requests_total{status=~"5.."}[5m]))'
    ```
 
 4. Check health endpoint for degraded dependencies:
@@ -283,7 +283,7 @@ This runbook covers common operational scenarios for the AgentStack platform. Ea
 1. Check disk usage:
    ```bash
    df -h
-   du -sh /var/lib/clickhouse/data/agentstack/*
+   du -sh /var/lib/clickhouse/data/agentstack  /* legacy db name *//*
    du -sh /var/lib/postgresql/data/
    ```
 
@@ -300,19 +300,19 @@ This runbook covers common operational scenarios for the AgentStack platform. Ea
 
 3. Check for dead letter files:
    ```bash
-   du -sh /var/lib/agentstack/deadletter/
+   du -sh /var/lib/traceform/deadletter/
    ```
 
 ### Resolution
 
 - **ClickHouse data too large:** Apply or tighten TTL retention:
   ```sql
-  ALTER TABLE agentstack.spans MODIFY TTL created_at + INTERVAL 90 DAY;
-  ALTER TABLE agentstack.events MODIFY TTL created_at + INTERVAL 90 DAY;
+  ALTER TABLE traceform.spans MODIFY TTL created_at + INTERVAL 90 DAY;
+  ALTER TABLE traceform.events MODIFY TTL created_at + INTERVAL 90 DAY;
   ```
   Then force cleanup:
   ```bash
-  clickhouse-client --query "OPTIMIZE TABLE agentstack.spans FINAL"
+  clickhouse-client --query "OPTIMIZE TABLE traceform.spans FINAL"
   ```
 - **PostgreSQL WAL bloat:** Check for replication slots that are not advancing:
   ```bash
@@ -321,7 +321,7 @@ This runbook covers common operational scenarios for the AgentStack platform. Ea
   Drop unused slots if necessary.
 - **Dead letter cleanup:** Archive or delete old dead letter messages:
   ```bash
-  find /var/lib/agentstack/deadletter/ -mtime +7 -delete
+  find /var/lib/traceform/deadletter/ -mtime +7 -delete
   ```
 - **Backup cleanup:** Run the backup retention cleanup:
   ```bash
@@ -378,28 +378,28 @@ This runbook covers common operational scenarios for the AgentStack platform. Ea
 
 1. **Scale API server replicas:**
    ```bash
-   kubectl scale deployment agentstack-server --replicas=3
+   kubectl scale deployment traceform-server --replicas=3
    # Or via Helm values:
-   helm upgrade agentstack deploy/helm/agentstack --set server.replicas=3
+   helm upgrade traceform deploy/helm/agentstack --set server.replicas=3
    ```
 
 2. **Scale workers:**
    ```bash
-   kubectl scale deployment agentstack-worker --replicas=5
-   helm upgrade agentstack deploy/helm/agentstack --set worker.replicas=5
+   kubectl scale deployment traceform-worker --replicas=5
+   helm upgrade traceform deploy/helm/agentstack --set worker.replicas=5
    ```
 
 3. **Scale gateway:**
    ```bash
-   kubectl scale deployment agentstack-gateway --replicas=3
-   helm upgrade agentstack deploy/helm/agentstack --set gateway.replicas=3
+   kubectl scale deployment traceform-gateway --replicas=3
+   helm upgrade traceform deploy/helm/agentstack --set gateway.replicas=3
    ```
 
 ### Vertical Scaling
 
 4. **Increase ClickHouse resources:**
    ```bash
-   helm upgrade agentstack deploy/helm/agentstack \
+   helm upgrade traceform deploy/helm/agentstack \
      --set clickhouse.resources.requests.memory=8Gi \
      --set clickhouse.resources.limits.memory=16Gi
    ```
@@ -419,7 +419,7 @@ After scaling, verify the system is healthy:
 ```bash
 curl -s http://localhost:8080/health | python3 -m json.tool
 curl -s http://localhost:8080/ready | python3 -m json.tool
-kubectl top pods -l app.kubernetes.io/name=agentstack
+kubectl top pods -l app.kubernetes.io/name=traceform
 ```
 
 ---
@@ -432,19 +432,19 @@ kubectl top pods -l app.kubernetes.io/name=agentstack
 
 1. List recent releases:
    ```bash
-   helm history agentstack
+   helm history traceform
    ```
 
 2. Roll back to the previous version:
    ```bash
-   helm rollback agentstack <REVISION>
+   helm rollback traceform <REVISION>
    ```
 
 3. Verify health after rollback:
    ```bash
-   kubectl rollout status deployment/agentstack-server
-   kubectl rollout status deployment/agentstack-gateway
-   kubectl rollout status deployment/agentstack-worker
+   kubectl rollout status deployment/traceform-server
+   kubectl rollout status deployment/traceform-gateway
+   kubectl rollout status deployment/traceform-worker
    curl -s http://localhost:8080/health | python3 -m json.tool
    ```
 
@@ -484,7 +484,7 @@ make migrate-status
 make migrate-down
 
 # Or restore from backup if data was corrupted
-./scripts/restore.sh /var/backups/agentstack/postgres-YYYYMMDD-HHMMSS.dump
+./scripts/restore.sh /var/backups/traceform/postgres-YYYYMMDD-HHMMSS.dump
 ```
 
 ### Post-Rollback Checklist

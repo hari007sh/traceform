@@ -1,5 +1,5 @@
 """
-AgentStack Python SDK — Test Suite
+Traceform Python SDK — Test Suite
 
 Tests for core SDK functionality:
 - Client initialization
@@ -14,13 +14,13 @@ import threading
 import pytest
 from unittest.mock import MagicMock, patch, call
 
-import agentstack
-from agentstack.client import AgentStackClient
-from agentstack.session import Session
-from agentstack.span import Span
-from agentstack.trace import trace, get_current_session, set_current_session, _safe_repr
-from agentstack.batch import BatchSender
-from agentstack.healing import (
+import traceform
+from traceform.client import TraceformClient
+from traceform.session import Session
+from traceform.span import Span
+from traceform.trace import trace, get_current_session, set_current_session, _safe_repr
+from traceform.batch import BatchSender
+from traceform.healing import (
     HealingConfig,
     HealingEngine,
     HealingIntervention,
@@ -28,7 +28,7 @@ from agentstack.healing import (
     get_healing_engine,
     set_healing_engine,
 )
-from agentstack import guard, cost
+from traceform import guard, cost
 
 
 # ---------------------------------------------------------------------------
@@ -76,23 +76,23 @@ class MockSession:
 # ===========================================================================
 
 class TestClient:
-    """Tests for AgentStackClient initialization and configuration."""
+    """Tests for TraceformClient initialization and configuration."""
 
     def test_init_requires_api_key(self):
         """Client raises ValueError if api_key is empty."""
         with pytest.raises(ValueError, match="api_key is required"):
-            AgentStackClient(api_key="")
+            TraceformClient(api_key="")
 
     def test_init_with_valid_key(self):
         """Client initializes with a valid API key."""
-        client = AgentStackClient(api_key="as_sk_test123")
+        client = TraceformClient(api_key="tf_sk_test123")
         assert client.endpoint == "http://localhost:8080"
         client.shutdown()
 
     def test_init_custom_endpoint(self):
         """Client accepts a custom endpoint."""
-        client = AgentStackClient(
-            api_key="as_sk_test",
+        client = TraceformClient(
+            api_key="tf_sk_test",
             endpoint="https://api.example.com",
         )
         assert client.endpoint == "https://api.example.com"
@@ -100,8 +100,8 @@ class TestClient:
 
     def test_init_strips_trailing_slash(self):
         """Client strips trailing slash from endpoint."""
-        client = AgentStackClient(
-            api_key="as_sk_test",
+        client = TraceformClient(
+            api_key="tf_sk_test",
             endpoint="http://localhost:8080/",
         )
         assert client.endpoint == "http://localhost:8080"

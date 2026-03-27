@@ -146,7 +146,7 @@ export function Sidebar() {
               <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[var(--accent-blue)] to-[var(--accent-purple)] flex items-center justify-center">
                 <span className="text-white font-bold text-[11px]">A</span>
               </div>
-              <span className="font-semibold text-[13px] text-[var(--text-primary)]">AgentStack</span>
+              <span className="font-semibold text-[13px] text-[var(--text-primary)]">Traceform</span>
             </Link>
           )}
           <button

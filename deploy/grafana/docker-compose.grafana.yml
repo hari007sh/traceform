@@ -12,6 +12,6 @@ services:
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
-      - ./agentstack-dashboard.json:/var/lib/grafana/dashboards/agentstack.json
+      - ./traceform-dashboard.json:/var/lib/grafana/dashboards/traceform.json
       - ./dashboard-provider.yml:/etc/grafana/provisioning/dashboards/provider.yml
       - ./datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml
