@@ -112,6 +112,13 @@ const planBadgeColors: Record<string, string> = {
   enterprise: "bg-amber-500/10 text-amber-400",
 };
 
+const planBadgeLabels: Record<string, string> = {
+  free: "Community",
+  cloud: "Cloud",
+  team: "Team",
+  enterprise: "Enterprise",
+};
+
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -264,12 +271,12 @@ export function Sidebar() {
                     <p className="text-[12px] font-medium truncate text-[var(--text-primary)]">Default Org</p>
                     {planInfo && (
                       <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider ${planBadgeColors[planInfo.plan] || planBadgeColors.free}`}>
-                        {planInfo.plan}
+                        {planBadgeLabels[planInfo.plan] || "Community"}
                       </span>
                     )}
                   </div>
                   <p className="text-[10px] text-[var(--text-tertiary)] leading-tight">
-                    {planInfo ? `${planInfo.plan.charAt(0).toUpperCase() + planInfo.plan.slice(1)} Plan` : "Loading..."}
+                    {planInfo ? `${planBadgeLabels[planInfo.plan] || "Community"} Plan` : "Loading..."}
                   </p>
                 </div>
               </>

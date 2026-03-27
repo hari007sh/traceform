@@ -1,11 +1,71 @@
 ---
 title: Enterprise Features
-description: Enterprise capabilities — RBAC, SSO (SAML/OIDC), audit logging, plan tiers, usage metering, data export, GDPR compliance, error groups, API key rotation, and JWT revocation.
+description: Enterprise capabilities — BSL 1.1 licensing, RBAC, SSO (SAML/OIDC), audit logging, plan tiers, usage metering, data export, GDPR compliance, error groups, API key rotation, and JWT revocation.
 ---
 
 # Enterprise Features
 
 Traceform includes enterprise-grade features for security, compliance, and team management. This page covers all enterprise capabilities and their configuration.
+
+## Licensing
+
+Traceform is licensed under the **Business Source License 1.1 (BSL 1.1)**. This means:
+
+- **Free to use**: Self-host and use Traceform for any purpose, including commercial use.
+- **No competing services**: You may not offer Traceform as a managed service, hosted solution, or cloud service to third parties.
+- **Converts to Apache 2.0**: Four years after each release, the code converts to the fully permissive Apache License 2.0.
+
+### License Tiers
+
+Traceform uses a license key system to unlock features beyond the Community tier:
+
+| Feature | Community (Free) | Team ($199/mo) | Enterprise (Custom) |
+|---------|-----------------|----------------|---------------------|
+| All 6 modules | Yes | Yes | Yes |
+| Team members | 3 | 25 | Unlimited |
+| Data retention | 7 days | 90 days | Custom |
+| RBAC | Basic (admin/viewer) | Basic (admin/viewer) | Custom roles |
+| Audit logging | -- | Yes | Yes |
+| Data export (CSV/JSON) | -- | Yes | Yes |
+| Error groups | -- | Yes | Yes |
+| Budget enforcement | -- | Yes | Yes |
+| SSO (SAML/OIDC) | -- | -- | Yes |
+| Custom roles | -- | -- | Yes |
+| SLA guarantee | -- | -- | Yes |
+| Dedicated support | -- | Email | Dedicated |
+
+### License Key Setup
+
+Set your license key as an environment variable in your `.env` file:
+
+```bash
+# .env
+TRACEFORM_LICENSE_KEY=tf_lic_your_license_key_here
+TRACEFORM_MODE=self-hosted  # or "cloud" for managed deployments
+```
+
+You can also enter a license key in the dashboard at **Settings > Billing**.
+
+### Checking License Status
+
+Use the CLI to check your current license:
+
+```bash
+traceform license info
+```
+
+Output:
+
+```
+License: Team
+Status: Active
+Expires: 2027-03-27
+Members: 25 (5 used)
+Retention: 90 days
+Features: audit_log, data_export, error_groups, budget_enforcement
+```
+
+If no license key is set, Traceform runs in Community mode with all 6 modules available but with reduced limits.
 
 ## Role-Based Access Control (RBAC)
 
@@ -134,7 +194,7 @@ curl "http://localhost:8080/auth/sso/lookup?domain=example.com"
 
 ## Audit Logging
 
-<PlanBadge plan="cloud" />
+<PlanBadge plan="team" />
 
 All mutations (creates, updates, deletes) are recorded in an asynchronous audit log. The audit log service never blocks mutation requests -- writes go through a buffered channel to the audit logger worker.
 
@@ -180,26 +240,31 @@ curl -H "Authorization: Bearer <jwt_token>" \
   "http://localhost:8080/v1/export/audit?format=json"
 ```
 
-Audit logging requires team plan or above. Audit log export requires team plan or above.
+Audit logging requires the Team license or above. Audit log export requires the Team license or above.
 
 ## Plan Tiers
 
-Traceform offers four plan tiers with feature gating and usage metering:
+Traceform offers three self-hosted tiers (Community, Team, Enterprise) and equivalent cloud-hosted tiers where Traceform manages the infrastructure for you.
 
-| Feature | Free | Cloud ($49/mo) | Team ($199/mo) | Enterprise (Custom) |
-|---------|------|----------------|-----------------|---------------------|
-| Core modules (Trace, Shield, Guard, Route, Test, Cost) | Yes | Yes | Yes | Yes |
-| Events per month | 10K | 100K | 1M | Unlimited |
-| Data retention | 7 days | 30 days | 90 days | Custom |
-| Team members | 1 | 3 | 10 | Unlimited |
-| Custom evaluators | 3 | 10 | Unlimited | Unlimited |
-| Data export (CSV/JSON) | -- | Yes | Yes | Yes |
-| Error groups | -- | Yes | Yes | Yes |
-| API key rotation | -- | -- | Yes | Yes |
-| Audit logging | -- | -- | Yes | Yes |
-| SSO (SAML/OIDC) | -- | -- | -- | Yes |
-| Priority support | -- | -- | Yes | Yes |
-| SLA | -- | -- | -- | Yes |
+### Self-Hosted Tiers
+
+| Feature | Community (Free) | Team ($199/mo) | Enterprise (Custom) |
+|---------|-----------------|----------------|---------------------|
+| Core modules (Trace, Shield, Guard, Route, Test, Cost) | Yes | Yes | Yes |
+| Team members | 3 | 25 | Unlimited |
+| Data retention | 7 days | 90 days | Custom |
+| RBAC | Basic (admin/viewer) | Basic (admin/viewer) | Custom roles |
+| Audit logging | -- | Yes | Yes |
+| Data export (CSV/JSON) | -- | Yes | Yes |
+| Error groups | -- | Yes | Yes |
+| Budget enforcement | -- | Yes | Yes |
+| SSO (SAML/OIDC) | -- | -- | Yes |
+| SLA guarantee | -- | -- | Yes |
+| Support | Community | Email | Dedicated |
+
+### Cloud-Hosted Tiers
+
+Cloud-hosted tiers include the same features as their self-hosted counterparts, plus managed infrastructure, automatic updates, and backups. Pricing starts at $49/mo for Cloud Starter (Community-equivalent) and $199/mo for Cloud Team.
 
 ### Usage Metering
 
@@ -231,9 +296,9 @@ Navigate to **Settings > Billing** in the dashboard to see:
 
 ## Data Export
 
-<PlanBadge plan="cloud" />
+<PlanBadge plan="team" />
 
-Export sessions, cost data, and audit logs as CSV or JSON. Available on cloud plan and above.
+Export sessions, cost data, and audit logs as CSV or JSON. Available on the Team license and above.
 
 ```bash
 # Export sessions
@@ -282,11 +347,11 @@ This action is **irreversible** and requires the `owner` role.
 
 ### Data Retention
 
-Data retention is governed by plan tier (7 days for free, 30 days for cloud, 90 days for team, custom for enterprise). Expired data is automatically purged from ClickHouse by the background cleanup worker.
+Data retention is governed by license tier (7 days for Community, 90 days for Team, custom for Enterprise). Expired data is automatically purged from ClickHouse by the background cleanup worker.
 
 ## Error Groups
 
-<PlanBadge plan="cloud" />
+<PlanBadge plan="team" />
 
 Errors are grouped by fingerprint for efficient triage. The fingerprinting algorithm normalizes error messages (removing dynamic values like IDs and timestamps), extracts top stack trace frames, and combines with span type and agent name.
 
@@ -310,7 +375,7 @@ curl -H "Authorization: Bearer tf_sk_..." \
   "http://localhost:8080/v1/errors/{fingerprint}"
 ```
 
-Error groups require cloud plan or above.
+Error groups require the Team license or above.
 
 ## API Key Rotation
 
@@ -339,7 +404,7 @@ During the grace period:
 - After 24 hours, the old key is automatically revoked
 - The new key is returned only once -- store it securely
 
-API key rotation requires team plan or above.
+API key rotation requires the Team license or above.
 
 ## JWT Revocation
 

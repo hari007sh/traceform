@@ -375,6 +375,49 @@ The pipeline runs on:
 - Pull requests targeting `main`
 - Manual dispatch
 
+## License Configuration
+
+Traceform uses BSL 1.1 licensing with three tiers: **Community** (free), **Team** ($199/mo), and **Enterprise** (custom). The license tier is controlled by environment variables.
+
+### Setting Your License
+
+Add the following to your `.env` file:
+
+```bash
+# Deployment mode: "self-hosted" (default) or "cloud"
+TRACEFORM_MODE=self-hosted
+
+# License key (leave blank for Community tier)
+TRACEFORM_LICENSE_KEY=tf_lic_your_license_key_here
+```
+
+### Tier Behavior
+
+| Variable | Community | Team | Enterprise |
+|----------|-----------|------|------------|
+| `TRACEFORM_MODE` | `self-hosted` | `self-hosted` | `self-hosted` |
+| `TRACEFORM_LICENSE_KEY` | (not set) | `tf_lic_...` | `tf_lic_...` |
+| Team members | 3 | 25 | Unlimited |
+| Data retention | 7 days | 90 days | Custom |
+| Audit log | Disabled | Enabled | Enabled |
+| Data export | Disabled | Enabled | Enabled |
+| Error groups | Disabled | Enabled | Enabled |
+| SSO | Disabled | Disabled | Enabled |
+
+### Verifying License
+
+After starting Traceform, verify your license status:
+
+```bash
+# Via CLI
+traceform license info
+
+# Via API
+curl http://localhost:8080/api/license
+```
+
+If `TRACEFORM_LICENSE_KEY` is not set or invalid, Traceform runs in **Community** mode with all 6 modules available but with reduced limits (3 members, 7-day retention, no audit log or data export).
+
 ## Environment Variables Reference
 
 ### Server Configuration
@@ -454,12 +497,19 @@ The pipeline runs on:
 | `BLOB_STORE_TYPE` | `filesystem` | Blob storage type |
 | `BLOB_STORE_PATH` | `/tmp/traceform/payloads` | Blob storage path |
 
+### Licensing
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TRACEFORM_MODE` | `self-hosted` | Deployment mode (`self-hosted` or `cloud`) |
+| `TRACEFORM_LICENSE_KEY` | -- | License key for Team or Enterprise tiers (`tf_lic_...`) |
+
 ### Billing
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `STRIPE_SECRET_KEY` | -- | Stripe secret key for billing |
-| `STRIPE_WEBHOOK_SECRET` | -- | Stripe webhook signing secret |
+| `STRIPE_SECRET_KEY` | -- | Stripe secret key for billing (cloud only) |
+| `STRIPE_WEBHOOK_SECRET` | -- | Stripe webhook signing secret (cloud only) |
 
 ## Monitoring with Prometheus and Grafana
 

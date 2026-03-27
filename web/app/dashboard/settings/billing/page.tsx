@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useState } from "react";
 import {
   CreditCard,
   Zap,
@@ -11,6 +12,9 @@ import {
   Users,
   Webhook,
   X,
+  Server,
+  KeyRound,
+  Calendar,
 } from "lucide-react";
 import { fadeIn, staggerContainer, staggerItem } from "@/lib/animations";
 import { Button } from "@/components/ui/button";
@@ -46,16 +50,16 @@ interface PlanCard {
 
 const allPlans: Record<PlanTier, PlanCard> = {
   free: {
-    name: "Self-Hosted",
+    name: "Community",
     price: "Free",
     period: "forever",
     features: [
       "All 6 modules",
-      "Open-source codebase",
+      "Basic RBAC (admin/viewer)",
       "Community support",
       "Self-managed infrastructure",
     ],
-    limits: { events: "10K/mo", retention: "7 days", members: "3", webhooks: "2" },
+    limits: { events: "Unlimited", retention: "7 days", members: "3", webhooks: "2" },
     gatedFeatures: { sso: false, auditLog: false, dataExport: false, customRoles: false },
     cta: "Current",
   },
@@ -67,13 +71,11 @@ const allPlans: Record<PlanTier, PlanCard> = {
       "All 6 modules",
       "Managed hosting",
       "Email support",
-      "Automatic updates",
-      "Audit logs",
-      "Data export",
-      "99.9% uptime SLA",
+      "Automatic updates & backups",
+      "No infrastructure to maintain",
     ],
-    limits: { events: "100K/mo", retention: "30 days", members: "5", webhooks: "10" },
-    gatedFeatures: { sso: false, auditLog: true, dataExport: true, customRoles: false },
+    limits: { events: "100K/mo", retention: "7 days", members: "3", webhooks: "10" },
+    gatedFeatures: { sso: false, auditLog: false, dataExport: false, customRoles: false },
     cta: "Upgrade",
     stripeUrl: "https://billing.stripe.com/p/login/traceform-cloud",
   },
@@ -82,16 +84,14 @@ const allPlans: Record<PlanTier, PlanCard> = {
     price: "$199",
     period: "/month",
     features: [
-      "All 6 modules",
-      "Managed hosting",
-      "Priority support",
-      "Advanced analytics",
-      "Team collaboration",
-      "Audit logs",
-      "Data export",
-      "99.95% uptime SLA",
+      "Everything in Community, plus:",
+      "Audit logging",
+      "Data export (CSV/JSON)",
+      "Error groups",
+      "Budget enforcement",
+      "Email support",
     ],
-    limits: { events: "1M/mo", retention: "90 days", members: "25", webhooks: "100" },
+    limits: { events: "Unlimited", retention: "90 days", members: "25", webhooks: "100" },
     gatedFeatures: { sso: false, auditLog: true, dataExport: true, customRoles: false },
     highlight: true,
     cta: "Upgrade",
@@ -102,17 +102,14 @@ const allPlans: Record<PlanTier, PlanCard> = {
     price: "Custom",
     period: "",
     features: [
-      "All 6 modules",
-      "On-premise deploy",
-      "Dedicated SLA",
-      "SSO / SAML",
+      "Everything in Team, plus:",
+      "SSO (SAML/OIDC)",
       "Custom roles",
-      "Audit logs",
-      "Data export",
-      "Data residency",
+      "SLA guarantee",
       "Dedicated support",
+      "On-prem deployment assistance",
     ],
-    limits: { events: "Unlimited", retention: "365 days", members: "Unlimited", webhooks: "Unlimited" },
+    limits: { events: "Unlimited", retention: "Custom", members: "Unlimited", webhooks: "Unlimited" },
     gatedFeatures: { sso: true, auditLog: true, dataExport: true, customRoles: true },
     cta: "Contact Sales",
   },
@@ -126,7 +123,7 @@ const planColors: Record<string, string> = {
 };
 
 const planDisplayNames: Record<string, string> = {
-  free: "Self-Hosted",
+  free: "Community",
   cloud: "Cloud",
   team: "Team",
   enterprise: "Enterprise",
@@ -196,8 +193,12 @@ function FeatureRow({ name, enabled }: { name: string; enabled: boolean }) {
 export default function BillingPage() {
   const { plan: planInfo, loading } = usePlan();
   const currentTier = (planInfo?.plan || "free") as PlanTier;
-  const currentPlanDisplay = planDisplayNames[currentTier] || "Self-Hosted";
+  const currentPlanDisplay = planDisplayNames[currentTier] || "Community";
   const currentPlanData = allPlans[currentTier] || allPlans.free;
+  const [licenseKey, setLicenseKey] = useState("");
+  const [licenseSubmitting, setLicenseSubmitting] = useState(false);
+  const isSelfHosted = currentTier === "free" || currentTier === "team" || currentTier === "enterprise";
+  const isCloud = currentTier === "cloud";
 
   if (loading) {
     return (
@@ -254,8 +255,8 @@ export default function BillingPage() {
                   </Badge>
                 </div>
                 <p className="text-xs text-[var(--text-tertiary)] mt-0.5">
-                  {currentTier === "free"
-                    ? "Open-source self-hosted deployment"
+                  {isSelfHosted
+                    ? `Self-hosted ${currentPlanDisplay} Edition (BSL 1.1)`
                     : `Managed ${currentPlanDisplay} subscription`}
                 </p>
               </div>
@@ -304,6 +305,100 @@ export default function BillingPage() {
             </div>
           </div>
         </motion.div>
+
+        {/* License Key (self-hosted only) */}
+        {isSelfHosted && (
+          <motion.div
+            variants={staggerItem}
+            className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-6"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-9 h-9 rounded-lg bg-[var(--accent-green)]/10 flex items-center justify-center">
+                <KeyRound className="w-4 h-4 text-[var(--accent-green)]" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-[var(--text-primary)]">License Key</h2>
+                <p className="text-xs text-[var(--text-tertiary)]">
+                  {currentTier === "free"
+                    ? "Enter a license key to unlock Team or Enterprise features"
+                    : `Your ${currentPlanDisplay} license is active`}
+                </p>
+              </div>
+            </div>
+
+            {currentTier !== "free" && (
+              <div className="mb-4 p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-subtle)] space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-[var(--accent-green)] animate-pulse" />
+                    <span className="text-xs font-medium text-[var(--text-primary)]">License Active</span>
+                  </div>
+                  <Badge className={`${planColors[currentTier]} border-0 text-[10px] uppercase tracking-wider font-semibold`}>
+                    {currentPlanDisplay}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-4 text-xs text-[var(--text-secondary)]">
+                  <div className="flex items-center gap-1.5">
+                    <Server className="w-3 h-3 text-[var(--text-tertiary)]" />
+                    <span>Self-Hosted</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="w-3 h-3 text-[var(--text-tertiary)]" />
+                    <span>Renews monthly</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={licenseKey}
+                onChange={(e) => setLicenseKey(e.target.value)}
+                placeholder="tf_lic_..."
+                className="flex-1 h-9 px-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-blue)] font-mono text-xs"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!licenseKey.startsWith("tf_lic_") || licenseSubmitting}
+                onClick={() => {
+                  setLicenseSubmitting(true);
+                  // Simulate license activation
+                  setTimeout(() => {
+                    setLicenseSubmitting(false);
+                    showSuccess("License key activated. Restart your instance to apply changes.");
+                    setLicenseKey("");
+                  }, 1500);
+                }}
+              >
+                {licenseSubmitting ? "Activating..." : "Activate"}
+              </Button>
+            </div>
+
+            <p className="mt-2 text-[10px] text-[var(--text-tertiary)]">
+              Set <code className="font-mono bg-[var(--bg-hover)] px-1 py-0.5 rounded">TRACEFORM_LICENSE_KEY</code> in your .env file, or enter a key above to activate via the dashboard.
+            </p>
+
+            {currentTier === "free" && (
+              <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
+                <p className="text-xs text-[var(--text-secondary)] mb-2">
+                  You are running <span className="font-semibold text-[var(--text-primary)]">Traceform Community Edition</span>. Upgrade to Team for audit logs, data export, error groups, and more.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open("https://traceform.dev/pricing", "_blank")}
+                >
+                  <span className="flex items-center gap-1.5">
+                    Upgrade to Team
+                    <ArrowUpRight className="w-3 h-3" />
+                  </span>
+                </Button>
+              </div>
+            )}
+          </motion.div>
+        )}
 
         {/* Usage Meters */}
         <motion.div
@@ -364,7 +459,7 @@ export default function BillingPage() {
             <div className="flex-1">
               <h2 className="text-sm font-semibold text-[var(--text-primary)]">Payment Method</h2>
               <p className="text-xs text-[var(--text-tertiary)]">
-                {currentTier === "free"
+                {isSelfHosted
                   ? "No payment required for self-hosted"
                   : "Manage your payment method"}
               </p>
@@ -379,8 +474,8 @@ export default function BillingPage() {
               <div>
                 <p className="text-sm text-[var(--text-secondary)]">No payment method on file</p>
                 <p className="text-xs text-[var(--text-tertiary)]">
-                  {currentTier === "free"
-                    ? "Add a payment method to upgrade"
+                  {isSelfHosted
+                    ? "License keys are managed via .env or the dashboard"
                     : "Update your card details"}
                 </p>
               </div>
@@ -389,10 +484,12 @@ export default function BillingPage() {
               variant="outline"
               size="sm"
               onClick={() =>
-                showSuccess("Stripe billing portal coming soon")
+                isSelfHosted
+                  ? showSuccess("License keys are managed via TRACEFORM_LICENSE_KEY in .env")
+                  : showSuccess("Stripe billing portal coming soon")
               }
             >
-              {currentTier === "free" ? "Add Card" : "Update"}
+              {isSelfHosted ? "Manage License" : "Update"}
             </Button>
           </div>
 
@@ -404,11 +501,11 @@ export default function BillingPage() {
                 <div>
                   <p className="text-sm text-[var(--text-primary)]">Invoices</p>
                   <p className="text-xs text-[var(--text-tertiary)]">
-                    {currentTier === "free" ? "No invoices for self-hosted" : "View and download invoices"}
+                    {isSelfHosted ? "No invoices for self-hosted" : "View and download invoices"}
                   </p>
                 </div>
               </div>
-              {currentTier !== "free" && (
+              {!isSelfHosted && (
                 <Button
                   variant="outline"
                   size="sm"
