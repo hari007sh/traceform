@@ -12,6 +12,7 @@ import (
 
 	"github.com/agentstack/agentstack/internal/audit"
 	"github.com/agentstack/agentstack/internal/auth"
+	"github.com/agentstack/agentstack/internal/billing"
 	"github.com/agentstack/agentstack/internal/config"
 	"github.com/agentstack/agentstack/internal/server/httputil"
 	"github.com/agentstack/agentstack/internal/server/middleware"
@@ -24,16 +25,18 @@ import (
 
 // Server holds the HTTP server and its dependencies.
 type Server struct {
-	cfg          *config.Config
-	router       *chi.Mux
-	db           *sql.DB
-	clickhouseDB *sql.DB
-	redis        *redis.Client
-	nats         *nats.Conn
-	jwtManager   *auth.JWTManager
-	apiKeyStore  *auth.APIKeyStore
-	logger       *slog.Logger
-	auditLogger  *audit.Logger
+	cfg             *config.Config
+	router          *chi.Mux
+	db              *sql.DB
+	clickhouseDB    *sql.DB
+	redis           *redis.Client
+	nats            *nats.Conn
+	jwtManager      *auth.JWTManager
+	apiKeyStore     *auth.APIKeyStore
+	tokenRevocation *auth.TokenRevocation
+	logger          *slog.Logger
+	auditLogger     *audit.Logger
+	meter           *billing.Meter
 }
 
 // New creates a new Server instance with all dependencies.
@@ -48,16 +51,26 @@ func New(cfg *config.Config, db *sql.DB, redisClient *redis.Client, natsConn *na
 	auditStore := audit.NewStore(db)
 	auditLog := audit.NewLogger(auditStore, logger)
 
+	meter := billing.NewMeter(redisClient)
+
+	// Initialize token revocation if Redis is available
+	var tokenRevocation *auth.TokenRevocation
+	if redisClient != nil {
+		tokenRevocation = auth.NewTokenRevocation(redisClient)
+	}
+
 	s := &Server{
-		cfg:         cfg,
-		router:      chi.NewRouter(),
-		db:          db,
-		redis:       redisClient,
-		nats:        natsConn,
-		jwtManager:  jwtManager,
-		apiKeyStore: apiKeyStore,
-		logger:      logger,
-		auditLogger: auditLog,
+		cfg:             cfg,
+		router:          chi.NewRouter(),
+		db:              db,
+		redis:           redisClient,
+		nats:            natsConn,
+		jwtManager:      jwtManager,
+		apiKeyStore:     apiKeyStore,
+		tokenRevocation: tokenRevocation,
+		logger:          logger,
+		auditLogger:     auditLog,
+		meter:           meter,
 	}
 
 	// Apply options (e.g., WithClickHouse)

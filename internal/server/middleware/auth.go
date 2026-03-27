@@ -50,7 +50,12 @@ func APIKeyAuth(store *auth.APIKeyStore) func(http.Handler) http.Handler {
 // DualAuth returns middleware that accepts EITHER a JWT token (from dashboard login)
 // OR an API key (from SDKs). It tries JWT first, then falls back to API key.
 // This allows the dashboard frontend and SDKs to use the same /v1/* endpoints.
-func DualAuth(jwtManager *auth.JWTManager, apiKeyStore *auth.APIKeyStore) func(http.Handler) http.Handler {
+// If revocation is non-nil, revoked JWTs are rejected.
+func DualAuth(jwtManager *auth.JWTManager, apiKeyStore *auth.APIKeyStore, revocation ...*auth.TokenRevocation) func(http.Handler) http.Handler {
+	var rev *auth.TokenRevocation
+	if len(revocation) > 0 {
+		rev = revocation[0]
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := extractBearerToken(r)
@@ -62,6 +67,11 @@ func DualAuth(jwtManager *auth.JWTManager, apiKeyStore *auth.APIKeyStore) func(h
 			// Try JWT first (dashboard users)
 			claims, jwtErr := jwtManager.ValidateToken(token)
 			if jwtErr == nil {
+				// Check if token has been revoked
+				if rev != nil && claims.ID != "" && rev.IsRevoked(r.Context(), claims.ID) {
+					writeError(w, http.StatusUnauthorized, "TOKEN_REVOKED", "token has been revoked")
+					return
+				}
 				ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
 				ctx = context.WithValue(ctx, OrgIDKey, claims.OrgID)
 				ctx = context.WithValue(ctx, UserEmailKey, claims.Email)
@@ -85,7 +95,12 @@ func DualAuth(jwtManager *auth.JWTManager, apiKeyStore *auth.APIKeyStore) func(h
 }
 
 // JWTAuth returns middleware that authenticates requests using JWT tokens.
-func JWTAuth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
+// If revocation is non-nil, revoked JWTs are rejected.
+func JWTAuth(jwtManager *auth.JWTManager, revocation ...*auth.TokenRevocation) func(http.Handler) http.Handler {
+	var rev *auth.TokenRevocation
+	if len(revocation) > 0 {
+		rev = revocation[0]
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := extractBearerToken(r)
@@ -97,6 +112,12 @@ func JWTAuth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 			claims, err := jwtManager.ValidateToken(token)
 			if err != nil {
 				writeError(w, http.StatusUnauthorized, "INVALID_TOKEN", "invalid or expired token")
+				return
+			}
+
+			// Check if token has been revoked
+			if rev != nil && claims.ID != "" && rev.IsRevoked(r.Context(), claims.ID) {
+				writeError(w, http.StatusUnauthorized, "TOKEN_REVOKED", "token has been revoked")
 				return
 			}
 

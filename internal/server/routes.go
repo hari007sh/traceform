@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/agentstack/agentstack/internal/audit"
 	"github.com/agentstack/agentstack/internal/auth"
+	"github.com/agentstack/agentstack/internal/cache"
 	costhandler "github.com/agentstack/agentstack/internal/cost/handler"
 	costservice "github.com/agentstack/agentstack/internal/cost/service"
 	coststore "github.com/agentstack/agentstack/internal/cost/store"
@@ -68,12 +70,21 @@ func (s *Server) setupRoutes() {
 		r.Post("/github", s.handleGitHubLogin)
 		r.Get("/github/callback", s.handleGitHubCallback)
 
+		// Logout — requires valid JWT to extract jti for revocation
+		r.With(middleware.JWTAuth(s.jwtManager, s.tokenRevocation)).Post("/logout", s.handleLogout)
+
 		// SSO routes
 		r.Get("/sso/lookup", ssoHandler.HandleSSOLookup)
 		r.Post("/saml/acs", ssoHandler.HandleSAMLACSEndpoint)
 		r.Get("/oidc/{orgID}/login", ssoHandler.HandleOIDCLogin)
 		r.Get("/oidc/callback", ssoHandler.HandleOIDCCallback)
 	})
+
+	// --- Build query result cache ---
+	// Uses short TTLs (30-60s) so cache expires naturally; no explicit
+	// invalidation is needed on the ingest path. For a monitoring tool,
+	// 30-60s staleness is acceptable.
+	queryCache := cache.NewQueryCache(s.redis)
 
 	// --- Build trace module dependencies ---
 	pgStore := store.NewPostgresStore(s.db)
@@ -113,6 +124,7 @@ func (s *Server) setupRoutes() {
 	}
 	if analyticsSvc != nil {
 		analyticsHandler = tracehandler.NewAnalyticsHandler(analyticsSvc, s.logger)
+		analyticsHandler.SetCache(queryCache)
 	}
 	if chStore != nil {
 		errorsHandler = tracehandler.NewErrorsHandler(chStore, s.logger)
@@ -137,7 +149,8 @@ func (s *Server) setupRoutes() {
 
 	// API v1 routes — authenticated via JWT (dashboard) or API key (SDKs)
 	s.router.Route("/v1", func(r chi.Router) {
-		r.Use(middleware.DualAuth(s.jwtManager, s.apiKeyStore))
+		r.Use(middleware.DualAuth(s.jwtManager, s.apiKeyStore, s.tokenRevocation))
+		r.Use(middleware.OrgPlanLoader(s.db, s.redis))
 		r.Use(middleware.BodyLimit(10 * 1024 * 1024)) // 10MB default
 
 		// Rate limiting
@@ -324,6 +337,7 @@ func (s *Server) setupRoutes() {
 
 		costEventsHandler := costhandler.NewEventsHandler(trackerSvc, s.logger)
 		costAnalyticsHandler := costhandler.NewAnalyticsHandler(costAnalyticsSvc, s.logger)
+		costAnalyticsHandler.SetCache(queryCache)
 		costBudgetsHandler := costhandler.NewBudgetsHandler(costPgStore, s.logger)
 		costModelsHandler := costhandler.NewModelsHandler(costPgStore, s.logger)
 
@@ -493,9 +507,10 @@ func (s *Server) setupRoutes() {
 			r.With(middleware.RequireRole("admin")).Post("/{id}/deliveries/{deliveryID}/retry", whDeliveryHandler.Retry)
 		})
 
-		// --- Data export routes (admin only) ---
+		// --- Data export routes (admin only, requires data_export feature) ---
 		r.Route("/export", func(r chi.Router) {
 			r.Use(middleware.RequireRole("admin"))
+			r.Use(middleware.RequireFeature("data_export"))
 			r.Get("/", s.handleExportFormats)
 			r.Get("/sessions", s.handleExportSessions)
 			r.Get("/cost", s.handleExportCostEvents)
@@ -505,7 +520,8 @@ func (s *Server) setupRoutes() {
 
 	// Dashboard API — authenticated via JWT
 	s.router.Route("/api", func(r chi.Router) {
-		r.Use(middleware.JWTAuth(s.jwtManager))
+		r.Use(middleware.JWTAuth(s.jwtManager, s.tokenRevocation))
+		r.Use(middleware.OrgPlanLoader(s.db, s.redis))
 
 		// Organization management — owner only
 		r.Route("/org", func(r chi.Router) {
@@ -524,6 +540,7 @@ func (s *Server) setupRoutes() {
 		r.Route("/api-keys", func(r chi.Router) {
 			r.Get("/", s.handleListAPIKeys)
 			r.With(middleware.RequireRole("admin")).Post("/", s.handleCreateAPIKey)
+			r.With(middleware.RequireRole("admin")).Post("/{id}/rotate", s.handleRotateAPIKey)
 			r.With(middleware.RequireRole("admin")).Delete("/{id}", s.handleDeleteAPIKey)
 		})
 
@@ -535,16 +552,21 @@ func (s *Server) setupRoutes() {
 			r.With(middleware.RequireRole("owner")).Delete("/{id}", s.handleRemoveTeamMember)
 		})
 
-		// Audit logs — admin only
+		// Usage & billing info
+		r.Get("/usage", s.handleGetUsage)
+
+		// Audit logs — admin only, requires audit_log feature
 		auditHandler := audit.NewHandler(audit.NewStore(s.db), s.logger)
 		r.Route("/audit-logs", func(r chi.Router) {
 			r.Use(middleware.RequireRole("admin"))
+			r.Use(middleware.RequireFeature("audit_log"))
 			r.Get("/", auditHandler.List)
 		})
 
-		// SSO configuration — owner only
+		// SSO configuration — owner only, requires sso feature
 		r.Route("/sso", func(r chi.Router) {
 			r.Use(middleware.RequireRole("owner"))
+			r.Use(middleware.RequireFeature("sso"))
 			r.Get("/", ssoHandler.HandleSSOConfigGet)
 			r.Post("/", ssoHandler.HandleSSOConfigUpsert)
 			r.Delete("/", ssoHandler.HandleSSOConfigDelete)
@@ -552,50 +574,97 @@ func (s *Server) setupRoutes() {
 	})
 }
 
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"status":  "healthy",
-		"version": "0.1.0",
-		"time":    time.Now().UTC().Format(time.RFC3339),
-	})
+// checkDependencies pings every backing service and returns a map of
+// dependency name to "healthy" / "unhealthy".
+func (s *Server) checkDependencies(ctx context.Context) map[string]string {
+	deps := map[string]string{}
+
+	// PostgreSQL
+	if err := s.db.PingContext(ctx); err != nil {
+		deps["postgresql"] = "unhealthy"
+	} else {
+		deps["postgresql"] = "healthy"
+	}
+
+	// ClickHouse
+	if s.clickhouseDB != nil {
+		if err := s.clickhouseDB.PingContext(ctx); err != nil {
+			deps["clickhouse"] = "unhealthy"
+		} else {
+			deps["clickhouse"] = "healthy"
+		}
+	} else {
+		deps["clickhouse"] = "unhealthy"
+	}
+
+	// Redis
+	if s.redis != nil {
+		if err := s.redis.Ping(ctx).Err(); err != nil {
+			deps["redis"] = "unhealthy"
+		} else {
+			deps["redis"] = "healthy"
+		}
+	} else {
+		deps["redis"] = "unhealthy"
+	}
+
+	// NATS
+	if s.nats != nil && s.nats.IsConnected() {
+		deps["nats"] = "healthy"
+	} else {
+		deps["nats"] = "unhealthy"
+	}
+
+	return deps
 }
 
-func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
-	checks := map[string]string{}
+// handleHealth returns the overall service health with dependency status.
+// GET /health
+//
+//	{
+//	    "status": "healthy" | "degraded",
+//	    "version": "1.0.0",
+//	    "time": "2026-03-26T...",
+//	    "dependencies": { "postgresql": "healthy", ... }
+//	}
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	deps := s.checkDependencies(r.Context())
 
-	if err := s.db.PingContext(r.Context()); err != nil {
-		checks["postgres"] = "unhealthy: " + err.Error()
-	} else {
-		checks["postgres"] = "healthy"
-	}
-
-	if s.redis != nil {
-		if err := s.redis.Ping(r.Context()).Err(); err != nil {
-			checks["redis"] = "unhealthy: " + err.Error()
-		} else {
-			checks["redis"] = "healthy"
-		}
-	}
-
-	if s.nats != nil && s.nats.IsConnected() {
-		checks["nats"] = "healthy"
-	} else {
-		checks["nats"] = "unhealthy"
-	}
-
-	status := http.StatusOK
-	overall := "ready"
-	for _, v := range checks {
+	overall := "healthy"
+	for _, v := range deps {
 		if v != "healthy" {
-			status = http.StatusServiceUnavailable
-			overall = "not ready"
+			overall = "degraded"
 			break
 		}
 	}
 
-	WriteJSON(w, status, map[string]interface{}{
-		"status": overall,
-		"checks": checks,
+	WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"status":       overall,
+		"version":      "1.0.0",
+		"time":         time.Now().UTC().Format(time.RFC3339),
+		"dependencies": deps,
+	})
+}
+
+// handleReady returns 200 only when ALL dependencies are healthy.
+// Designed for use as a Kubernetes readiness probe.
+// GET /ready
+func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
+	deps := s.checkDependencies(r.Context())
+
+	for _, v := range deps {
+		if v != "healthy" {
+			WriteJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+				"status":       "not ready",
+				"dependencies": deps,
+			})
+			return
+		}
+	}
+
+	WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"status":       "ready",
+		"dependencies": deps,
 	})
 }
 

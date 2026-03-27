@@ -54,10 +54,16 @@ func (rl *RateLimiter) Middleware() func(http.Handler) http.Handler {
 			now := time.Now()
 
 			ctx := r.Context()
+			resetTime := now.Add(rl.window).Unix()
+
 			allowed, remaining, err := rl.check(ctx, key, now)
 			if err != nil {
-				// Redis is down — fail closed using in-memory limiter
+				// Redis is down — fail closed using in-memory limiter.
+				// Still set rate limit headers for observability.
+				w.Header().Set("X-RateLimit-Limit", strconv.Itoa(rl.limit))
+				w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(resetTime, 10))
 				if !rl.localLimit.Allow() {
+					w.Header().Set("X-RateLimit-Remaining", "0")
 					writeRateLimited(w)
 					return
 				}
@@ -67,7 +73,7 @@ func (rl *RateLimiter) Middleware() func(http.Handler) http.Handler {
 
 			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(rl.limit))
 			w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
-			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(now.Add(rl.window).Unix(), 10))
+			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(resetTime, 10))
 
 			if !allowed {
 				writeRateLimited(w)

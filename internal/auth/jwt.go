@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 // Claims represents the JWT claims for authenticated users.
@@ -27,6 +28,7 @@ func NewJWTManager(secret string) *JWTManager {
 }
 
 // GenerateToken creates a new JWT token for the given user.
+// Each token includes a unique JTI (JWT ID) for revocation support.
 func (j *JWTManager) GenerateToken(userID, orgID, email, role string) (string, error) {
 	claims := &Claims{
 		UserID: userID,
@@ -34,6 +36,7 @@ func (j *JWTManager) GenerateToken(userID, orgID, email, role string) (string, e
 		Email:  email,
 		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    "agentstack",
