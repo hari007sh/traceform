@@ -1359,16 +1359,18 @@ Result: PASS (4/4 evaluators passed)`}
           <AnimatePresence mode="wait">
             <motion.div
               key={pricingTab}
-              initial={{ opacity: 0, y: 12 }}
+              initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              transition={{ duration: 0.25 }}
+              exit={{ opacity: 0, y: -16 }}
+              transition={{ duration: 0.3 }}
               className="grid grid-cols-1 md:grid-cols-3 gap-4"
             >
-              {(pricingTab === "self-hosted" ? selfHostedTiers : cloudTiers).map((tier) => (
+              {(pricingTab === "self-hosted" ? selfHostedTiers : cloudTiers).map((tier, i) => (
                 <motion.div
                   key={tier.name}
-                  variants={fadeUpItem}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: i * 0.08 }}
                   className={`relative rounded-xl border p-6 flex flex-col ${
                     tier.highlighted
                       ? "border-blue-500 bg-[#1a1a24] shadow-lg shadow-blue-500/5"
