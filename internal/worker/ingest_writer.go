@@ -465,9 +465,9 @@ func (w *IngestWriter) writeSessions(ctx context.Context, sessions []service.Ses
 	stmt, err := tx.PrepareContext(ctx,
 		`INSERT INTO agentstack.sessions
 		 (id, org_id, agent_name, agent_id, status, input, output, error,
-		  metadata, total_tokens, total_cost_cents, total_spans, duration_ms,
+		  error_fingerprint, metadata, total_tokens, total_cost_cents, total_spans, duration_ms,
 		  has_healing, tags, started_at, ended_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		_ = tx.Rollback()
 		return fmt.Errorf("prepare: %w", err)
@@ -480,7 +480,7 @@ func (w *IngestWriter) writeSessions(ctx context.Context, sessions []service.Ses
 
 		_, err := stmt.ExecContext(ctx,
 			s.ID, s.OrgID, s.AgentName, s.AgentID, s.Status,
-			s.Input, s.Output, s.Error, s.Metadata,
+			s.Input, s.Output, s.Error, s.ErrorFingerprint, s.Metadata,
 			s.TotalTokens, s.TotalCostCents, s.TotalSpans, s.DurationMs,
 			s.HasHealing, s.Tags, startedAt, endedAt,
 		)

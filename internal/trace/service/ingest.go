@@ -35,23 +35,24 @@ func NewIngestService(nc *nats.Conn, logger *slog.Logger, sampling *SamplingServ
 
 // SessionIngestRequest represents a session to be ingested.
 type SessionIngestRequest struct {
-	ID             string   `json:"id"`
-	OrgID          string   `json:"org_id"`
-	AgentName      string   `json:"agent_name"`
-	AgentID        string   `json:"agent_id"`
-	Status         string   `json:"status"`
-	Input          string   `json:"input"`
-	Output         string   `json:"output"`
-	Error          string   `json:"error"`
-	Metadata       string   `json:"metadata"`
-	TotalTokens    uint64   `json:"total_tokens"`
-	TotalCostCents uint64   `json:"total_cost_cents"`
-	TotalSpans     uint32   `json:"total_spans"`
-	DurationMs     uint64   `json:"duration_ms"`
-	HasHealing     uint8    `json:"has_healing"`
-	Tags           []string `json:"tags"`
-	StartedAt      string   `json:"started_at"`
-	EndedAt        string   `json:"ended_at"`
+	ID               string   `json:"id"`
+	OrgID            string   `json:"org_id"`
+	AgentName        string   `json:"agent_name"`
+	AgentID          string   `json:"agent_id"`
+	Status           string   `json:"status"`
+	Input            string   `json:"input"`
+	Output           string   `json:"output"`
+	Error            string   `json:"error"`
+	ErrorFingerprint string   `json:"error_fingerprint"`
+	Metadata         string   `json:"metadata"`
+	TotalTokens      uint64   `json:"total_tokens"`
+	TotalCostCents   uint64   `json:"total_cost_cents"`
+	TotalSpans       uint32   `json:"total_spans"`
+	DurationMs       uint64   `json:"duration_ms"`
+	HasHealing       uint8    `json:"has_healing"`
+	Tags             []string `json:"tags"`
+	StartedAt        string   `json:"started_at"`
+	EndedAt          string   `json:"ended_at"`
 }
 
 // SpanIngestRequest represents a span to be ingested.
@@ -259,6 +260,10 @@ func (s *IngestService) fillSessionDefaults(orgID string, req *SessionIngestRequ
 	}
 	if req.StartedAt == "" {
 		req.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	// Compute error fingerprint for deduplication/grouping.
+	if req.Error != "" && req.ErrorFingerprint == "" {
+		req.ErrorFingerprint = Fingerprint(req.Error)
 	}
 }
 

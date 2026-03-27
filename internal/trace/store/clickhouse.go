@@ -22,24 +22,25 @@ func NewClickHouseStore(db *sql.DB) *ClickHouseStore {
 
 // Session represents a trace session stored in ClickHouse.
 type Session struct {
-	ID             string    `json:"id"`
-	OrgID          string    `json:"org_id"`
-	AgentName      string    `json:"agent_name"`
-	AgentID        string    `json:"agent_id"`
-	Status         string    `json:"status"`
-	Input          string    `json:"input"`
-	Output         string    `json:"output"`
-	Error          string    `json:"error,omitempty"`
-	Metadata       string    `json:"metadata"`
-	TotalTokens    uint64    `json:"total_tokens"`
-	TotalCostCents uint64    `json:"total_cost_cents"`
-	TotalSpans     uint32    `json:"total_spans"`
-	DurationMs     uint64    `json:"duration_ms"`
-	HasHealing     bool      `json:"has_healing"`
-	Tags           []string  `json:"tags"`
-	StartedAt      time.Time `json:"started_at"`
-	EndedAt        time.Time `json:"ended_at"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID               string    `json:"id"`
+	OrgID            string    `json:"org_id"`
+	AgentName        string    `json:"agent_name"`
+	AgentID          string    `json:"agent_id"`
+	Status           string    `json:"status"`
+	Input            string    `json:"input"`
+	Output           string    `json:"output"`
+	Error            string    `json:"error,omitempty"`
+	ErrorFingerprint string    `json:"error_fingerprint,omitempty"`
+	Metadata         string    `json:"metadata"`
+	TotalTokens      uint64    `json:"total_tokens"`
+	TotalCostCents   uint64    `json:"total_cost_cents"`
+	TotalSpans       uint32    `json:"total_spans"`
+	DurationMs       uint64    `json:"duration_ms"`
+	HasHealing       bool      `json:"has_healing"`
+	Tags             []string  `json:"tags"`
+	StartedAt        time.Time `json:"started_at"`
+	EndedAt          time.Time `json:"ended_at"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 // Span represents a trace span stored in ClickHouse.
@@ -198,7 +199,7 @@ func (s *ClickHouseStore) ListSessions(ctx context.Context, orgID string, f Sess
 	orderClause := fmt.Sprintf("%s %s", f.SortBy, strings.ToUpper(f.SortDir))
 	query := fmt.Sprintf(
 		`SELECT id, org_id, agent_name, agent_id, status, input, output, error,
-		        metadata, total_tokens, total_cost_cents, total_spans, duration_ms,
+		        error_fingerprint, metadata, total_tokens, total_cost_cents, total_spans, duration_ms,
 		        has_healing, tags, started_at, ended_at, created_at
 		 FROM agentstack.sessions
 		 WHERE %s
@@ -220,7 +221,7 @@ func (s *ClickHouseStore) ListSessions(ctx context.Context, orgID string, f Sess
 		if err := rows.Scan(
 			&sess.ID, &sess.OrgID, &sess.AgentName, &sess.AgentID,
 			&sess.Status, &sess.Input, &sess.Output, &sess.Error,
-			&sess.Metadata, &sess.TotalTokens, &sess.TotalCostCents,
+			&sess.ErrorFingerprint, &sess.Metadata, &sess.TotalTokens, &sess.TotalCostCents,
 			&sess.TotalSpans, &sess.DurationMs, &hasHealing,
 			&tags, &sess.StartedAt, &sess.EndedAt, &sess.CreatedAt,
 		); err != nil {
@@ -246,7 +247,7 @@ func (s *ClickHouseStore) ListSessions(ctx context.Context, orgID string, f Sess
 // GetSession returns a single session by ID.
 func (s *ClickHouseStore) GetSession(ctx context.Context, orgID, sessionID string) (*Session, error) {
 	query := `SELECT id, org_id, agent_name, agent_id, status, input, output, error,
-	                 metadata, total_tokens, total_cost_cents, total_spans, duration_ms,
+	                 error_fingerprint, metadata, total_tokens, total_cost_cents, total_spans, duration_ms,
 	                 has_healing, tags, started_at, ended_at, created_at
 	          FROM agentstack.sessions
 	          WHERE org_id = ? AND id = ?
@@ -258,7 +259,7 @@ func (s *ClickHouseStore) GetSession(ctx context.Context, orgID, sessionID strin
 	err := s.db.QueryRowContext(ctx, query, orgID, sessionID).Scan(
 		&sess.ID, &sess.OrgID, &sess.AgentName, &sess.AgentID,
 		&sess.Status, &sess.Input, &sess.Output, &sess.Error,
-		&sess.Metadata, &sess.TotalTokens, &sess.TotalCostCents,
+		&sess.ErrorFingerprint, &sess.Metadata, &sess.TotalTokens, &sess.TotalCostCents,
 		&sess.TotalSpans, &sess.DurationMs, &hasHealing,
 		&tags, &sess.StartedAt, &sess.EndedAt, &sess.CreatedAt,
 	)
