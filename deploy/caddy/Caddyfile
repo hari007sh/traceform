@@ -1,0 +1,82 @@
+# =============================================================================
+# AgentStack — Caddy Reverse Proxy Configuration
+# =============================================================================
+#
+# Caddy provides automatic TLS via Let's Encrypt in production and self-signed
+# certificates for local development. No manual certificate management needed.
+#
+# Usage:
+#   Production:  caddy run --config /etc/caddy/Caddyfile
+#   Local dev:   caddy run --config deploy/caddy/Caddyfile
+#
+# Ports behind the proxy:
+#   8080 — Go API server (all /v1/*, /api/*, /auth/*, /docs, /health, /metrics)
+#   8090 — Gateway proxy (OpenAI-compatible LLM routing)
+#   3000 — Next.js dashboard
+# =============================================================================
+
+# ─── Production: automatic TLS with Let's Encrypt ────────────────────────────
+#
+# Caddy will automatically obtain and renew a certificate from Let's Encrypt
+# for app.agentstack.dev. Ensure DNS points to this server and ports 80/443
+# are open.
+
+app.agentstack.dev {
+	# Encode responses with gzip/zstd for smaller payloads
+	encode gzip zstd
+
+	# ── Security headers ──────────────────────────────────────────────────
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options    "nosniff"
+		X-Frame-Options           "DENY"
+		Referrer-Policy           "strict-origin-when-cross-origin"
+		X-XSS-Protection          "1; mode=block"
+		-Server
+	}
+
+	# ── API server routes (port 8080) ────────────────────────────────────
+	reverse_proxy /v1/*      localhost:8080
+	reverse_proxy /api/*     localhost:8080
+	reverse_proxy /auth/*    localhost:8080
+	reverse_proxy /docs*     localhost:8080
+	reverse_proxy /health    localhost:8080
+	reverse_proxy /metrics   localhost:8080
+
+	# ── Gateway proxy routes (port 8090) ─────────────────────────────────
+	reverse_proxy /gateway/* localhost:8090
+
+	# ── Frontend catch-all (port 3000) ───────────────────────────────────
+	reverse_proxy * localhost:3000
+}
+
+# ─── Local development: self-signed TLS ──────────────────────────────────────
+#
+# `tls internal` tells Caddy to generate a locally-trusted certificate.
+# On first run, Caddy installs its root CA into your system trust store
+# (may prompt for your password).
+#
+# Access the app at https://localhost after starting Caddy.
+
+localhost:443 {
+	tls internal
+
+	encode gzip zstd
+
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options        "DENY"
+		-Server
+	}
+
+	# ── API server routes (port 8080) ────────────────────────────────────
+	reverse_proxy /v1/*      localhost:8080
+	reverse_proxy /api/*     localhost:8080
+	reverse_proxy /auth/*    localhost:8080
+	reverse_proxy /docs*     localhost:8080
+	reverse_proxy /health    localhost:8080
+	reverse_proxy /metrics   localhost:8080
+
+	# ── Frontend catch-all (port 3000) ───────────────────────────────────
+	reverse_proxy * localhost:3000
+}
