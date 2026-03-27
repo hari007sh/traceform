@@ -10,10 +10,12 @@ const nextConfig = {
     ]
   },
   images: {
-    domains: ['avatars.githubusercontent.com'],
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'avatars.githubusercontent.com',
+      },
+    ],
   },
   typescript: {
     ignoreBuildErrors: false,
