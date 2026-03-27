@@ -99,8 +99,8 @@ const navigation: NavSection[] = [
   {
     title: "Resources",
     items: [
-      { label: "Docs", href: "http://localhost:3002/docs", icon: BookOpen, external: true },
-      { label: "API Reference", href: "http://localhost:8080/docs", icon: BookOpen, external: true },
+      { label: "Docs", href: process.env.NEXT_PUBLIC_DOCS_URL || "http://localhost:3002/docs", icon: BookOpen, external: true },
+      { label: "API Reference", href: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/docs`, icon: BookOpen, external: true },
     ],
   },
 ];
