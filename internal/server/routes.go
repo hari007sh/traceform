@@ -107,11 +107,15 @@ func (s *Server) setupRoutes() {
 
 	var sessionHandler *tracehandler.SessionHandler
 	var analyticsHandler *tracehandler.AnalyticsHandler
+	var errorsHandler *tracehandler.ErrorsHandler
 	if sessionSvc != nil {
 		sessionHandler = tracehandler.NewSessionHandler(sessionSvc, s.logger)
 	}
 	if analyticsSvc != nil {
 		analyticsHandler = tracehandler.NewAnalyticsHandler(analyticsSvc, s.logger)
+	}
+	if chStore != nil {
+		errorsHandler = tracehandler.NewErrorsHandler(chStore, s.logger)
 	}
 
 	// --- Build blob store for payload retrieval ---
@@ -186,6 +190,14 @@ func (s *Server) setupRoutes() {
 
 			// Shield module: Healing analytics
 			r.Get("/healing", healingHandler.HealingAnalytics)
+		})
+
+		// Trace module: Error groups (fingerprinted error deduplication)
+		r.Route("/errors", func(r chi.Router) {
+			if errorsHandler != nil {
+				r.Get("/", errorsHandler.ListGroups)
+				r.Get("/{fingerprint}", errorsHandler.GetGroup)
+			}
 		})
 
 		// Trace module: Agent definitions CRUD

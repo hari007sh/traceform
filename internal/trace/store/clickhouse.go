@@ -649,3 +649,128 @@ func (s *ClickHouseStore) GetOverviewWithCounters(ctx context.Context, orgID str
 		HealedSessions: totalHealed,
 	}, nil
 }
+
+// --- Error Group Queries ---
+
+// ErrorGroup represents an aggregated group of sessions sharing the same error fingerprint.
+type ErrorGroup struct {
+	Fingerprint    string    `json:"fingerprint"`
+	SampleError    string    `json:"message"`
+	Count          int       `json:"count"`
+	FirstSeen      time.Time `json:"first_seen"`
+	LastSeen       time.Time `json:"last_seen"`
+	AffectedAgents []string  `json:"agents"`
+}
+
+// ListErrorGroups returns error groups aggregated by fingerprint for the given time range.
+func (s *ClickHouseStore) ListErrorGroups(ctx context.Context, orgID string, start, end time.Time) ([]ErrorGroup, error) {
+	query := `SELECT
+	            error_fingerprint,
+	            any(error) as sample_error,
+	            count() as occurrence_count,
+	            min(started_at) as first_seen,
+	            max(started_at) as last_seen,
+	            groupUniqArray(agent_name) as affected_agents
+	          FROM agentstack.sessions
+	          WHERE org_id = ? AND error != '' AND error_fingerprint != ''
+	            AND started_at >= ? AND started_at <= ?
+	          GROUP BY error_fingerprint
+	          ORDER BY occurrence_count DESC
+	          LIMIT 50`
+
+	rows, err := s.db.QueryContext(ctx, query, orgID, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("list error groups: %w", err)
+	}
+	defer rows.Close()
+
+	var groups []ErrorGroup
+	for rows.Next() {
+		var g ErrorGroup
+		var agents []string
+		if err := rows.Scan(
+			&g.Fingerprint, &g.SampleError, &g.Count,
+			&g.FirstSeen, &g.LastSeen, &agents,
+		); err != nil {
+			return nil, fmt.Errorf("scan error group: %w", err)
+		}
+		g.AffectedAgents = agents
+		if g.AffectedAgents == nil {
+			g.AffectedAgents = []string{}
+		}
+		groups = append(groups, g)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate error groups: %w", err)
+	}
+
+	if groups == nil {
+		groups = []ErrorGroup{}
+	}
+	return groups, nil
+}
+
+// GetErrorGroupSessions returns sessions matching a specific error fingerprint.
+func (s *ClickHouseStore) GetErrorGroupSessions(ctx context.Context, orgID, fingerprint string, start, end time.Time, limit, offset int) ([]Session, int, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	// Count
+	countQuery := `SELECT count() FROM agentstack.sessions
+	               WHERE org_id = ? AND error_fingerprint = ?
+	                 AND started_at >= ? AND started_at <= ?`
+	var total int
+	if err := s.db.QueryRowContext(ctx, countQuery, orgID, fingerprint, start, end).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count error group sessions: %w", err)
+	}
+
+	// Data
+	query := `SELECT id, org_id, agent_name, agent_id, status, input, output, error,
+	                 error_fingerprint, metadata, total_tokens, total_cost_cents, total_spans, duration_ms,
+	                 has_healing, tags, started_at, ended_at, created_at
+	          FROM agentstack.sessions
+	          WHERE org_id = ? AND error_fingerprint = ?
+	            AND started_at >= ? AND started_at <= ?
+	          ORDER BY started_at DESC
+	          LIMIT ? OFFSET ?`
+
+	rows, err := s.db.QueryContext(ctx, query, orgID, fingerprint, start, end, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("get error group sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var sessions []Session
+	for rows.Next() {
+		var sess Session
+		var hasHealing uint8
+		var tags []string
+		if err := rows.Scan(
+			&sess.ID, &sess.OrgID, &sess.AgentName, &sess.AgentID,
+			&sess.Status, &sess.Input, &sess.Output, &sess.Error,
+			&sess.ErrorFingerprint, &sess.Metadata, &sess.TotalTokens, &sess.TotalCostCents,
+			&sess.TotalSpans, &sess.DurationMs, &hasHealing,
+			&tags, &sess.StartedAt, &sess.EndedAt, &sess.CreatedAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scan error group session: %w", err)
+		}
+		sess.HasHealing = hasHealing == 1
+		sess.Tags = tags
+		if sess.Tags == nil {
+			sess.Tags = []string{}
+		}
+		sessions = append(sessions, sess)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate error group sessions: %w", err)
+	}
+
+	if sessions == nil {
+		sessions = []Session{}
+	}
+	return sessions, total, nil
+}
