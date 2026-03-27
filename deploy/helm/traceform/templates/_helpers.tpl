@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "agentstack.name" -}}
+{{- define "traceform.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -9,7 +9,7 @@ Expand the name of the chart.
 Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 */}}
-{{- define "agentstack.fullname" -}}
+{{- define "traceform.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -25,15 +25,15 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "agentstack.chart" -}}
+{{- define "traceform.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "agentstack.labels" -}}
-helm.sh/chart: {{ include "agentstack.chart" . }}
+{{- define "traceform.labels" -}}
+helm.sh/chart: {{ include "traceform.chart" . }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/part-of: agentstack
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
@@ -41,35 +41,35 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 
 {{/*
 Selector labels for a specific component.
-Usage: {{ include "agentstack.selectorLabels" (dict "root" . "component" "server") }}
+Usage: {{ include "traceform.selectorLabels" (dict "root" . "component" "server") }}
 */}}
-{{- define "agentstack.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "agentstack.name" .root }}
+{{- define "traceform.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "traceform.name" .root }}
 app.kubernetes.io/instance: {{ .root.Release.Name }}
 app.kubernetes.io/component: {{ .component }}
 {{- end }}
 
 {{/*
 Component labels (common + selector).
-Usage: {{ include "agentstack.componentLabels" (dict "root" . "component" "server") }}
+Usage: {{ include "traceform.componentLabels" (dict "root" . "component" "server") }}
 */}}
-{{- define "agentstack.componentLabels" -}}
-{{ include "agentstack.labels" .root }}
-{{ include "agentstack.selectorLabels" (dict "root" .root "component" .component) }}
+{{- define "traceform.componentLabels" -}}
+{{ include "traceform.labels" .root }}
+{{ include "traceform.selectorLabels" (dict "root" .root "component" .component) }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use.
 */}}
-{{- define "agentstack.serviceAccountName" -}}
-{{- default (include "agentstack.fullname" .) .Values.serviceAccount.name }}
+{{- define "traceform.serviceAccountName" -}}
+{{- default (include "traceform.fullname" .) .Values.serviceAccount.name }}
 {{- end }}
 
 {{/*
 Build the image reference with optional global registry.
-Usage: {{ include "agentstack.image" (dict "root" . "image" .Values.server.image) }}
+Usage: {{ include "traceform.image" (dict "root" . "image" .Values.server.image) }}
 */}}
-{{- define "agentstack.image" -}}
+{{- define "traceform.image" -}}
 {{- $registry := .root.Values.global.imageRegistry -}}
 {{- $repository := .image.repository -}}
 {{- $tag := .image.tag | default "latest" -}}
@@ -83,49 +83,49 @@ Usage: {{ include "agentstack.image" (dict "root" . "image" .Values.server.image
 {{/*
 Secrets name helper.
 */}}
-{{- define "agentstack.secretName" -}}
-{{ include "agentstack.fullname" . }}-secrets
+{{- define "traceform.secretName" -}}
+{{ include "traceform.fullname" . }}-secrets
 {{- end }}
 
 {{/*
 ConfigMap name helper.
 */}}
-{{- define "agentstack.configMapName" -}}
-{{ include "agentstack.fullname" . }}-config
+{{- define "traceform.configMapName" -}}
+{{ include "traceform.fullname" . }}-config
 {{- end }}
 
 {{/*
 Database URL construction.
 */}}
-{{- define "agentstack.databaseURL" -}}
+{{- define "traceform.databaseURL" -}}
 postgresql://{{ .Values.postgresql.username }}:$(DB_PASSWORD)@{{ .Values.postgresql.host }}:{{ .Values.postgresql.port }}/{{ .Values.postgresql.database }}?sslmode=disable
 {{- end }}
 
 {{/*
 ClickHouse URL construction.
 */}}
-{{- define "agentstack.clickhouseURL" -}}
+{{- define "traceform.clickhouseURL" -}}
 clickhouse://{{ .Values.clickhouse.host }}:{{ .Values.clickhouse.port }}/{{ .Values.clickhouse.database }}
 {{- end }}
 
 {{/*
 Redis URL construction.
 */}}
-{{- define "agentstack.redisURL" -}}
+{{- define "traceform.redisURL" -}}
 redis://{{ .Values.redis.host }}:{{ .Values.redis.port }}
 {{- end }}
 
 {{/*
 NATS URL construction.
 */}}
-{{- define "agentstack.natsURL" -}}
+{{- define "traceform.natsURL" -}}
 nats://{{ .Values.nats.host }}:{{ .Values.nats.port }}
 {{- end }}
 
 {{/*
 Image pull secrets.
 */}}
-{{- define "agentstack.imagePullSecrets" -}}
+{{- define "traceform.imagePullSecrets" -}}
 {{- if .Values.global.imagePullSecrets }}
 imagePullSecrets:
 {{- range .Values.global.imagePullSecrets }}
