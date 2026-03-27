@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { requestIdStore } from "@/lib/api";
+import { usePlan } from "@/hooks/use-plan";
 
 interface NavItem {
   label: string;
@@ -102,10 +103,18 @@ const navigation: NavSection[] = [
   },
 ];
 
+const planBadgeColors: Record<string, string> = {
+  free: "bg-zinc-500/10 text-zinc-400",
+  cloud: "bg-[var(--accent-blue)]/10 text-[var(--accent-blue)]",
+  team: "bg-[var(--accent-purple)]/10 text-[var(--accent-purple)]",
+  enterprise: "bg-amber-500/10 text-amber-400",
+};
+
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [lastRequestId, setLastRequestId] = useState("");
+  const { plan: planInfo } = usePlan();
 
   useEffect(() => {
     const unsubscribe = requestIdStore.subscribe(setLastRequestId);
@@ -249,8 +258,17 @@ export function Sidebar() {
                   D
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-medium truncate text-[var(--text-primary)]">Default Org</p>
-                  <p className="text-[10px] text-[var(--text-tertiary)] leading-tight">Team Plan</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[12px] font-medium truncate text-[var(--text-primary)]">Default Org</p>
+                    {planInfo && (
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider ${planBadgeColors[planInfo.plan] || planBadgeColors.free}`}>
+                        {planInfo.plan}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-[var(--text-tertiary)] leading-tight">
+                    {planInfo ? `${planInfo.plan.charAt(0).toUpperCase() + planInfo.plan.slice(1)} Plan` : "Loading..."}
+                  </p>
                 </div>
               </>
             )}

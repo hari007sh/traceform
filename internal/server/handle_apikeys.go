@@ -181,6 +181,131 @@ func (s *Server) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusCreated, resp)
 }
 
+// handleRotateAPIKey creates a new key with the same name and permissions,
+// marks the old key with a 24-hour grace period, then returns the new key.
+func (s *Server) handleRotateAPIKey(w http.ResponseWriter, r *http.Request) {
+	orgID := middleware.GetOrgID(r.Context())
+	userID := middleware.GetUserID(r.Context())
+	if orgID == "" {
+		WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing organization context")
+		return
+	}
+
+	keyID := chi.URLParam(r, "id")
+	if keyID == "" {
+		WriteError(w, http.StatusBadRequest, "MISSING_ID", "API key ID is required")
+		return
+	}
+
+	// 1. Get existing key metadata
+	var oldName string
+	var oldPerms []string
+	err := s.db.QueryRowContext(r.Context(),
+		`SELECT name, permissions FROM api_keys WHERE id = $1 AND org_id = $2`,
+		keyID, orgID,
+	).Scan(&oldName, pq.Array(&oldPerms))
+	if err != nil {
+		WriteError(w, http.StatusNotFound, "NOT_FOUND", "API key not found")
+		return
+	}
+
+	// 2. Generate new key
+	rawKey, err := auth.GenerateAPIKey()
+	if err != nil {
+		s.logger.Error("failed to generate API key for rotation", "error", err)
+		WriteError(w, http.StatusInternalServerError, "GENERATE_ERROR", "failed to generate new API key")
+		return
+	}
+
+	keyHash := auth.HashAPIKey(rawKey)
+	keyPrefix := auth.KeyPrefix(rawKey)
+
+	// Use transaction to ensure atomicity
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		s.logger.Error("failed to begin transaction for key rotation", "error", err)
+		WriteError(w, http.StatusInternalServerError, "DB_ERROR", "failed to start key rotation")
+		return
+	}
+	defer tx.Rollback()
+
+	// 3. Insert new key with same name + " (rotated)" suffix
+	newName := oldName + " (rotated)"
+	var createdBy *string
+	if userID != "" {
+		createdBy = &userID
+	}
+
+	var newKeyID string
+	var createdAt time.Time
+	err = tx.QueryRowContext(r.Context(),
+		`INSERT INTO api_keys (org_id, name, key_hash, key_prefix, permissions, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 RETURNING id, created_at`,
+		orgID, newName, keyHash, keyPrefix, pq.Array(oldPerms), createdBy,
+	).Scan(&newKeyID, &createdAt)
+	if err != nil {
+		s.logger.Error("failed to insert rotated API key", "error", err, "org_id", orgID)
+		WriteError(w, http.StatusInternalServerError, "DB_ERROR", "failed to create rotated API key")
+		return
+	}
+
+	// 4. Mark old key expires_at = now + 24h (grace period)
+	gracePeriod := time.Now().Add(24 * time.Hour)
+	_, err = tx.ExecContext(r.Context(),
+		`UPDATE api_keys SET expires_at = $1 WHERE id = $2 AND org_id = $3`,
+		gracePeriod, keyID, orgID,
+	)
+	if err != nil {
+		s.logger.Error("failed to set grace period on old API key", "error", err, "key_id", keyID)
+		WriteError(w, http.StatusInternalServerError, "DB_ERROR", "failed to set grace period on old key")
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		s.logger.Error("failed to commit key rotation", "error", err)
+		WriteError(w, http.StatusInternalServerError, "DB_ERROR", "failed to complete key rotation")
+		return
+	}
+
+	// 6. Audit log the rotation
+	s.auditLogger.Log(r, "rotated", "api_key", keyID, map[string]interface{}{
+		"old_key_id":        keyID,
+		"new_key_id":        newKeyID,
+		"new_key_prefix":    keyPrefix,
+		"grace_period_ends": gracePeriod.Format(time.RFC3339),
+	})
+
+	// 5. Return new key (shown only once)
+	perms := oldPerms
+	if perms == nil {
+		perms = []string{}
+	}
+	graceStr := gracePeriod.Format(time.RFC3339)
+
+	resp := struct {
+		apiKeyCreateResponse
+		OldKeyID        string `json:"old_key_id"`
+		GracePeriodEnds string `json:"grace_period_ends"`
+	}{
+		apiKeyCreateResponse: apiKeyCreateResponse{
+			apiKeyResponse: apiKeyResponse{
+				ID:          newKeyID,
+				Name:        newName,
+				KeyPrefix:   keyPrefix,
+				Permissions: perms,
+				CreatedAt:   createdAt.Format(time.RFC3339),
+				CreatedBy:   createdBy,
+			},
+			Key: rawKey,
+		},
+		OldKeyID:        keyID,
+		GracePeriodEnds: graceStr,
+	}
+
+	WriteJSON(w, http.StatusCreated, resp)
+}
+
 // handleDeleteAPIKey revokes (deletes) an API key.
 func (s *Server) handleDeleteAPIKey(w http.ResponseWriter, r *http.Request) {
 	orgID := middleware.GetOrgID(r.Context())
