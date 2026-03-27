@@ -424,7 +424,10 @@ func (w *IngestWriter) flushCounters() {
 // writeDeadLetter persists a failed batch to disk so it can be replayed later.
 // Files are written to /tmp/agentstack/deadletter/TYPE-YYYY-MM-DD-HH.jsonl.
 func (w *IngestWriter) writeDeadLetter(typ string, data interface{}) {
-	dir := "/tmp/agentstack/deadletter"
+	dir := os.Getenv("DEAD_LETTER_PATH")
+	if dir == "" {
+		dir = "/tmp/agentstack/deadletter"
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		w.logger.Error("failed to create dead-letter dir", "error", err)
 		return

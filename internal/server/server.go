@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -41,9 +42,25 @@ type Server struct {
 
 // New creates a new Server instance with all dependencies.
 func New(cfg *config.Config, db *sql.DB, redisClient *redis.Client, natsConn *nats.Conn, opts ...func(*Server)) *Server {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
+	var logLevel slog.Level
+	switch strings.ToLower(os.Getenv("LOG_LEVEL")) {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "warn", "warning":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	default:
+		logLevel = slog.LevelInfo
+	}
+
+	var logHandler slog.Handler
+	if os.Getenv("ENVIRONMENT") == "production" {
+		logHandler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})
+	} else {
+		logHandler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})
+	}
+	logger := slog.New(logHandler)
 
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret)
 	apiKeyStore := auth.NewAPIKeyStore(db)

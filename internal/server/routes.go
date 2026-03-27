@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/agentstack/agentstack/internal/audit"
@@ -156,14 +158,16 @@ func (s *Server) setupRoutes() {
 
 		// Rate limiting
 		if s.redis != nil {
-			limiter := middleware.NewRateLimiter(s.redis, 1000, time.Minute)
+			defaultLimit := envInt("RATE_LIMIT_DEFAULT", 1000)
+			limiter := middleware.NewRateLimiter(s.redis, defaultLimit, time.Minute)
 			r.Use(limiter.Middleware())
 		}
 
 		// Trace module: Ingestion routes (higher rate limit for ingest)
 		r.Route("/ingest", func(r chi.Router) {
 			if s.redis != nil {
-				r.Use(middleware.RateLimit(s.redis, 10000))
+				ingestLimit := envInt("RATE_LIMIT_INGEST", 10000)
+				r.Use(middleware.RateLimit(s.redis, ingestLimit))
 			}
 			r.Use(middleware.UsageLimitCheck(s.meter))
 			r.Post("/sessions", ingestHandler.IngestSession)
@@ -824,6 +828,16 @@ func (s *Server) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 			"avatar_url": ghUser.AvatarURL,
 		},
 	})
+}
+
+// envInt reads an integer from an environment variable or returns the fallback.
+func envInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return fallback
 }
 
 // Ensure packages are used

@@ -2,11 +2,24 @@ package auth
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
+
+// getJWTExpiry reads the JWT token expiry duration from the JWT_EXPIRY_HOURS
+// environment variable, falling back to 24 hours.
+func getJWTExpiry() time.Duration {
+	if h := os.Getenv("JWT_EXPIRY_HOURS"); h != "" {
+		if n, err := strconv.Atoi(h); err == nil && n > 0 {
+			return time.Duration(n) * time.Hour
+		}
+	}
+	return 24 * time.Hour
+}
 
 // Claims represents the JWT claims for authenticated users.
 type Claims struct {
@@ -37,7 +50,7 @@ func (j *JWTManager) GenerateToken(userID, orgID, email, role string) (string, e
 		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.New().String(),
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(getJWTExpiry())),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    "agentstack",
 		},
