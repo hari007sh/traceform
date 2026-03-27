@@ -20,6 +20,7 @@ import {
 } from "@/lib/animations";
 import { SkeletonMetricCards, SkeletonTable } from "@/components/skeleton";
 import { api } from "@/lib/api";
+import { RequireRole } from "@/components/require-role";
 
 // ---------------------------------------------------------------------------
 // Types matching backend response shapes
@@ -237,10 +238,12 @@ export default function TestOverviewPage() {
             Evaluate agent quality with automated test suites and scoring
           </p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent-blue)] text-white text-sm font-medium hover:opacity-90 transition-opacity active:scale-[0.98]">
-          <Plus className="w-4 h-4" />
-          New Test Suite
-        </button>
+        <RequireRole role="admin">
+          <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent-blue)] text-white text-sm font-medium hover:opacity-90 transition-opacity active:scale-[0.98]">
+            <Plus className="w-4 h-4" />
+            New Test Suite
+          </button>
+        </RequireRole>
       </div>
 
       {/* Error State */}
@@ -322,13 +325,15 @@ export default function TestOverviewPage() {
             agent&apos;s quality, accuracy, and reliability.
           </p>
           <div className="flex items-center justify-center gap-3">
-            <button
-              onClick={() => router.push("/dashboard/test/suites/new")}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[var(--accent-blue)] text-white hover:opacity-90 transition-opacity active:scale-[0.98]"
-            >
-              <Plus className="w-4 h-4" />
-              New Test Suite
-            </button>
+            <RequireRole role="admin">
+              <button
+                onClick={() => router.push("/dashboard/test/suites/new")}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[var(--accent-blue)] text-white hover:opacity-90 transition-opacity active:scale-[0.98]"
+              >
+                <Plus className="w-4 h-4" />
+                New Test Suite
+              </button>
+            </RequireRole>
             <a
               href="https://docs.agentstack.dev/test/evaluators"
               target="_blank"

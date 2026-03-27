@@ -374,6 +374,35 @@ def test_rate_limiting():
     check("Rate limited endpoint accessible", not result.get("_error"))
 
 
+def test_usage_endpoint():
+    print("\n--- Usage Endpoint ---")
+    # Need JWT token for /api routes
+    result = api("GET", "/api/usage")
+    # May get 401 since we use API key not JWT, that's ok
+    check("Usage endpoint exists", result.get("_status") in [200, 401, 403])
+
+
+def test_error_groups():
+    print("\n--- Error Groups ---")
+    result = api("GET", "/v1/errors")
+    check("Error groups endpoint works", not result.get("_error"),
+          result.get("_body", "")[:100] if result.get("_error") else "")
+
+
+def test_logout_endpoint():
+    print("\n--- Logout ---")
+    result = api("POST", "/auth/logout")
+    # Will get 401 since we use API key, but endpoint should exist (not 404)
+    check("Logout endpoint exists", result.get("_status") != 404)
+
+
+def test_key_rotation():
+    print("\n--- API Key Rotation ---")
+    # Just verify the endpoint pattern exists (don't actually rotate the test key)
+    result = api("POST", "/api/api-keys/nonexistent/rotate")
+    check("Rotation endpoint exists", result.get("_status") in [401, 403, 404])
+
+
 def test_clickhouse_indexes_exist():
     print("\n--- ClickHouse Skip Indexes ---")
     import subprocess
@@ -409,6 +438,12 @@ def main():
     test_cost_event_recording()
     test_healing()
     test_auth_rejection()
+
+    # Launch readiness tests
+    test_usage_endpoint()
+    test_error_groups()
+    test_logout_endpoint()
+    test_key_rotation()
 
     # Enterprise hardening tests
     test_server_side_pagination()

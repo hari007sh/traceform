@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
 import { showSuccess, showError, showApiError } from "@/lib/toast";
 import type { AlertRule } from "@/lib/types";
+import { RequireRole } from "@/components/require-role";
 
 // ---------------------------------------------------------------------------
 // API response shapes (match Go handler exactly)
@@ -226,10 +227,12 @@ export default function AlertsPage() {
             />
             Refresh
           </Button>
-          <Button size="sm" onClick={() => setShowCreateModal(true)}>
-            <Plus className="w-4 h-4 mr-1.5" />
-            New Alert
-          </Button>
+          <RequireRole role="admin">
+            <Button size="sm" onClick={() => setShowCreateModal(true)}>
+              <Plus className="w-4 h-4 mr-1.5" />
+              New Alert
+            </Button>
+          </RequireRole>
         </div>
       </div>
 
@@ -259,10 +262,12 @@ export default function AlertsPage() {
             Create alert rules to get notified when your agents encounter
             issues.
           </p>
-          <Button size="sm" onClick={() => setShowCreateModal(true)}>
-            <Plus className="w-4 h-4 mr-1.5" />
-            New Alert
-          </Button>
+          <RequireRole role="admin">
+            <Button size="sm" onClick={() => setShowCreateModal(true)}>
+              <Plus className="w-4 h-4 mr-1.5" />
+              New Alert
+            </Button>
+          </RequireRole>
         </div>
       )}
 

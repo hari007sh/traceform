@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/agentstack/agentstack/internal/billing"
 	"github.com/agentstack/agentstack/internal/server/httputil"
 	"github.com/agentstack/agentstack/internal/server/middleware"
 	"github.com/agentstack/agentstack/internal/trace/service"
@@ -14,12 +15,18 @@ import (
 type IngestHandler struct {
 	svc      *service.IngestService
 	sampling *service.SamplingService
+	meter    *billing.Meter
 	logger   *slog.Logger
 }
 
 // NewIngestHandler creates a new ingest handler.
 func NewIngestHandler(svc *service.IngestService, sampling *service.SamplingService, logger *slog.Logger) *IngestHandler {
 	return &IngestHandler{svc: svc, sampling: sampling, logger: logger}
+}
+
+// SetMeter sets the billing meter for usage tracking after successful ingest.
+func (h *IngestHandler) SetMeter(m *billing.Meter) {
+	h.meter = m
 }
 
 // IngestSession handles POST /v1/ingest/sessions.
@@ -45,6 +52,11 @@ func (h *IngestHandler) IngestSession(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error("failed to ingest session", "org_id", orgID, "error", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "INGEST_ERROR", "failed to queue session for ingestion")
 		return
+	}
+
+	// Increment usage meter after successful ingest
+	if h.meter != nil {
+		h.meter.IncrementEvents(r.Context(), orgID, 1)
 	}
 
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]interface{}{
@@ -101,6 +113,11 @@ func (h *IngestHandler) IngestSpans(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Increment usage meter after successful ingest
+	if h.meter != nil {
+		h.meter.IncrementEvents(r.Context(), orgID, len(spans))
+	}
+
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]interface{}{
 		"status": "accepted",
 		"count":  len(spans),
@@ -138,6 +155,11 @@ func (h *IngestHandler) IngestEvents(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error("failed to ingest events", "org_id", orgID, "count", len(events), "error", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "INGEST_ERROR", "failed to queue events for ingestion")
 		return
+	}
+
+	// Increment usage meter after successful ingest
+	if h.meter != nil {
+		h.meter.IncrementEvents(r.Context(), orgID, len(events))
 	}
 
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]interface{}{
@@ -194,6 +216,11 @@ func (h *IngestHandler) IngestBatch(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error("failed to ingest batch", "org_id", orgID, "error", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "INGEST_ERROR", "failed to queue batch for ingestion")
 		return
+	}
+
+	// Increment usage meter after successful ingest
+	if h.meter != nil {
+		h.meter.IncrementEvents(r.Context(), orgID, totalItems)
 	}
 
 	// Set the adaptive sample-rate header so SDKs can adjust client-side sampling.

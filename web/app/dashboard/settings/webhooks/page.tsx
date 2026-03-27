@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/select";
 import { api, ApiError } from "@/lib/api";
 import { showSuccess, showError, showApiError } from "@/lib/toast";
+import { RequireRole } from "@/components/require-role";
 
 // --- Types matching backend ---
 interface WebhookEndpoint {
@@ -381,13 +382,15 @@ export default function WebhooksPage() {
             Configure webhook endpoints for real-time event notifications
           </p>
         </div>
-        <button
-          onClick={() => setCreateDialogOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent-blue)] text-white text-sm font-medium hover:opacity-90 transition-opacity active:scale-[0.98]"
-        >
-          <Plus className="w-4 h-4" />
-          Add Webhook
-        </button>
+        <RequireRole role="admin">
+          <button
+            onClick={() => setCreateDialogOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent-blue)] text-white text-sm font-medium hover:opacity-90 transition-opacity active:scale-[0.98]"
+          >
+            <Plus className="w-4 h-4" />
+            Add Webhook
+          </button>
+        </RequireRole>
       </div>
 
       {/* Loading */}
@@ -434,10 +437,12 @@ export default function WebhooksPage() {
             Add a webhook endpoint to receive real-time notifications about
             agent events.
           </p>
-          <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
-            <Plus className="w-3.5 h-3.5 mr-1.5" />
-            Add Webhook
-          </Button>
+          <RequireRole role="admin">
+            <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
+              <Plus className="w-3.5 h-3.5 mr-1.5" />
+              Add Webhook
+            </Button>
+          </RequireRole>
         </div>
       )}
 

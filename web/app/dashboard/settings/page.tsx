@@ -21,6 +21,7 @@ import {
   Check,
   Loader2,
   Archive,
+  LogOut,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { fadeIn, staggerContainer, staggerItem } from "@/lib/animations";
@@ -112,6 +113,7 @@ export default function SettingsPage() {
   const [showDeleteOrg, setShowDeleteOrg] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const initToken = useCallback(() => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -208,6 +210,23 @@ export default function SettingsPage() {
       setShowDeleteOrg(false);
       setDeleteConfirmText("");
     }
+  };
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (token) {
+      try {
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/auth/logout`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch {
+        // Best-effort: proceed with local cleanup even if API call fails
+      }
+    }
+    localStorage.removeItem("token");
+    window.location.href = "/login";
   };
 
   const plan = orgData?.plan || orgUsage?.plan || "free";
@@ -605,6 +624,39 @@ export default function SettingsPage() {
             </motion.span>
           )}
         </div>
+
+        {/* Sign Out */}
+        <motion.div
+          variants={staggerItem}
+          className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-6"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-[var(--bg-hover)] flex items-center justify-center">
+                <LogOut className="w-4.5 h-4.5 text-[var(--text-tertiary)]" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-[var(--text-primary)]">Sign Out</h2>
+                <p className="text-xs text-[var(--text-tertiary)]">
+                  End your current session and return to the login screen
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleLogout} disabled={loggingOut}>
+              {loggingOut ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Signing out...
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <LogOut className="w-3.5 h-3.5" />
+                  Sign Out
+                </span>
+              )}
+            </Button>
+          </div>
+        </motion.div>
 
         {/* Danger Zone */}
         <motion.div

@@ -15,6 +15,7 @@ import {
   Clock,
   Info,
   Loader2,
+  RotateCw,
 } from "lucide-react";
 import { fadeIn, staggerContainer, staggerItem } from "@/lib/animations";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,9 @@ export default function APIKeysPage() {
   const [revokeConfirmText, setRevokeConfirmText] = useState("");
   const [revoking, setRevoking] = useState(false);
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
+  const [rotating, setRotating] = useState(false);
+  const [rotatedKey, setRotatedKey] = useState<string | null>(null);
+  const [showRotateResult, setShowRotateResult] = useState(false);
 
   // Create form state
   const [newKeyName, setNewKeyName] = useState("");
@@ -165,6 +169,30 @@ export default function APIKeysPage() {
     } finally {
       setRevoking(false);
     }
+  };
+
+  const handleRotate = async (id: string) => {
+    setRotating(true);
+    try {
+      initToken();
+      const resp = await api.post<{ key: string }>(`/api/api-keys/${id}/rotate`);
+      setRotatedKey(resp.key);
+      setShowRotateResult(true);
+      showSuccess("API key rotated successfully");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        showApiError(err);
+      } else {
+        showError("Failed to rotate API key");
+      }
+    } finally {
+      setRotating(false);
+    }
+  };
+
+  const resetRotateDialog = () => {
+    setShowRotateResult(false);
+    setRotatedKey(null);
   };
 
   const handleCopy = (text: string, id: string) => {
@@ -419,7 +447,15 @@ export default function APIKeysPage() {
                         {formatRelative(key.last_used_at)}
                       </td>
                       <td className="px-5 py-3.5">
-                        <div className="flex items-center justify-end">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleRotate(key.id)}
+                            disabled={rotating}
+                            className="p-1.5 rounded hover:bg-[var(--accent-blue)]/10 text-[var(--text-tertiary)] hover:text-[var(--accent-blue)] transition-colors"
+                            title="Rotate key"
+                          >
+                            <RotateCw className={`w-3.5 h-3.5 ${rotating ? "animate-spin" : ""}`} />
+                          </button>
                           <button
                             onClick={() => setShowRevokeConfirm(key.id)}
                             className="p-1.5 rounded hover:bg-[var(--accent-red)]/10 text-[var(--text-tertiary)] hover:text-[var(--accent-red)] transition-colors"
@@ -642,6 +678,49 @@ export default function APIKeysPage() {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rotate result dialog */}
+      <Dialog open={showRotateResult} onOpenChange={(open) => !open && resetRotateDialog()}>
+        <DialogContent className="bg-[var(--bg-elevated)] border-[var(--border-default)] max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Key Rotated Successfully</DialogTitle>
+            <DialogDescription>
+              Copy your new API key now. It will not be shown again.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {rotatedKey && (
+              <div className="p-4 rounded-lg bg-[var(--bg-primary)] border border-[var(--accent-green)]/20">
+                <div className="flex items-center justify-between gap-2">
+                  <code className="font-mono text-sm text-[var(--accent-green)] break-all">
+                    {rotatedKey}
+                  </code>
+                  <button
+                    onClick={() => handleCopy(rotatedKey, "rotated")}
+                    className="p-2 rounded-lg hover:bg-[var(--bg-hover)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0"
+                  >
+                    {copiedId === "rotated" ? (
+                      <Check className="w-4 h-4 text-[var(--accent-green)]" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-[var(--accent-amber)]/5 border border-[var(--accent-amber)]/10">
+              <AlertTriangle className="w-4 h-4 text-[var(--accent-amber)] mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-[var(--text-secondary)]">
+                Old key will remain valid for 24 hours. Store the new key securely before closing this dialog.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button onClick={resetRotateDialog}>Done</Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </motion.div>

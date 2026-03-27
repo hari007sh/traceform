@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
 import { useTimeRange } from "@/hooks/use-time-range";
 import { TimeRangePicker } from "@/components/time-range-picker";
+import { RequireRole } from "@/components/require-role";
 
 // ---------------------------------------------------------------------------
 // Guard type display names — maps backend guard_type to human-readable name
@@ -366,13 +367,15 @@ export default function GuardOverviewPage() {
             PII, prompt injection, toxicity, and hallucinations.
           </p>
           <div className="flex items-center justify-center gap-3">
-            <button
-              onClick={() => window.location.href = "/dashboard/guard/rules/new"}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[var(--accent-blue)] text-white hover:opacity-90 transition-opacity active:scale-[0.98]"
-            >
-              Create First Guard Rule
-              <span aria-hidden="true">&rarr;</span>
-            </button>
+            <RequireRole role="admin">
+              <button
+                onClick={() => window.location.href = "/dashboard/guard/rules/new"}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[var(--accent-blue)] text-white hover:opacity-90 transition-opacity active:scale-[0.98]"
+              >
+                Create First Guard Rule
+                <span aria-hidden="true">&rarr;</span>
+              </button>
+            </RequireRole>
             <a
               href="https://docs.agentstack.dev/guard"
               target="_blank"

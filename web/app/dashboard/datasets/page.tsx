@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { api, ApiError } from "@/lib/api";
 import { showSuccess, showError, showApiError } from "@/lib/toast";
+import { RequireRole } from "@/components/require-role";
 
 // --- Types ---
 interface Dataset {
@@ -198,12 +199,14 @@ export default function DatasetsPage() {
         </div>
         <div className="flex items-center gap-2">
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent-blue)] text-white text-sm font-medium hover:opacity-90 transition-opacity active:scale-[0.98]">
-                <Plus className="w-4 h-4" />
-                Create Dataset
-              </button>
-            </DialogTrigger>
+            <RequireRole role="admin">
+              <DialogTrigger asChild>
+                <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent-blue)] text-white text-sm font-medium hover:opacity-90 transition-opacity active:scale-[0.98]">
+                  <Plus className="w-4 h-4" />
+                  Create Dataset
+                </button>
+              </DialogTrigger>
+            </RequireRole>
             <DialogContent className="bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-primary)] max-w-md">
               <DialogHeader>
                 <DialogTitle>Create Dataset</DialogTitle>

@@ -64,6 +64,7 @@ const navigation: NavSection[] = [
       { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
       { label: "Patterns", href: "/dashboard/patterns", icon: Fingerprint },
       { label: "Alerts", href: "/dashboard/alerts", icon: AlertTriangle },
+      { label: "Errors", href: "/dashboard/errors", icon: AlertTriangle },
     ],
   },
   {

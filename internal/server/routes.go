@@ -112,6 +112,7 @@ func (s *Server) setupRoutes() {
 	samplingHandler := tracehandler.NewSamplingHandler(samplingSvc, s.logger)
 
 	ingestHandler := tracehandler.NewIngestHandler(ingestSvc, samplingSvc, s.logger)
+	ingestHandler.SetMeter(s.meter)
 	agentHandler := tracehandler.NewAgentHandler(pgStore, s.logger)
 	patternHandler := tracehandler.NewPatternHandler(patternSvc, s.logger)
 	alertHandler := tracehandler.NewAlertHandler(alertSvc, s.logger)
@@ -164,6 +165,7 @@ func (s *Server) setupRoutes() {
 			if s.redis != nil {
 				r.Use(middleware.RateLimit(s.redis, 10000))
 			}
+			r.Use(middleware.UsageLimitCheck(s.meter))
 			r.Post("/sessions", ingestHandler.IngestSession)
 			r.Post("/spans", ingestHandler.IngestSpans)
 			r.Post("/events", ingestHandler.IngestEvents)

@@ -14,6 +14,7 @@ import {
   staggerItem,
 } from "@/lib/animations";
 import { SkeletonBlock } from "@/components/skeleton";
+import { RequireRole } from "@/components/require-role";
 
 // --- Mock Data ---
 interface ProviderCard {
@@ -114,10 +115,12 @@ export default function ProvidersPage() {
             Manage LLM provider connections and API keys
           </p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent-blue)] text-white text-sm font-medium hover:opacity-90 transition-opacity active:scale-[0.98]">
-          <Plus className="w-4 h-4" />
-          Add Provider
-        </button>
+        <RequireRole role="admin">
+          <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent-blue)] text-white text-sm font-medium hover:opacity-90 transition-opacity active:scale-[0.98]">
+            <Plus className="w-4 h-4" />
+            Add Provider
+          </button>
+        </RequireRole>
       </div>
 
       {/* Loading */}
