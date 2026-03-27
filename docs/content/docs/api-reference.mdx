@@ -379,6 +379,8 @@ Get Shield healing analytics.
 
 ## Error Groups
 
+<PlanBadge plan="cloud" />
+
 ### GET /v1/errors
 
 List error groups, aggregated by fingerprint in ClickHouse.
@@ -611,6 +613,8 @@ List cost events with filtering.
 
 ## Data Export
 
+<PlanBadge plan="cloud" />
+
 Export endpoints return CSV or JSON data. Specify format via the `format` query parameter (`csv` or `json`, default `json`). Requires cloud plan or above.
 
 ### GET /v1/export/sessions
@@ -632,6 +636,8 @@ curl -H "Authorization: Bearer tf_sk_..." \
 ```
 
 ### GET /v1/export/audit
+
+<PlanBadge plan="cloud" />
 
 Export audit log data. Requires team plan or above.
 
@@ -766,6 +772,8 @@ These endpoints require JWT authentication (dashboard login). All mutations requ
 
 ### SSO Configuration
 
+<PlanBadge plan="enterprise" />
+
 Requires enterprise plan. See [Enterprise](/docs/enterprise) for setup details.
 
 | Method | Path | Description |
@@ -775,6 +783,8 @@ Requires enterprise plan. See [Enterprise](/docs/enterprise) for setup details.
 | DELETE | `/api/sso` | Remove SSO configuration |
 
 ### Audit Logs
+
+<PlanBadge plan="cloud" />
 
 Requires team plan or above.
 
@@ -808,6 +818,8 @@ curl -H "Authorization: Bearer <jwt_token>" \
 ```
 
 ### GDPR Data Deletion
+
+<PlanBadge plan="team" />
 
 | Method | Path | Description |
 |--------|------|-------------|

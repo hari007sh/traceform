@@ -209,6 +209,8 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 ## Kubernetes with Helm
 
+<PlanBadge plan="free" />
+
 A full Helm chart is available at `deploy/helm/traceform/`. It includes Horizontal Pod Autoscaling (HPA), Pod Disruption Budgets (PDB), and ingress configuration.
 
 ### Install
@@ -302,6 +304,8 @@ helm upgrade traceform deploy/helm/traceform/ \
 ```
 
 ## Caddy TLS Reverse Proxy
+
+<PlanBadge plan="free" />
 
 A Caddy configuration is provided at `deploy/caddy/` for TLS termination and reverse proxying.
 
@@ -458,6 +462,8 @@ The pipeline runs on:
 | `STRIPE_WEBHOOK_SECRET` | -- | Stripe webhook signing secret |
 
 ## Monitoring with Prometheus and Grafana
+
+<PlanBadge plan="free" />
 
 ### Prometheus Scrape Configuration
 

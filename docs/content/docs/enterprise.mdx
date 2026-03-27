@@ -9,6 +9,8 @@ Traceform includes enterprise-grade features for security, compliance, and team 
 
 ## Role-Based Access Control (RBAC)
 
+<PlanBadge plan="free" />
+
 All mutation routes enforce role-based access control. Roles are assigned per organization through team membership.
 
 ### Roles
@@ -48,7 +50,11 @@ curl -X POST http://localhost:8080/api/team/invite \
 
 ## Single Sign-On (SSO)
 
+<PlanBadge plan="enterprise" />
+
 SSO supports both SAML 2.0 and OpenID Connect (OIDC) protocols with Just-In-Time (JIT) user provisioning. SSO is available on the enterprise plan.
+
+<UpgradeCallout plan="Enterprise" feature="SSO (SAML/OIDC)" />
 
 ### SAML Setup
 
@@ -127,6 +133,8 @@ curl "http://localhost:8080/auth/sso/lookup?domain=example.com"
 ```
 
 ## Audit Logging
+
+<PlanBadge plan="cloud" />
 
 All mutations (creates, updates, deletes) are recorded in an asynchronous audit log. The audit log service never blocks mutation requests -- writes go through a buffered channel to the audit logger worker.
 
@@ -223,6 +231,8 @@ Navigate to **Settings > Billing** in the dashboard to see:
 
 ## Data Export
 
+<PlanBadge plan="cloud" />
+
 Export sessions, cost data, and audit logs as CSV or JSON. Available on cloud plan and above.
 
 ```bash
@@ -239,7 +249,9 @@ curl -H "Authorization: Bearer <jwt_token>" \
   "http://localhost:8080/v1/export/audit?format=csv"
 ```
 
-## GDPR Compliance
+## GDPR Data Deletion
+
+<PlanBadge plan="team" />
 
 ### Data Deletion
 
@@ -274,6 +286,8 @@ Data retention is governed by plan tier (7 days for free, 30 days for cloud, 90 
 
 ## Error Groups
 
+<PlanBadge plan="cloud" />
+
 Errors are grouped by fingerprint for efficient triage. The fingerprinting algorithm normalizes error messages (removing dynamic values like IDs and timestamps), extracts top stack trace frames, and combines with span type and agent name.
 
 ### Viewing Error Groups
@@ -299,6 +313,8 @@ curl -H "Authorization: Bearer tf_sk_..." \
 Error groups require cloud plan or above.
 
 ## API Key Rotation
+
+<PlanBadge plan="team" />
 
 API keys can be rotated with a 24-hour grace period that allows the old key to continue working while applications are updated.
 

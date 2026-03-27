@@ -104,6 +104,8 @@ Session: "Customer Support Run #1847"
 
 ### Error Groups
 
+<PlanBadge plan="cloud" />
+
 Errors are grouped by fingerprint, which is computed from:
 - Normalized error message (dynamic values like IDs and timestamps stripped)
 - Top stack trace frames
@@ -190,6 +192,8 @@ Query parameters:
 
 ### Error Groups
 
+<PlanBadge plan="cloud" />
+
 ```
 GET /v1/errors?limit=20
 Authorization: Bearer tf_sk_your_key
@@ -219,6 +223,8 @@ Authorization: Bearer tf_sk_your_key
 Returns time-series data downsampled to max 500 points via LTTB.
 
 ### Data Export
+
+<PlanBadge plan="cloud" />
 
 ```
 GET /v1/export/sessions?format=csv&start=...&end=...
