@@ -1,0 +1,337 @@
+---
+title: Enterprise Features
+description: Enterprise capabilities — RBAC, SSO (SAML/OIDC), audit logging, plan tiers, usage metering, data export, GDPR compliance, error groups, API key rotation, and JWT revocation.
+---
+
+# Enterprise Features
+
+Traceform includes enterprise-grade features for security, compliance, and team management. This page covers all enterprise capabilities and their configuration.
+
+## Role-Based Access Control (RBAC)
+
+All mutation routes enforce role-based access control. Roles are assigned per organization through team membership.
+
+### Roles
+
+| Role | Permissions |
+|------|------------|
+| **owner** | Full access. Manage billing, SSO, delete organization, transfer ownership. Only one owner per organization. |
+| **admin** | Create, update, and delete resources. Manage team members (except owners). Manage API keys. Configure SSO and audit settings. |
+| **viewer** | Read-only access to all data pages. Cannot create, update, or delete any resources. |
+
+### How RBAC is Enforced
+
+- Every `/api/*` endpoint checks the user's role from the JWT token
+- All mutation endpoints (POST, PUT, PATCH, DELETE) require `admin` or `owner` role
+- Read endpoints (GET) are accessible to all roles including `viewer`
+- The API returns `403 Forbidden` with code `FORBIDDEN` when a user lacks the required role
+
+### Managing Roles
+
+```bash
+# List team members with roles
+curl -H "Authorization: Bearer <jwt_token>" \
+  http://localhost:8080/api/team
+
+# Update a member's role
+curl -X PATCH http://localhost:8080/api/team/{memberId}/role \
+  -H "Authorization: Bearer <jwt_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"role": "admin"}'
+
+# Invite a new team member
+curl -X POST http://localhost:8080/api/team/invite \
+  -H "Authorization: Bearer <jwt_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "colleague@example.com", "role": "viewer"}'
+```
+
+## Single Sign-On (SSO)
+
+SSO supports both SAML 2.0 and OpenID Connect (OIDC) protocols with Just-In-Time (JIT) user provisioning. SSO is available on the enterprise plan.
+
+### SAML Setup
+
+1. Navigate to **Settings > SSO** in the dashboard
+2. Select **SAML** as the SSO provider
+3. Configure the following:
+
+| Field | Description |
+|-------|-------------|
+| Entity ID | Your IdP entity ID (e.g., `https://idp.example.com/metadata`) |
+| SSO URL | IdP single sign-on URL |
+| Certificate | IdP X.509 signing certificate (PEM format) |
+| Email Domain | Email domain for SSO enforcement (e.g., `example.com`) |
+
+4. Copy the **ACS URL** displayed in the dashboard (`https://your-domain.com/auth/saml/acs`) and configure it in your IdP
+
+### OIDC Setup
+
+1. Navigate to **Settings > SSO** in the dashboard
+2. Select **OIDC** as the SSO provider
+3. Configure the following:
+
+| Field | Description |
+|-------|-------------|
+| Client ID | OIDC client ID from your IdP |
+| Client Secret | OIDC client secret |
+| Issuer URL | OIDC issuer URL (e.g., `https://accounts.google.com`) |
+| Email Domain | Email domain for SSO enforcement |
+
+4. Copy the **Redirect URI** displayed in the dashboard (`https://your-domain.com/auth/oidc/callback`) and register it with your IdP
+
+### JIT Provisioning
+
+When a user logs in via SSO for the first time:
+- A user account is automatically created
+- The user is added to the organization with the `viewer` role
+- Admins can promote users to `admin` or `owner` after provisioning
+
+### SSO API
+
+```bash
+# Get SSO configuration
+curl -H "Authorization: Bearer <jwt_token>" \
+  http://localhost:8080/api/sso
+
+# Create or update SSO configuration
+curl -X POST http://localhost:8080/api/sso \
+  -H "Authorization: Bearer <jwt_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "saml",
+    "entity_id": "https://idp.example.com/metadata",
+    "sso_url": "https://idp.example.com/sso",
+    "certificate": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
+    "email_domain": "example.com"
+  }'
+
+# Remove SSO configuration
+curl -X DELETE http://localhost:8080/api/sso \
+  -H "Authorization: Bearer <jwt_token>"
+```
+
+### SSO Login Flow
+
+```bash
+# Look up SSO configuration by domain
+curl "http://localhost:8080/auth/sso/lookup?domain=example.com"
+
+# SAML login (redirect to IdP)
+# Browser redirects to: /auth/saml/login/{orgID}
+# IdP posts back to: /auth/saml/acs
+
+# OIDC login (redirect to IdP)
+# Browser redirects to: /auth/oidc/{orgID}/login
+# IdP redirects back to: /auth/oidc/callback
+```
+
+## Audit Logging
+
+All mutations (creates, updates, deletes) are recorded in an asynchronous audit log. The audit log service never blocks mutation requests -- writes go through a buffered channel to the audit logger worker.
+
+### What is Logged
+
+Every audit log entry includes:
+
+| Field | Description |
+|-------|-------------|
+| `actor_id` | User ID of the person who made the change |
+| `actor_email` | Email of the actor |
+| `action` | `create`, `update`, `delete` |
+| `resource_type` | Type of resource (e.g., `api_key`, `guardrail`, `route`, `team_member`) |
+| `resource_id` | ID of the affected resource |
+| `diff` | Before/after state diff (JSON) |
+| `ip_address` | IP address of the request |
+| `user_agent` | User agent string |
+| `created_at` | Timestamp of the action |
+
+### Viewing Audit Logs
+
+Navigate to **Settings > Audit Log** in the dashboard. The page provides:
+- Searchable list of all audit events
+- Filtering by action, resource type, actor, and date range
+- Detail view showing the full diff for each event
+
+### Querying via API
+
+```bash
+curl -H "Authorization: Bearer <jwt_token>" \
+  "http://localhost:8080/api/audit-logs?limit=50&action=create&resource_type=api_key"
+```
+
+### Exporting Audit Logs
+
+```bash
+# Export as CSV
+curl -H "Authorization: Bearer <jwt_token>" \
+  "http://localhost:8080/v1/export/audit?format=csv&start=2026-03-01T00:00:00Z"
+
+# Export as JSON
+curl -H "Authorization: Bearer <jwt_token>" \
+  "http://localhost:8080/v1/export/audit?format=json"
+```
+
+Audit logging requires team plan or above. Audit log export requires team plan or above.
+
+## Plan Tiers
+
+Traceform offers four plan tiers with feature gating and usage metering:
+
+| Feature | Free | Cloud ($49/mo) | Team ($199/mo) | Enterprise (Custom) |
+|---------|------|----------------|-----------------|---------------------|
+| Core modules (Trace, Shield, Guard, Route, Test, Cost) | Yes | Yes | Yes | Yes |
+| Events per month | 10K | 100K | 1M | Unlimited |
+| Data retention | 7 days | 30 days | 90 days | Custom |
+| Team members | 1 | 3 | 10 | Unlimited |
+| Custom evaluators | 3 | 10 | Unlimited | Unlimited |
+| Data export (CSV/JSON) | -- | Yes | Yes | Yes |
+| Error groups | -- | Yes | Yes | Yes |
+| API key rotation | -- | -- | Yes | Yes |
+| Audit logging | -- | -- | Yes | Yes |
+| SSO (SAML/OIDC) | -- | -- | -- | Yes |
+| Priority support | -- | -- | Yes | Yes |
+| SLA | -- | -- | -- | Yes |
+
+### Usage Metering
+
+Usage is tracked per billing period and available at `GET /api/usage`:
+
+```json
+{
+  "plan": "team",
+  "period_start": "2026-03-01T00:00:00Z",
+  "period_end": "2026-03-31T23:59:59Z",
+  "usage": {
+    "events": { "used": 45000, "limit": 1000000 },
+    "sessions": { "used": 1200, "limit": -1 },
+    "api_calls": { "used": 89000, "limit": -1 },
+    "members": { "used": 5, "limit": 10 }
+  }
+}
+```
+
+A `limit` of `-1` means unlimited.
+
+### Billing Page
+
+Navigate to **Settings > Billing** in the dashboard to see:
+- Current plan and usage meters with progress bars
+- Plan comparison table
+- Upgrade buttons
+- Billing history
+
+## Data Export
+
+Export sessions, cost data, and audit logs as CSV or JSON. Available on cloud plan and above.
+
+```bash
+# Export sessions
+curl -H "Authorization: Bearer tf_sk_..." \
+  "http://localhost:8080/v1/export/sessions?format=csv&start=2026-03-01T00:00:00Z"
+
+# Export cost data
+curl -H "Authorization: Bearer tf_sk_..." \
+  "http://localhost:8080/v1/export/cost?format=json&start=2026-03-01T00:00:00Z"
+
+# Export audit logs (requires team plan)
+curl -H "Authorization: Bearer <jwt_token>" \
+  "http://localhost:8080/v1/export/audit?format=csv"
+```
+
+## GDPR Compliance
+
+### Data Deletion
+
+The `DELETE /api/org/data` endpoint deletes all organization data for GDPR compliance:
+
+```bash
+curl -X DELETE http://localhost:8080/api/org/data \
+  -H "Authorization: Bearer <jwt_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"confirm": true}'
+```
+
+This deletes:
+- All session data in ClickHouse
+- All span and event data
+- All healing events
+- All cost events
+- All audit logs
+- All gateway request logs
+
+This does **not** delete:
+- User accounts and authentication data
+- Organization settings
+- API key configurations
+- Guard rules, test suites, and other configuration
+
+This action is **irreversible** and requires the `owner` role.
+
+### Data Retention
+
+Data retention is governed by plan tier (7 days for free, 30 days for cloud, 90 days for team, custom for enterprise). Expired data is automatically purged from ClickHouse by the background cleanup worker.
+
+## Error Groups
+
+Errors are grouped by fingerprint for efficient triage. The fingerprinting algorithm normalizes error messages (removing dynamic values like IDs and timestamps), extracts top stack trace frames, and combines with span type and agent name.
+
+### Viewing Error Groups
+
+Navigate to `/dashboard/errors` to see:
+- Error groups sorted by count (most frequent first)
+- First seen and last seen timestamps
+- Affected agents and span types
+- Click through to sample sessions for investigation
+
+### API
+
+```bash
+# List error groups
+curl -H "Authorization: Bearer tf_sk_..." \
+  "http://localhost:8080/v1/errors?limit=20"
+
+# Get error group details
+curl -H "Authorization: Bearer tf_sk_..." \
+  "http://localhost:8080/v1/errors/{fingerprint}"
+```
+
+Error groups require cloud plan or above.
+
+## API Key Rotation
+
+API keys can be rotated with a 24-hour grace period that allows the old key to continue working while applications are updated.
+
+```bash
+# Rotate an API key
+curl -X POST http://localhost:8080/api/api-keys/{id}/rotate \
+  -H "Authorization: Bearer <jwt_token>"
+```
+
+Response:
+
+```json
+{
+  "new_key": "tf_sk_new_key_here",
+  "old_key_expires_at": "2026-03-28T10:30:00Z",
+  "grace_period_hours": 24
+}
+```
+
+During the grace period:
+- Both the old and new keys are valid
+- After 24 hours, the old key is automatically revoked
+- The new key is returned only once -- store it securely
+
+API key rotation requires team plan or above.
+
+## JWT Revocation
+
+JWT tokens can be revoked immediately via the logout endpoint:
+
+```bash
+curl -X POST http://localhost:8080/auth/logout \
+  -H "Authorization: Bearer <jwt_token>"
+```
+
+Revoked tokens are added to a Redis blacklist and checked on every authenticated request. The blacklist entry automatically expires when the token's natural expiry time is reached, so Redis memory usage is bounded.

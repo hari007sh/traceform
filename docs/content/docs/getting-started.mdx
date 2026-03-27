@@ -8,8 +8,8 @@ description: "Set up Traceform locally and send your first session trace in unde
 Before you begin, make sure you have the following installed:
 
 - **Docker** and **Docker Compose** (for PostgreSQL, ClickHouse, Redis, NATS)
-- **Go 1.22+** (for the API server and gateway)
-- **Node.js 18+** and **npm** (for the dashboard)
+- **Go 1.26+** (for the API server and gateway)
+- **Node.js 20+** and **npm** (for the dashboard)
 - **Python 3.9+** (for the Python SDK)
 - **Git**
 
@@ -64,12 +64,12 @@ Start the Go API server (port 8080):
 make dev
 ```
 
-In a separate terminal, start the Next.js dashboard (port 3000):
+In a separate terminal, start the Next.js dashboard. Port 3000 may be taken by other applications, so use port 3001:
 
 ```bash
 cd web
 npm install
-npm run dev
+PORT=3001 npm run dev
 ```
 
 Verify the API server is running:
@@ -88,13 +88,32 @@ Expected response:
 }
 ```
 
+You can also check the readiness endpoint, which verifies all dependencies:
+
+```bash
+curl http://localhost:8080/ready
+```
+
+```json
+{
+  "status": "ready",
+  "checks": {
+    "postgres": "healthy",
+    "redis": "healthy",
+    "nats": "healthy",
+    "clickhouse": "healthy"
+  }
+}
+```
+
 ## First Login (GitHub OAuth)
 
-Open [http://localhost:3000](http://localhost:3000) in your browser. Click **Sign in with GitHub** to authenticate.
+Open [http://localhost:3001](http://localhost:3001) in your browser. Click **Sign in with GitHub** to authenticate.
 
 On first login, Traceform automatically creates:
 - A personal **organization** for your account
-- A **default API key** for SDK access
+- A **default API key** for SDK access (prefixed with `tf_sk_`)
+- An **owner** role for your user (RBAC is enforced on all mutation routes)
 
 If GitHub OAuth is not configured in your `.env`, you can set it up by creating a GitHub OAuth App and adding the credentials:
 
@@ -107,7 +126,7 @@ GITHUB_CLIENT_SECRET=your_client_secret
 
 Navigate to **Settings > API Keys** in the dashboard, or use the default key created during login.
 
-API keys use the format `as_sk_...` and are passed as Bearer tokens in the `Authorization` header.
+API keys use the format `tf_sk_...` and are passed as Bearer tokens in the `Authorization` header.
 
 You can also manage API keys via the dashboard API:
 
@@ -115,6 +134,8 @@ You can also manage API keys via the dashboard API:
 # List API keys (requires JWT from dashboard login)
 curl -H "Authorization: Bearer <jwt_token>" http://localhost:8080/api/api-keys
 ```
+
+API keys support rotation with a 24-hour grace period via `POST /api/api-keys/{id}/rotate`.
 
 ## Install the Python SDK
 
@@ -129,6 +150,12 @@ pip install traceform[openai]      # OpenAI auto-instrumentation
 pip install traceform[anthropic]   # Anthropic auto-instrumentation
 ```
 
+## Install the TypeScript SDK
+
+```bash
+npm install @traceform/sdk
+```
+
 ## Send Your First Session Trace
 
 Create a file called `quickstart.py`:
@@ -138,7 +165,7 @@ import traceform
 
 # Initialize the SDK with your API key
 traceform.init(
-    api_key="as_sk_your_key_here",
+    api_key="tf_sk_your_key_here",
     endpoint="http://localhost:8080",
 )
 
@@ -174,17 +201,44 @@ python quickstart.py
 
 ## View Data in the Dashboard
 
-Open [http://localhost:3000/dashboard/sessions](http://localhost:3000/dashboard/sessions) to see your session. Click on it to view the full trace timeline with:
+Open [http://localhost:3001/dashboard/sessions](http://localhost:3001/dashboard/sessions) to see your session in the **split-pane session explorer**. The left pane shows the session list with infinite scroll; select a session to see its details in the right pane.
 
-- Session metadata and status
-- Individual spans displayed on a Gantt-chart timeline
-- Token usage and cost per span
-- Input/output data for each span
+### Split-Pane Explorer
 
-Navigate to [http://localhost:3000/dashboard/overview](http://localhost:3000/dashboard/overview) for aggregate metrics including session count, failure rate, total tokens, and cost.
+The sessions page uses a master-detail split view:
+- **Left pane**: Session list with infinite scroll and server-side pagination, search, and filtering.
+- **Right pane**: Session detail with the D3 Gantt chart timeline, span tree (virtual scrolling for large traces), and metadata.
+- **Keyboard navigation**: Use arrow keys to move between sessions.
+
+### Time Range Picker
+
+A global time range picker appears on all data pages. Choose from preset ranges: **15m, 1h, 4h, 1d, 7d, 30d**.
+
+### Auto-Refresh
+
+The overview page at [http://localhost:3001/dashboard/overview](http://localhost:3001/dashboard/overview) supports auto-refresh with configurable intervals: **Off, 10s, 30s, 1m**.
+
+Navigate to the overview page for aggregate metrics including session count, failure rate, total tokens, and cost.
+
+## Dashboard Tour
+
+| Page | URL | Description |
+|------|-----|-------------|
+| Overview | `/dashboard/overview` | Metric cards, charts, auto-refresh |
+| Sessions | `/dashboard/sessions` | Split-pane explorer with infinite scroll |
+| Errors | `/dashboard/errors` | Error groups with fingerprinting |
+| Healing | `/dashboard/healing` | Shield intervention metrics |
+| Analytics | `/dashboard/analytics` | Aggregate analytics charts |
+| Test | `/dashboard/test` | Test suites, runs, evaluators |
+| Guard | `/dashboard/guard` | Guardrail rules and events |
+| Route | `/dashboard/route` | Gateway providers, routes, fallbacks |
+| Cost | `/dashboard/cost` | Spend analytics and budgets |
+| Settings | `/dashboard/settings` | API keys, team, SSO, audit log, billing |
 
 ## Next Steps
 
 - [Python SDK Reference](/docs/python-sdk) -- Full SDK documentation with all methods and features
 - [TypeScript SDK Reference](/docs/typescript-sdk) -- Node.js SDK for TypeScript projects
 - [API Reference](/docs/api-reference) -- Complete REST API documentation
+- [Deployment](/docs/deployment) -- Docker Compose, Kubernetes, Caddy TLS, and CI/CD
+- [Enterprise](/docs/enterprise) -- RBAC, SSO, audit logging, and plan tiers

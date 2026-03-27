@@ -26,7 +26,7 @@ Call `traceform.init()` once at application startup before creating any sessions
 import traceform
 
 traceform.init(
-    api_key="as_sk_your_key_here",
+    api_key="tf_sk_your_key_here",
     endpoint="http://localhost:8080",   # default
     batch_size=50,                      # events per batch flush (default: 50)
     flush_interval=5.0,                 # seconds between flushes (default: 5.0)
@@ -39,12 +39,28 @@ traceform.init(
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `api_key` | `str` | *required* | Your Traceform API key (format: `as_sk_...`) |
+| `api_key` | `str` | *required* | Your Traceform API key (format: `tf_sk_...`) |
 | `endpoint` | `str` | `http://localhost:8080` | Base URL of the Traceform API server |
 | `batch_size` | `int` | `50` | Number of events per batch flush |
 | `flush_interval` | `float` | `5.0` | Seconds between automatic batch flushes |
 | `auto_instrument` | `list[str] \| None` | `None` | Libraries to auto-instrument |
 | `debug` | `bool` | `False` | Enable debug-level logging |
+
+### Thread Safety
+
+The SDK uses `threading.local` for session context, making it safe to use in multi-threaded applications. Each thread maintains its own current session reference, so concurrent agent executions do not interfere with each other.
+
+### Shutdown and atexit
+
+The SDK automatically registers a shutdown hook via `atexit` to flush all pending events when the process exits. You can also shut down manually:
+
+```python
+# Force flush all pending events
+traceform.flush()
+
+# Gracefully shut down (flushes remaining events)
+traceform.shutdown()
+```
 
 ## Sessions
 
@@ -228,7 +244,7 @@ Auto-instrumentation patches supported libraries to automatically create spans f
 
 ```python
 traceform.init(
-    api_key="as_sk_...",
+    api_key="tf_sk_...",
     auto_instrument=["openai", "anthropic"],
 )
 ```
@@ -260,7 +276,7 @@ Once instrumented, every OpenAI call automatically creates a span:
 import openai
 import traceform
 
-traceform.init(api_key="as_sk_...", auto_instrument=["openai"])
+traceform.init(api_key="tf_sk_...", auto_instrument=["openai"])
 
 client = openai.OpenAI()
 
@@ -287,7 +303,7 @@ The auto-instrumentation captures:
 import anthropic
 import traceform
 
-traceform.init(api_key="as_sk_...", auto_instrument=["anthropic"])
+traceform.init(api_key="tf_sk_...", auto_instrument=["anthropic"])
 
 client = anthropic.Anthropic()
 
@@ -303,6 +319,8 @@ with traceform.session(agent_name="assistant") as session:
 ## Shield (Self-Healing)
 
 Shield is Traceform's self-healing engine that automatically detects and corrects agent failure modes in real-time, including loops, hallucinations, cost overruns, context overflow, and timeouts.
+
+The healing engine is thread-safe, using `threading.local` for state isolation between concurrent sessions.
 
 ### Enabling Shield
 
@@ -328,6 +346,10 @@ traceform.protect({
 | `timeout_retry` | `bool` | `True` | Retry on timeout before skipping |
 | `model_fallback` | `str \| None` | `None` | Cheaper model to switch to on cost limit |
 | `max_retries_per_step` | `int` | `2` | Max retries per step for error recovery |
+
+### Bounded Retries
+
+Shield uses bounded retry logic with a maximum of 3 attempts per healing intervention. This prevents infinite retry loops when a healing action itself fails. After exhausting retries, the engine falls back to the next recovery strategy or raises the original error.
 
 ### Using Shield with `@trace`
 
@@ -434,13 +456,14 @@ else:
 
 ## Batch Sending Configuration
 
-The SDK batches events for efficient network usage. Events are sent when either the batch size threshold or flush interval is reached.
+The SDK batches events for efficient network usage. Events are sent when either the batch size threshold or flush interval is reached. Failed sends are retried up to 3 times with exponential backoff.
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `batch_size` | `50` | Number of events that triggers an immediate flush |
 | `flush_interval` | `5.0s` | Maximum seconds between flushes |
 | Max queue size | `10,000` | Events beyond this limit are dropped with a warning |
+| Max retries | `3` | Bounded retries per batch send |
 
 ### Manual Flush and Shutdown
 
@@ -462,7 +485,7 @@ from openai import OpenAI
 
 # Initialize
 traceform.init(
-    api_key="as_sk_your_key",
+    api_key="tf_sk_your_key",
     endpoint="http://localhost:8080",
     auto_instrument=["openai"],
 )

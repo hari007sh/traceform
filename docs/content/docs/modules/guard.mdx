@@ -1,6 +1,6 @@
 ---
 title: Guard (Guardrails)
-description: Guard provides real-time content safety checks — PII detection, prompt injection blocking, toxicity filtering, and custom policy enforcement.
+description: Guard provides real-time content safety checks — PII detection, prompt injection blocking, toxicity filtering, and custom policy enforcement with parallel execution.
 ---
 
 # Guard (Guardrails)
@@ -9,7 +9,7 @@ Guard is Traceform's guardrails module. It runs content through configurable saf
 
 ## Overview
 
-Guard supports eight built-in guard types:
+Guard supports eight built-in guard types, all executing in parallel with short-circuit on the first block:
 
 | Guard Type | Detection Method | Latency |
 |-----------|-----------------|---------|
@@ -99,11 +99,23 @@ The injection guard uses pattern matching to detect common prompt injection tech
 - Delimiter injection
 - Role switching attempts
 
+### Toxicity Filtering
+
+The toxicity guard uses an LLM judge to evaluate content for harmful, offensive, or inappropriate material. The LLM is called with the user's configured API key.
+
+### Hallucination Detection
+
+The hallucination guard uses an LLM judge to check whether output contains fabricated information that contradicts provided context.
+
+### Topic Guard
+
+The topic guard uses an LLM judge to verify content stays within defined topic boundaries. Useful for preventing agents from discussing off-topic subjects.
+
 ### Code Execution Detection
 
 The code execution guard uses regex patterns to detect dangerous code patterns:
 
-- `eval()`, `exec()`, `os.system()`
+- `eval()` and `exec()` calls
 - Shell command injection patterns
 - File system access patterns
 
@@ -144,7 +156,7 @@ Define your own guard with a natural language policy prompt:
 
 ```
 POST /v1/guard/check
-Authorization: Bearer as_sk_your_key
+Authorization: Bearer tf_sk_your_key
 Content-Type: application/json
 ```
 
@@ -194,7 +206,7 @@ Guard events are persisted asynchronously after the response is returned.
 
 ```
 POST /v1/guard/rules
-Authorization: Bearer as_sk_your_key
+Authorization: Bearer tf_sk_your_key
 Content-Type: application/json
 ```
 
@@ -225,43 +237,12 @@ Content-Type: application/json
 
 Response (`201 Created`): the created guardrail object.
 
-### List Guardrail Rules
-
-```
-GET /v1/guard/rules
-Authorization: Bearer as_sk_your_key
-```
-
-### Get Guardrail Rule
-
-```
-GET /v1/guard/rules/{id}
-Authorization: Bearer as_sk_your_key
-```
-
-### Update Guardrail Rule
-
-```
-PUT /v1/guard/rules/{id}
-Authorization: Bearer as_sk_your_key
-Content-Type: application/json
-```
-
-Accepts partial updates -- only include the fields you want to change.
-
-### Delete Guardrail Rule
-
-```
-DELETE /v1/guard/rules/{id}
-Authorization: Bearer as_sk_your_key
-```
-
 ### SDK Usage (Python)
 
 ```python
 import traceform
 
-traceform.init(api_key="as_sk_your_key", endpoint="http://localhost:8080")
+traceform.init(api_key="tf_sk_your_key", endpoint="http://localhost:8080")
 
 result = traceform.guard.check(
     content="My email is john@example.com",
@@ -279,7 +260,7 @@ if not result.passed:
 
 Displays:
 - **Metric cards**: Total checks, block rate, average latency, active rules count.
-- **Checks over time**: Area chart of guard check volume.
+- **Checks over time**: Area chart of guard check volume (uses the global time range picker).
 - **Block reasons**: Bar chart breaking down blocks by guard type.
 - **Recent events table**: Latest guard events with action, type, findings, and latency.
 

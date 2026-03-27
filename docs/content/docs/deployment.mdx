@@ -1,18 +1,18 @@
 ---
 title: Deployment
-description: Deploy Traceform locally with Docker Compose or to production with the provided Dockerfiles and production compose file.
+description: Deploy Traceform locally with Docker Compose, to Kubernetes with Helm, or to production with Caddy TLS and GitHub Actions CI/CD.
 ---
 
 # Deployment
 
-Traceform can be deployed locally for development using Docker Compose, or to production using the provided multi-stage Dockerfiles and production compose file.
+Traceform can be deployed locally for development using Docker Compose, to production using Docker images and Kubernetes with Helm, or behind a Caddy reverse proxy for TLS termination. A full GitHub Actions CI/CD pipeline is provided.
 
 ## Local Development (Docker Compose)
 
 ### Prerequisites
 
 - Docker and Docker Compose
-- Go 1.22+
+- Go 1.26+
 - Node.js 20+
 
 ### 1. Start Infrastructure Services
@@ -25,9 +25,9 @@ This starts PostgreSQL, ClickHouse, Redis, and NATS:
 
 | Service | Container Port | Host Port | Purpose |
 |---------|---------------|-----------|---------|
-| PostgreSQL | 5432 | 5436 | Config database |
+| PostgreSQL | 5432 | 5432 | Config database |
 | ClickHouse | 9000, 8123 | 9000, 8123 | Time-series storage |
-| Redis | 6379 | 6379 | Cache, rate limiting |
+| Redis | 6379 | 6379 | Cache, rate limiting, JWT blacklist |
 | NATS | 4222, 8222 | 4222, 8222 | Event streaming |
 
 ### 2. Configure Environment
@@ -75,32 +75,37 @@ go run ./cmd/worker
 
 ### 8. Start the Dashboard
 
+Port 3000 may be taken by other applications. Use port 3001:
+
 ```bash
-cd web && npm install && npm run dev
+cd web && npm install && PORT=3001 npm run dev
 ```
 
-The dashboard starts on port 3000.
+The dashboard starts on port 3001.
 
 ### Verify
 
 ```bash
-# Health check
+# Health check with dependency status
 curl http://localhost:8080/health
 
-# Check services
+# Readiness probe
+curl http://localhost:8080/ready
+
+# Check infrastructure services
 docker compose ps
 ```
 
-## Production Deployment
+## Docker Images
 
-Traceform provides three Dockerfiles and a production Docker Compose file in the `deploy/` directory.
+Traceform provides three Dockerfiles in the `deploy/` directory. All Go images build with Go 1.26.
 
-### Dockerfiles
+### API Server + Worker + Migrate (`deploy/Dockerfile`)
 
-**`deploy/Dockerfile`** -- Multi-stage Go build for the API server, worker, and migration runner:
+Multi-stage build that produces a single image capable of running as the API server, background worker, or migration runner depending on the command:
 
 ```dockerfile
-FROM golang:1.22-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -120,12 +125,10 @@ EXPOSE 8080
 CMD ["/server"]
 ```
 
-The same image runs as server, worker, or migration runner depending on the command.
-
-**`deploy/Dockerfile.gateway`** -- Gateway proxy binary:
+### Gateway Proxy (`deploy/Dockerfile.gateway`)
 
 ```dockerfile
-FROM golang:1.22-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -139,7 +142,7 @@ EXPOSE 8090
 CMD ["/gateway"]
 ```
 
-**`deploy/Dockerfile.web`** -- Next.js dashboard:
+### Dashboard (`deploy/Dockerfile.web`)
 
 ```dockerfile
 FROM node:20-alpine AS deps
@@ -168,9 +171,9 @@ EXPOSE 3000
 CMD ["node", "server.js"]
 ```
 
-### Production Docker Compose
+## Production Docker Compose
 
-The `deploy/docker-compose.prod.yml` defines all seven services:
+The `deploy/docker-compose.prod.yml` defines all services:
 
 | Service | Image Source | Port | Depends On |
 |---------|-------------|------|------------|
@@ -182,7 +185,7 @@ The `deploy/docker-compose.prod.yml` defines all seven services:
 | `server` | `deploy/Dockerfile` | 8080 | migrate, redis, nats |
 | `worker` | `deploy/Dockerfile` | -- | migrate, redis, nats |
 | `gateway` | `deploy/Dockerfile.gateway` | 8090 | migrate, redis, nats |
-| `web` | `deploy/Dockerfile.web` | 3000 | server |
+| `web` | `deploy/Dockerfile.web` | 3001 | server |
 
 The migrate service runs first (with `condition: service_completed_successfully`), then the application services start.
 
@@ -204,16 +207,169 @@ export FRONTEND_URL=https://your-domain.com
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-### Health Checks
+## Kubernetes with Helm
 
-All infrastructure services have health checks configured:
+A full Helm chart is available at `deploy/helm/traceform/`. It includes Horizontal Pod Autoscaling (HPA), Pod Disruption Budgets (PDB), and ingress configuration.
 
-- **PostgreSQL**: `pg_isready -U traceform`
-- **ClickHouse**: `clickhouse-client --query "SELECT 1"`
-- **Redis**: `redis-cli -a $REDIS_PASSWORD ping`
-- **NATS**: `wget --spider -q http://localhost:8222/healthz`
+### Install
 
-Application services wait for their dependencies to be healthy before starting.
+```bash
+helm install traceform deploy/helm/traceform/ \
+  --namespace traceform \
+  --create-namespace \
+  --set server.image.tag=latest \
+  --set gateway.image.tag=latest \
+  --set web.image.tag=latest \
+  --set config.jwtSecret=your_jwt_secret \
+  --set config.encryptionKey=your_encryption_key \
+  --set config.githubClientId=your_client_id \
+  --set config.githubClientSecret=your_client_secret
+```
+
+### Key Helm Values
+
+```yaml
+# Server configuration
+server:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilization: 70
+
+# Gateway configuration
+gateway:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 128Mi
+
+# Worker configuration
+worker:
+  replicas: 1
+
+# Web dashboard
+web:
+  replicas: 2
+
+# Ingress
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: traceform.example.com
+      paths:
+        - path: /
+          service: web
+        - path: /v1
+          service: server
+        - path: /api
+          service: server
+        - path: /auth
+          service: server
+        - path: /health
+          service: server
+        - path: /ready
+          service: server
+        - path: /metrics
+          service: server
+  tls:
+    - secretName: traceform-tls
+      hosts:
+        - traceform.example.com
+
+# Pod Disruption Budget
+pdb:
+  enabled: true
+  minAvailable: 1
+```
+
+### Upgrade
+
+```bash
+helm upgrade traceform deploy/helm/traceform/ \
+  --namespace traceform \
+  --set server.image.tag=v1.2.0
+```
+
+## Caddy TLS Reverse Proxy
+
+A Caddy configuration is provided at `deploy/caddy/` for TLS termination and reverse proxying.
+
+### Caddyfile
+
+```
+traceform.example.com {
+    # API server
+    handle /v1/* {
+        reverse_proxy server:8080
+    }
+    handle /api/* {
+        reverse_proxy server:8080
+    }
+    handle /auth/* {
+        reverse_proxy server:8080
+    }
+    handle /health {
+        reverse_proxy server:8080
+    }
+    handle /ready {
+        reverse_proxy server:8080
+    }
+    handle /metrics {
+        reverse_proxy server:8080
+    }
+
+    # Gateway proxy
+    handle /gateway/* {
+        reverse_proxy gateway:8090
+    }
+
+    # Dashboard (default)
+    handle {
+        reverse_proxy web:3001
+    }
+}
+```
+
+### Deploy with Caddy
+
+```bash
+cd deploy/caddy
+docker compose -f docker-compose.caddy.yml up -d
+```
+
+Caddy automatically provisions and renews TLS certificates via Let's Encrypt.
+
+## GitHub Actions CI/CD
+
+A comprehensive CI/CD pipeline is provided at `.github/workflows/ci.yml`. It includes:
+
+### Pipeline Stages
+
+1. **Go tests**: Runs `go test ./...` with race detection
+2. **Python SDK tests**: Runs `pytest` in the SDK directory
+3. **Frontend checks**: Runs `npm run lint` and `npm run build` in the web directory
+4. **E2E tests**: Starts full Docker Compose stack, runs integration tests
+5. **Docker builds**: Builds all three Docker images (server, gateway, web)
+6. **Helm lint**: Validates the Helm chart
+7. **Security scanning**: Runs `govulncheck` for Go dependencies, `npm audit` for Node.js
+
+### Triggering
+
+The pipeline runs on:
+- Push to `main` branch
+- Pull requests targeting `main`
+- Manual dispatch
 
 ## Environment Variables Reference
 
@@ -224,15 +380,25 @@ Application services wait for their dependencies to be healthy before starting.
 | `PORT` | `8080` | API server port |
 | `GATEWAY_PORT` | `8090` | Gateway proxy port |
 | `ENVIRONMENT` | `development` | Environment name (`development`, `production`) |
+| `LOG_LEVEL` | `info` | Log level (`debug`, `info`, `warn`, `error`) |
 
 ### Database Connections
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql://traceform:traceform_dev@localhost:5432/traceform?sslmode=disable` | PostgreSQL connection string |
-| `CLICKHOUSE_URL` | `clickhouse://localhost:9000/traceform` | ClickHouse native protocol URL |
+| `DATABASE_URL` | `postgresql://agentstack:traceform_dev@localhost:5432/agentstack?sslmode=disable` | PostgreSQL connection string |
+| `CLICKHOUSE_URL` | `clickhouse://localhost:9000/agentstack` | ClickHouse native protocol URL |
 | `REDIS_URL` | `redis://localhost:6379` | Redis connection URL |
 | `NATS_URL` | `nats://localhost:4222` | NATS connection URL |
+
+### Connection Pools
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PG_MAX_OPEN_CONNS` | `25` | PostgreSQL max open connections |
+| `PG_MAX_IDLE_CONNS` | `15` | PostgreSQL max idle connections |
+| `CH_MAX_OPEN_CONNS` | `25` | ClickHouse max open connections |
+| `CH_MAX_IDLE_CONNS` | `15` | ClickHouse max idle connections |
 
 ### Authentication
 
@@ -240,7 +406,9 @@ Application services wait for their dependencies to be healthy before starting.
 |----------|---------|-------------|
 | `GITHUB_CLIENT_ID` | -- | GitHub OAuth application client ID |
 | `GITHUB_CLIENT_SECRET` | -- | GitHub OAuth application client secret |
-| `JWT_SECRET` | `dev-secret-change-in-production` | Secret for signing JWT tokens (change in production) |
+| `JWT_SECRET` | `change-me-in-production` | Secret for signing JWT tokens |
+| `JWT_EXPIRY_HOURS` | `24` | JWT token expiry in hours |
+| `ENCRYPTION_KEY` | -- | 64-char hex string for AES-256-GCM encryption |
 
 ### Frontend
 
@@ -248,6 +416,25 @@ Application services wait for their dependencies to be healthy before starting.
 |----------|---------|-------------|
 | `FRONTEND_URL` | `http://localhost:3000` | Dashboard URL (used for CORS and OAuth callbacks) |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8080` | API server URL (used by the Next.js dashboard) |
+| `CORS_ORIGINS` | -- | Comma-separated additional CORS origins |
+
+### Ingestion
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `INGEST_BATCH_SIZE` | `10000` | Events per batch write to ClickHouse |
+| `INGEST_FLUSH_INTERVAL_MS` | `5000` | Milliseconds between batch flushes |
+| `INGEST_MAX_BUFFER_SIZE` | `50000` | Maximum events in the ingestion buffer |
+| `INGEST_MAX_RETRIES` | `3` | Retries before sending to dead letter |
+| `DEAD_LETTER_PATH` | `/tmp/traceform/deadletter` | Path for dead letter storage |
+| `DEFAULT_SAMPLE_RATE` | `1.0` | Default sampling rate (1.0 = 100%) |
+
+### Rate Limiting
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RATE_LIMIT_DEFAULT` | `1000` | Requests per minute for query endpoints |
+| `RATE_LIMIT_INGEST` | `10000` | Requests per minute for ingest endpoints |
 
 ### Email (Alerts)
 
@@ -256,11 +443,65 @@ Application services wait for their dependencies to be healthy before starting.
 | `SENDGRID_API_KEY` | -- | SendGrid API key for sending alert emails |
 | `FROM_EMAIL` | `alerts@traceform.dev` | Sender email for alerts |
 
-### Encryption
+### Storage
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ENCRYPTION_KEY` | -- | 32-byte hex string (64 characters) for AES-256-GCM encryption of provider API keys |
+| `BLOB_STORE_TYPE` | `filesystem` | Blob storage type |
+| `BLOB_STORE_PATH` | `/tmp/traceform/payloads` | Blob storage path |
+
+### Billing
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `STRIPE_SECRET_KEY` | -- | Stripe secret key for billing |
+| `STRIPE_WEBHOOK_SECRET` | -- | Stripe webhook signing secret |
+
+## Monitoring with Prometheus and Grafana
+
+### Prometheus Scrape Configuration
+
+Add Traceform to your Prometheus targets:
+
+```yaml
+scrape_configs:
+  - job_name: 'traceform-server'
+    static_configs:
+      - targets: ['server:8080']
+    metrics_path: /metrics
+    scrape_interval: 15s
+```
+
+### Grafana Dashboards
+
+Pre-built Grafana dashboards are available in `deploy/grafana/`. Import them into your Grafana instance for:
+
+- **API Server**: Request rates, latencies, error rates, active connections
+- **Gateway**: Provider latencies, circuit breaker states, cache hit rates
+- **Ingestion**: NATS queue depth, ClickHouse write latency, dead letter counts
+- **Business Metrics**: Sessions per minute, healing events, guard checks, cost tracking
+
+## Backup and Restore
+
+### PostgreSQL
+
+```bash
+# Backup
+pg_dump -h localhost -U agentstack agentstack > backup.sql
+
+# Restore
+psql -h localhost -U agentstack agentstack < backup.sql
+```
+
+### ClickHouse
+
+```bash
+# Backup a table
+clickhouse-client --query "SELECT * FROM sessions FORMAT Native" > sessions.native
+
+# Restore a table
+clickhouse-client --query "INSERT INTO sessions FORMAT Native" < sessions.native
+```
 
 ## Production Checklist
 
@@ -269,10 +510,14 @@ Before going to production, ensure:
 - [ ] `JWT_SECRET` is set to a strong random value (not the default)
 - [ ] `ENCRYPTION_KEY` is set to a cryptographically random 64-character hex string
 - [ ] `POSTGRES_PASSWORD` and `REDIS_PASSWORD` are strong and unique
-- [ ] `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are configured for your OAuth app
+- [ ] `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are configured
 - [ ] `FRONTEND_URL` points to your actual dashboard domain
 - [ ] PostgreSQL has `sslmode=require` in production
 - [ ] Redis has `requirepass` set
 - [ ] NATS has authentication configured
-- [ ] A reverse proxy (nginx, Caddy, or cloud load balancer) handles TLS termination
-- [ ] Backup strategy is in place for PostgreSQL and ClickHouse volumes
+- [ ] TLS is configured via Caddy, nginx, or cloud load balancer
+- [ ] Prometheus is scraping the `/metrics` endpoint
+- [ ] Backup strategy is in place for PostgreSQL and ClickHouse
+- [ ] `INGEST_MAX_BUFFER_SIZE` is tuned for your throughput
+- [ ] `DEAD_LETTER_PATH` is on persistent storage
+- [ ] Resource limits are set in Kubernetes (or Docker `--memory` / `--cpus`)

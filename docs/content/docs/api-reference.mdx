@@ -1,6 +1,6 @@
 ---
 title: "API Reference"
-description: "Complete REST API reference for the Traceform platform — authentication, ingestion, query, guard, cost, test, and gateway endpoints."
+description: "Complete REST API reference for the Traceform platform — authentication, ingestion, query, guard, cost, test, gateway, enterprise, and operations endpoints."
 ---
 
 ## Base URL
@@ -19,15 +19,15 @@ All `/v1/*` endpoints support dual authentication -- either an API key or a JWT 
 Pass your API key as a Bearer token:
 
 ```bash
-curl -H "Authorization: Bearer as_sk_your_key_here" \
+curl -H "Authorization: Bearer tf_sk_your_key_here" \
   http://localhost:8080/v1/sessions
 ```
 
-API keys use the format `as_sk_...` and are scoped to an organization.
+API keys use the format `tf_sk_...` and are scoped to an organization.
 
 ### JWT Token (Dashboard)
 
-After logging in via GitHub OAuth, the dashboard receives a JWT token:
+After logging in via GitHub OAuth or SSO, the dashboard receives a JWT token:
 
 ```bash
 curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
@@ -36,7 +36,7 @@ curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
 
 ### Dashboard-Only Endpoints
 
-Endpoints under `/api/*` require JWT authentication only (no API key support):
+Endpoints under `/api/*` require JWT authentication only (no API key support). All mutation endpoints require admin or owner role (RBAC enforced).
 
 ```bash
 curl -H "Authorization: Bearer <jwt_token>" \
@@ -64,20 +64,30 @@ Common error codes:
 | 400 | `VALIDATION_ERROR` | Missing or invalid field |
 | 401 | `UNAUTHORIZED` | Missing or invalid auth header |
 | 401 | `INVALID_API_KEY` | API key is invalid or expired |
+| 403 | `FORBIDDEN` | Insufficient role (RBAC) or plan tier |
 | 429 | `RATE_LIMITED` | Too many requests (1000/minute default) |
 | 500 | `INGEST_ERROR` | Failed to queue data for ingestion |
 
 ## Rate Limiting
 
-All `/v1/*` endpoints are rate-limited to **1000 requests per minute** per organization, enforced via Redis sliding window. When rate-limited, the response includes a `Retry-After` header.
+All `/v1/*` endpoints are rate-limited per organization, enforced via Redis sliding window:
+
+- **Query endpoints**: 1000 requests per minute
+- **Ingest endpoints**: 10,000 requests per minute
+
+When rate-limited, the response includes a `Retry-After` header.
+
+## Body Size Limits
+
+All endpoints enforce a **10MB** maximum request body size. Requests exceeding this limit receive a `413 Payload Too Large` response.
 
 ---
 
-## Health
+## Health and Operations
 
 ### GET /health
 
-Unauthenticated health check.
+Unauthenticated health check with dependency status.
 
 ```bash
 curl http://localhost:8080/health
@@ -87,13 +97,19 @@ curl http://localhost:8080/health
 {
   "status": "healthy",
   "version": "0.1.0",
-  "time": "2026-03-21T12:00:00Z"
+  "time": "2026-03-21T12:00:00Z",
+  "dependencies": {
+    "postgres": "healthy",
+    "clickhouse": "healthy",
+    "redis": "healthy",
+    "nats": "healthy"
+  }
 }
 ```
 
 ### GET /ready
 
-Readiness check with individual service health:
+Kubernetes readiness probe. Returns 200 when the server can accept traffic, 503 when dependencies are unhealthy.
 
 ```bash
 curl http://localhost:8080/ready
@@ -105,9 +121,22 @@ curl http://localhost:8080/ready
   "checks": {
     "postgres": "healthy",
     "redis": "healthy",
-    "nats": "healthy"
+    "nats": "healthy",
+    "clickhouse": "healthy"
   }
 }
+```
+
+### GET /metrics
+
+Prometheus metrics endpoint. Returns metrics in Prometheus exposition format. Includes:
+
+- **HTTP metrics**: `http_requests_total`, `http_request_duration_seconds`, `http_response_size_bytes`
+- **Business metrics**: `traceform_sessions_total`, `traceform_spans_total`, `traceform_healing_events_total`, `traceform_guard_checks_total`, `traceform_cost_cents_total`
+- **Infrastructure metrics**: `traceform_nats_pending`, `traceform_clickhouse_queries_total`, `traceform_redis_pool_active`
+
+```bash
+curl http://localhost:8080/metrics
 ```
 
 ---
@@ -144,6 +173,50 @@ Exchange a GitHub authorization code for a JWT token. On first login, creates a 
 }
 ```
 
+### POST /auth/logout
+
+Revoke a JWT token. Adds the token to a Redis blacklist until it expires naturally.
+
+```bash
+curl -X POST http://localhost:8080/auth/logout \
+  -H "Authorization: Bearer <jwt_token>"
+```
+
+```json
+{
+  "status": "logged_out"
+}
+```
+
+### GET /auth/sso/lookup?domain=\{domain\}
+
+Look up SSO configuration for a given email domain.
+
+```bash
+curl "http://localhost:8080/auth/sso/lookup?domain=example.com"
+```
+
+```json
+{
+  "sso_enabled": true,
+  "provider": "saml",
+  "org_id": "org_abc123",
+  "login_url": "/auth/saml/login/org_abc123"
+}
+```
+
+### POST /auth/saml/acs
+
+SAML Assertion Consumer Service endpoint. Receives SAML responses, validates assertions, creates or provisions user accounts (JIT), and returns a JWT token.
+
+### GET /auth/oidc/\{orgID\}/login
+
+Initiate OIDC login for a specific organization. Redirects to the configured OIDC provider.
+
+### GET /auth/oidc/callback
+
+OIDC callback endpoint. Exchanges the authorization code, validates the ID token, provisions users (JIT), and returns a JWT token.
+
 ---
 
 ## Trace: Ingestion
@@ -154,7 +227,7 @@ The primary ingestion endpoint used by SDKs. Accepts sessions, spans, and events
 
 ```bash
 curl -X POST http://localhost:8080/v1/ingest/batch \
-  -H "Authorization: Bearer as_sk_..." \
+  -H "Authorization: Bearer tf_sk_..." \
   -H "Content-Type: application/json" \
   -d '{
     "sessions": [
@@ -222,41 +295,9 @@ Response (202 Accepted):
 
 Ingest a single session.
 
-```json
-{
-  "id": "uuid",
-  "agent_name": "my-agent",
-  "status": "running",
-  "metadata": "{}",
-  "tags": ["env:prod"],
-  "started_at": "2026-03-21T12:00:00Z"
-}
-```
-
 ### POST /v1/ingest/spans
 
-Ingest an array of spans.
-
-```json
-[
-  {
-    "id": "uuid",
-    "session_id": "session-uuid",
-    "name": "llm-call",
-    "span_type": "llm_call",
-    "status": "completed",
-    "model": "gpt-4o",
-    "provider": "openai",
-    "input_tokens": 100,
-    "output_tokens": 50,
-    "duration_ms": 1500,
-    "started_at": "2026-03-21T12:00:00Z",
-    "ended_at": "2026-03-21T12:00:01.500Z"
-  }
-]
-```
-
-Valid `span_type` values: `llm_call`, `tool_call`, `retrieval`, `chain`, `agent`, `custom`.
+Ingest an array of spans. Valid `span_type` values: `llm_call`, `tool_call`, `retrieval`, `chain`, `agent`, `custom`.
 
 ### POST /v1/ingest/events
 
@@ -266,32 +307,30 @@ Ingest an array of events.
 
 Ingest a Shield healing event.
 
-```json
-{
-  "id": "uuid",
-  "session_id": "session-uuid",
-  "span_id": "span-uuid",
-  "type": "loop_break",
-  "trigger": "Output repeated 3/3 times",
-  "action": "modify_input",
-  "description": "Loop detected: output repeated 3 times",
-  "resolved": false,
-  "timestamp": "2026-03-21T12:00:03Z"
-}
-```
-
 ---
 
 ## Trace: Query
 
 ### GET /v1/sessions
 
-List sessions with optional filtering.
+List sessions with optional filtering. Supports server-side pagination, search, and filtering used by the split-pane explorer.
 
 ```bash
-curl -H "Authorization: Bearer as_sk_..." \
+curl -H "Authorization: Bearer tf_sk_..." \
   "http://localhost:8080/v1/sessions?limit=20&offset=0"
 ```
+
+Query parameters:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `agent_name` | -- | Filter by agent name |
+| `status` | -- | Filter by status: `running`, `completed`, `failed`, `timeout`, `healed` |
+| `limit` | 50 | Number of sessions to return |
+| `offset` | 0 | Pagination offset |
+| `start_date` | -- | Filter sessions started after this time (RFC3339) |
+| `end_date` | -- | Filter sessions started before this time (RFC3339) |
+| `search` | -- | Full-text search across agent name, metadata, and tags |
 
 ### GET /v1/sessions/\{id\}
 
@@ -299,7 +338,7 @@ Get a single session by ID.
 
 ### GET /v1/sessions/\{id\}/spans
 
-Get all spans for a session.
+Get all spans for a session, ordered for timeline replay.
 
 ### GET /v1/sessions/\{id\}/events
 
@@ -313,26 +352,62 @@ Get all healing events for a session.
 
 ## Trace: Analytics
 
+Analytics endpoints benefit from Redis query caching with 30-60 second TTL.
+
 ### GET /v1/analytics/overview
 
-Get aggregate overview metrics.
+Get aggregate overview metrics. Supports the time range picker presets.
 
 ```bash
-curl -H "Authorization: Bearer as_sk_..." \
+curl -H "Authorization: Bearer tf_sk_..." \
   "http://localhost:8080/v1/analytics/overview?period=24h"
 ```
 
 ### GET /v1/analytics/sessions-over-time
 
-Get session counts over time for charting.
+Get session counts over time for charting. LTTB downsampling limits responses to a maximum of 500 data points.
 
 ### GET /v1/analytics/failure-rate
 
-Get failure rate metrics.
+Get failure rate metrics over time.
 
 ### GET /v1/analytics/healing
 
 Get Shield healing analytics.
+
+---
+
+## Error Groups
+
+### GET /v1/errors
+
+List error groups, aggregated by fingerprint in ClickHouse.
+
+```bash
+curl -H "Authorization: Bearer tf_sk_..." \
+  "http://localhost:8080/v1/errors?limit=20&offset=0"
+```
+
+```json
+{
+  "error_groups": [
+    {
+      "fingerprint": "abc123def456",
+      "message": "Connection timeout to external API",
+      "count": 47,
+      "first_seen": "2026-03-15T10:00:00Z",
+      "last_seen": "2026-03-27T08:30:00Z",
+      "agent_names": ["research-agent", "support-agent"],
+      "span_types": ["tool_call"]
+    }
+  ],
+  "total": 15
+}
+```
+
+### GET /v1/errors/\{fingerprint\}
+
+Get details for a specific error group, including sample sessions and span details.
 
 ---
 
@@ -352,8 +427,6 @@ CRUD operations for agent definitions.
 
 ## Trace: Failure Patterns
 
-CRUD operations for failure pattern definitions.
-
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/v1/patterns` | List patterns |
@@ -365,8 +438,6 @@ CRUD operations for failure pattern definitions.
 ---
 
 ## Trace: Alerts
-
-CRUD operations for alert rules.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -429,7 +500,7 @@ Run content through guardrails. Returns results for each guard check executed in
 
 ```bash
 curl -X POST http://localhost:8080/v1/guard/check \
-  -H "Authorization: Bearer as_sk_..." \
+  -H "Authorization: Bearer tf_sk_..." \
   -H "Content-Type: application/json" \
   -d '{
     "content": "My email is john@example.com and my SSN is 123-45-6789",
@@ -438,13 +509,6 @@ curl -X POST http://localhost:8080/v1/guard/check \
     "session_id": "optional-session-uuid"
   }'
 ```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `content` | `string` | Yes | Text content to check |
-| `direction` | `string` | No | `"input"` (default) or `"output"` |
-| `guardrail_ids` | `string[]` | No | Specific guardrails to run. If omitted, runs all active rules |
-| `session_id` | `string` | No | Associate results with a session |
 
 ### Guard Rules
 
@@ -471,39 +535,9 @@ curl -X POST http://localhost:8080/v1/guard/check \
 
 Record cost event(s). Supports both single event and batch format.
 
-```bash
-curl -X POST http://localhost:8080/v1/cost/events \
-  -H "Authorization: Bearer as_sk_..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "session_id": "session-uuid",
-    "span_id": "span-uuid",
-    "agent_name": "my-agent",
-    "model": "gpt-4o",
-    "provider": "openai",
-    "input_tokens": 1500,
-    "output_tokens": 800,
-    "total_tokens": 2300,
-    "cost_cents": 3,
-    "outcome": "success",
-    "metadata": {"task": "summarization"}
-  }'
-```
-
-Batch format:
-
-```json
-{
-  "events": [
-    { "model": "gpt-4o", "input_tokens": 100, "output_tokens": 50, "cost_cents": 1 },
-    { "model": "gpt-4o-mini", "input_tokens": 200, "output_tokens": 100, "cost_cents": 0 }
-  ]
-}
-```
-
 ### GET /v1/cost/events
 
-List cost events.
+List cost events with filtering.
 
 ### Cost Analytics
 
@@ -572,6 +606,39 @@ List cost events.
 | GET | `/v1/gateway/cache/stats` | Semantic cache statistics |
 | POST | `/v1/gateway/cache/purge` | Purge the semantic cache |
 | GET | `/v1/gateway/analytics` | Gateway request analytics |
+
+---
+
+## Data Export
+
+Export endpoints return CSV or JSON data. Specify format via the `format` query parameter (`csv` or `json`, default `json`). Requires cloud plan or above.
+
+### GET /v1/export/sessions
+
+Export sessions data.
+
+```bash
+curl -H "Authorization: Bearer tf_sk_..." \
+  "http://localhost:8080/v1/export/sessions?format=csv&start=2026-03-01T00:00:00Z&end=2026-03-27T23:59:59Z"
+```
+
+### GET /v1/export/cost
+
+Export cost event data.
+
+```bash
+curl -H "Authorization: Bearer tf_sk_..." \
+  "http://localhost:8080/v1/export/cost?format=json&start=2026-03-01T00:00:00Z"
+```
+
+### GET /v1/export/audit
+
+Export audit log data. Requires team plan or above.
+
+```bash
+curl -H "Authorization: Bearer <jwt_token>" \
+  "http://localhost:8080/v1/export/audit?format=csv"
+```
 
 ---
 
@@ -649,7 +716,7 @@ Receive OpenTelemetry trace data in OTLP format. Translates OTLP spans to Tracef
 
 ## Dashboard API
 
-These endpoints require JWT authentication (dashboard login).
+These endpoints require JWT authentication (dashboard login). All mutations require admin or owner role.
 
 ### Organization
 
@@ -657,8 +724,27 @@ These endpoints require JWT authentication (dashboard login).
 |--------|------|-------------|
 | GET | `/api/org` | Get current organization |
 | PATCH | `/api/org` | Update organization |
-| DELETE | `/api/org` | Delete organization |
-| GET | `/api/org/usage` | Get usage metrics |
+| DELETE | `/api/org` | Delete organization (owner only) |
+
+### Usage and Plan
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/usage` | Get usage metrics and plan information |
+
+```json
+{
+  "plan": "team",
+  "period_start": "2026-03-01T00:00:00Z",
+  "period_end": "2026-03-31T23:59:59Z",
+  "usage": {
+    "events": { "used": 45000, "limit": 1000000 },
+    "sessions": { "used": 1200, "limit": -1 },
+    "api_calls": { "used": 89000, "limit": -1 },
+    "members": { "used": 5, "limit": 10 }
+  }
+}
+```
 
 ### API Keys
 
@@ -667,12 +753,71 @@ These endpoints require JWT authentication (dashboard login).
 | GET | `/api/api-keys` | List API keys (shows prefix only) |
 | POST | `/api/api-keys` | Create a new API key (returns full key once) |
 | DELETE | `/api/api-keys/\{id\}` | Revoke an API key |
+| POST | `/api/api-keys/\{id\}/rotate` | Rotate an API key (24-hour grace period for old key) |
 
 ### Team Management
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/team` | List team members |
+| GET | `/api/team` | List team members with roles |
 | POST | `/api/team/invite` | Invite a team member |
-| PATCH | `/api/team/\{id\}/role` | Update a member's role |
+| PATCH | `/api/team/\{id\}/role` | Update a member's role (owner/admin/viewer) |
 | DELETE | `/api/team/\{id\}` | Remove a team member |
+
+### SSO Configuration
+
+Requires enterprise plan. See [Enterprise](/docs/enterprise) for setup details.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/sso` | Get SSO configuration |
+| POST | `/api/sso` | Create or update SSO configuration |
+| DELETE | `/api/sso` | Remove SSO configuration |
+
+### Audit Logs
+
+Requires team plan or above.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/audit-logs` | Query audit logs |
+
+```bash
+curl -H "Authorization: Bearer <jwt_token>" \
+  "http://localhost:8080/api/audit-logs?limit=50&action=create&resource_type=api_key"
+```
+
+```json
+{
+  "logs": [
+    {
+      "id": "uuid",
+      "actor_id": "user-uuid",
+      "actor_email": "admin@example.com",
+      "action": "create",
+      "resource_type": "api_key",
+      "resource_id": "key-uuid",
+      "diff": { "name": "Production Key" },
+      "ip_address": "192.168.1.1",
+      "user_agent": "Mozilla/5.0...",
+      "created_at": "2026-03-27T10:30:00Z"
+    }
+  ],
+  "total": 1
+}
+```
+
+### GDPR Data Deletion
+
+| Method | Path | Description |
+|--------|------|-------------|
+| DELETE | `/api/org/data` | Delete all organization data (GDPR compliance) |
+
+This endpoint deletes all session data, spans, events, healing events, cost events, and audit logs for the organization. Configuration data (users, API keys, settings) is preserved. This action is irreversible. Requires owner role.
+
+```bash
+curl -X DELETE http://localhost:8080/api/org/data \
+  -H "Authorization: Bearer <jwt_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"confirm": true}'
+```

@@ -1,11 +1,11 @@
 ---
 title: Trace (Observability)
-description: Trace provides full observability for AI agents — session tracking, span-level tracing, failure pattern detection, and alerts.
+description: Trace provides full observability for AI agents — split-pane session explorer, span-level tracing, failure pattern detection, error groups, and alerts.
 ---
 
 # Trace (Observability)
 
-Trace is Traceform's observability module. It captures every session, span, and event from your AI agents, stores them in ClickHouse for fast aggregation, and surfaces failure patterns and alert conditions.
+Trace is Traceform's observability module. It captures every session, span, and event from your AI agents, stores them in ClickHouse for fast aggregation, and surfaces failure patterns, error groups, and alert conditions.
 
 ## Overview
 
@@ -14,8 +14,65 @@ Trace gives you:
 - **Sessions**: Top-level execution units for an agent run, with status, duration, cost, and token counts.
 - **Spans**: Individual operations within a session (LLM calls, tool calls, retrievals, chains, agent steps).
 - **Events**: Arbitrary timestamped events attached to sessions or spans.
+- **Error Groups**: Errors grouped by fingerprint with ClickHouse aggregation, displayed at `/dashboard/errors`.
 - **Failure Patterns**: Pre-built and custom patterns that match against session data to detect recurring failures.
 - **Alerts**: Rules that trigger notifications when conditions are met (failure rate thresholds, latency spikes, etc.).
+
+## Dashboard Features
+
+### Split-Pane Session Explorer (`/dashboard/sessions`)
+
+The sessions page uses a master-detail split view instead of a traditional table:
+
+- **Left pane**: Session list with infinite scroll and server-side pagination. Supports search by agent name, filtering by status, and date range filtering via the time range picker.
+- **Right pane**: Session detail panel showing the D3 Gantt chart timeline, span tree, metadata, and healing intervention markers.
+- **Keyboard navigation**: Use arrow keys (up/down) to move between sessions in the list. The detail pane updates immediately.
+- **Server-side operations**: All pagination, search, and filtering happens server-side. The client never loads the full dataset.
+
+### Time Range Picker
+
+A global time range picker appears on all data pages. Preset ranges:
+
+| Preset | Range |
+|--------|-------|
+| 15m | Last 15 minutes |
+| 1h | Last 1 hour |
+| 4h | Last 4 hours |
+| 1d | Last 24 hours |
+| 7d | Last 7 days |
+| 30d | Last 30 days |
+
+The selected time range is applied to all queries on the page, including analytics charts and session lists.
+
+### Auto-Refresh
+
+The overview page at `/dashboard/overview` supports configurable auto-refresh:
+
+| Interval | Description |
+|----------|-------------|
+| Off | Manual refresh only |
+| 10s | Refresh every 10 seconds |
+| 30s | Refresh every 30 seconds |
+| 1m | Refresh every 1 minute |
+
+### Session Replay (Gantt Chart)
+
+The session detail panel includes a D3.js Gantt-chart timeline (`SessionReplay` component) that visualizes:
+
+- All spans as horizontal bars on a time axis
+- Span nesting (parent-child relationships)
+- Span types with color coding
+- Duration and overlap between concurrent spans
+- Healing intervention markers (cyan pulses) from Shield
+- Click any span bar to expand its input/output, model, tokens, and latency
+
+### Virtual Scrolling
+
+For sessions with hundreds or thousands of spans, the span tree uses react-virtuoso for virtual scrolling. Only visible spans are rendered in the DOM, keeping the UI responsive regardless of trace depth.
+
+### LTTB Chart Downsampling
+
+Analytics charts use the Largest-Triangle-Three-Buckets (LTTB) algorithm to downsample time-series data to a maximum of 500 data points. This prevents chart rendering from slowing down on long time ranges while preserving visual fidelity.
 
 ## How It Works
 
@@ -40,9 +97,22 @@ Session: "Customer Support Run #1847"
 
 1. SDKs send data to ingestion endpoints (`POST /v1/ingest/sessions`, `/spans`, `/events`, `/batch`).
 2. The API server publishes each item to a NATS subject (`trace.ingest.session`, `trace.ingest.span`, `trace.ingest.event`).
-3. The ingest writer worker subscribes to these subjects and batch-writes to ClickHouse.
-4. API responses return `202 Accepted` immediately — they are never blocked on ClickHouse writes.
-5. Query endpoints (`GET /v1/sessions/*`, `GET /v1/analytics/*`) read directly from ClickHouse.
+3. Ingestion uses bounded buffers (50K cap) with dead letter for failed writes.
+4. The ingest writer worker subscribes via NATS queue groups and batch-writes to ClickHouse.
+5. API responses return `202 Accepted` immediately -- they are never blocked on ClickHouse writes.
+6. Query endpoints (`GET /v1/sessions/*`, `GET /v1/analytics/*`) read directly from ClickHouse with Redis query caching (30-60s TTL).
+
+### Error Groups
+
+Errors are grouped by fingerprint, which is computed from:
+- Normalized error message (dynamic values like IDs and timestamps stripped)
+- Top stack trace frames
+- Span type and agent name
+
+Error groups are aggregated in ClickHouse and displayed at `/dashboard/errors` with:
+- Error count, first seen, last seen
+- Affected agents and span types
+- Sample sessions for investigation
 
 ### Failure Patterns
 
@@ -69,7 +139,7 @@ When conditions are met, the alert evaluator worker triggers the configured acti
 
 ```
 POST /v1/ingest/sessions
-Authorization: Bearer as_sk_your_key
+Authorization: Bearer tf_sk_your_key
 Content-Type: application/json
 ```
 
@@ -85,8 +155,8 @@ Content-Type: application/json
   "total_spans": 4,
   "duration_ms": 2340,
   "tags": ["support", "password"],
-  "started_at": "2025-01-15T10:30:00Z",
-  "ended_at": "2025-01-15T10:30:02.340Z"
+  "started_at": "2026-03-21T10:30:00Z",
+  "ended_at": "2026-03-21T10:30:02.340Z"
 }
 ```
 
@@ -99,198 +169,60 @@ Response (`202 Accepted`):
 }
 ```
 
-**Validation**: Either `agent_name` or `agent_id` is required. If `id` is omitted, the server generates a UUID. If `status` is omitted, it defaults to `running`.
-
-### Ingest Spans
-
-```
-POST /v1/ingest/spans
-Authorization: Bearer as_sk_your_key
-Content-Type: application/json
-```
-
-```json
-[
-  {
-    "session_id": "sess_abc123",
-    "name": "classify_intent",
-    "span_type": "llm_call",
-    "status": "completed",
-    "model": "gpt-4o",
-    "provider": "openai",
-    "input": "How do I reset my password?",
-    "output": "intent: password_reset",
-    "input_tokens": 45,
-    "output_tokens": 8,
-    "duration_ms": 820,
-    "started_at": "2025-01-15T10:30:00Z",
-    "ended_at": "2025-01-15T10:30:00.820Z"
-  }
-]
-```
-
-Response (`202 Accepted`):
-
-```json
-{
-  "status": "accepted",
-  "count": 1
-}
-```
-
-**Validation**: `session_id` and `span_type` are required on every span. Valid span types: `llm_call`, `tool_call`, `retrieval`, `chain`, `agent`, `custom`.
-
-### Ingest Events
-
-```
-POST /v1/ingest/events
-Authorization: Bearer as_sk_your_key
-Content-Type: application/json
-```
-
-```json
-[
-  {
-    "session_id": "sess_abc123",
-    "span_id": "span_def456",
-    "type": "warning",
-    "name": "token_budget_warning",
-    "data": "{\"tokens_used\": 950, \"budget\": 1000}"
-  }
-]
-```
-
-### Batch Ingest
-
-```
-POST /v1/ingest/batch
-Authorization: Bearer as_sk_your_key
-Content-Type: application/json
-```
-
-```json
-{
-  "sessions": [ ... ],
-  "spans": [ ... ],
-  "events": [ ... ]
-}
-```
-
-Response (`202 Accepted`):
-
-```json
-{
-  "status": "accepted",
-  "sessions": 1,
-  "spans": 4,
-  "events": 2
-}
-```
-
 ### List Sessions
 
 ```
 GET /v1/sessions?agent_name=customer-support&status=failed&limit=20&offset=0
-Authorization: Bearer as_sk_your_key
+Authorization: Bearer tf_sk_your_key
 ```
 
 Query parameters:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `agent_name` | — | Filter by agent name |
-| `status` | — | Filter by status: `running`, `completed`, `failed`, `timeout`, `healed` |
+| `agent_name` | -- | Filter by agent name |
+| `status` | -- | Filter by status |
 | `limit` | 50 | Number of sessions to return |
 | `offset` | 0 | Pagination offset |
-| `start_date` | — | Filter sessions started after this time (RFC3339) |
-| `end_date` | — | Filter sessions started before this time (RFC3339) |
+| `start_date` | -- | Filter sessions started after this time (RFC3339) |
+| `end_date` | -- | Filter sessions started before this time (RFC3339) |
+| `search` | -- | Full-text search across agent name, metadata, and tags |
 
-Response:
-
-```json
-{
-  "sessions": [ ... ],
-  "total": 847,
-  "limit": 20,
-  "offset": 0
-}
-```
-
-### Get Session Detail
+### Error Groups
 
 ```
-GET /v1/sessions/{id}
-Authorization: Bearer as_sk_your_key
+GET /v1/errors?limit=20
+Authorization: Bearer tf_sk_your_key
 ```
 
-Returns the full session with all associated data.
-
-### Get Session Spans
-
 ```
-GET /v1/sessions/{id}/spans
-Authorization: Bearer as_sk_your_key
-```
-
-Returns all spans for a session, ordered for timeline replay.
-
-### Get Session Events
-
-```
-GET /v1/sessions/{id}/events
-Authorization: Bearer as_sk_your_key
+GET /v1/errors/{fingerprint}
+Authorization: Bearer tf_sk_your_key
 ```
 
 ### Analytics Overview
 
 ```
-GET /v1/analytics/overview?start=2025-01-01T00:00:00Z&end=2025-01-31T23:59:59Z
-Authorization: Bearer as_sk_your_key
+GET /v1/analytics/overview?period=24h
+Authorization: Bearer tf_sk_your_key
 ```
 
-Returns aggregate metrics: total sessions, failure rate, average duration, total cost, reliability score.
+Returns aggregate metrics: total sessions, failure rate, average duration, total cost, reliability score. Results are cached in Redis (30s TTL).
 
 ### Sessions Over Time
 
 ```
 GET /v1/analytics/sessions-over-time?start=...&end=...&interval=3600
-Authorization: Bearer as_sk_your_key
+Authorization: Bearer tf_sk_your_key
 ```
 
-Returns time-series data with the count of sessions per interval bucket.
+Returns time-series data downsampled to max 500 points via LTTB.
 
-### Failure Rate Over Time
+### Data Export
 
 ```
-GET /v1/analytics/failure-rate?start=...&end=...&interval=3600
-Authorization: Bearer as_sk_your_key
+GET /v1/export/sessions?format=csv&start=...&end=...
+Authorization: Bearer tf_sk_your_key
 ```
 
-Returns time-series data with the failure rate per interval bucket.
-
-## Dashboard Guide
-
-### Sessions Page (`/dashboard/sessions`)
-
-Lists all sessions with columns: agent name, status (color-coded dot), duration, token count, cost, and timestamp. Supports filtering by agent, status, and date range.
-
-### Session Detail (`/dashboard/sessions/{id}`)
-
-Shows the full session with:
-- Session metadata (status, duration, tokens, cost)
-- D3.js Gantt-chart timeline showing all spans as horizontal bars
-- Span detail panel (click any span to see input/output, model, tokens, latency)
-- Healing intervention markers (if Shield was active)
-- Events timeline
-
-### Analytics Page (`/dashboard/analytics`)
-
-Displays four metric cards (total sessions, failure rate, average latency, reliability score) with animated count-up numbers and sparklines. Below, two charts: sessions over time (area chart) and failure rate over time (line chart).
-
-### Patterns Page (`/dashboard/patterns`)
-
-Lists all failure patterns with match counts. Clicking a pattern shows the matched sessions.
-
-### Alerts Page (`/dashboard/alerts`)
-
-CRUD interface for alert rules. Shows active alerts, triggered history, and configuration for each rule (threshold, time window, notification channel).
+Export sessions as CSV or JSON. Requires cloud plan or above.

@@ -1,6 +1,6 @@
 ---
 title: Shield (Self-Healing)
-description: Shield automatically detects and fixes common AI agent failures — loops, hallucinations, cost overruns, and timeouts — without human intervention.
+description: Shield automatically detects and fixes common AI agent failures — loops, hallucinations, cost overruns, and timeouts — with thread-safe operation, bounded retries, and atexit hooks.
 ---
 
 # Shield (Self-Healing)
@@ -10,6 +10,13 @@ Shield is Traceform's self-healing module. It runs inside the SDK and automatica
 ## Overview
 
 Shield is the unique differentiator in Traceform. No other observability platform offers automatic self-healing. The healing engine lives in the SDK (Python and TypeScript), intercepts failures at runtime, applies a fix, and logs the intervention as a healing event.
+
+Key characteristics:
+
+- **Thread-safe**: Uses `threading.local` (Python) for session state isolation, safe for multi-threaded applications
+- **Bounded retries**: Maximum 3 retry attempts per healing intervention to prevent infinite retry loops
+- **atexit hooks**: Automatically flushes healing events on process shutdown via atexit (Python) and beforeExit (Node.js)
+- **Non-blocking**: Healing event ingestion is asynchronous and never blocks the agent execution path
 
 ## How It Works
 
@@ -26,6 +33,31 @@ Shield supports six healing types, stored as a ClickHouse `Enum8`:
 | `error_recovery` | An LLM call or tool call throws an exception | Retries with exponential backoff or falls back |
 | `custom` | User-defined condition | User-defined action |
 
+### Thread Safety
+
+The Python SDK healing engine uses `threading.local` to maintain separate state per thread. This means:
+
+- Multiple agents can run concurrently in different threads without interference
+- Each thread has its own healing state (loop counters, cost accumulators, etc.)
+- Session context is automatically scoped to the creating thread
+
+### Bounded Retries
+
+Each healing intervention has a maximum of 3 retry attempts. This prevents cascading failures where a healing action itself triggers another failure:
+
+1. **First attempt**: Apply the healing action (e.g., inject corrective prompt)
+2. **Second attempt**: Apply with modified parameters (e.g., stronger correction)
+3. **Third attempt**: Fall back to the next recovery strategy or raise the original error
+
+After exhausting retries, the engine marks the intervention as unsuccessful and continues execution.
+
+### atexit Shutdown
+
+The SDK registers cleanup hooks to ensure healing events are flushed on process exit:
+
+- **Python**: `atexit.register(traceform.shutdown)` flushes pending healing events and batch data
+- **Node.js**: `process.on('beforeExit', ...)` with `unref()` on the flush timer to avoid blocking exit
+
 ### SDK Integration (Python)
 
 Shield is enabled via the `healing` parameter on the `@trace` decorator or the `traceform.protect()` wrapper:
@@ -35,7 +67,7 @@ import traceform
 from traceform.healing import HealingConfig
 
 traceform.init(
-    api_key="as_sk_your_key",
+    api_key="tf_sk_your_key",
     endpoint="http://localhost:8080"
 )
 
@@ -57,10 +89,11 @@ def my_agent(input_text: str):
 ### SDK Integration (TypeScript)
 
 ```typescript
-import { init, trace, HealingConfig } from 'traceform';
+import { init, trace } from '@traceform/sdk';
+import type { HealingConfig } from '@traceform/sdk';
 
 init({
-  apiKey: 'as_sk_your_key',
+  apiKey: 'tf_sk_your_key',
   endpoint: 'http://localhost:8080'
 });
 
@@ -80,10 +113,11 @@ const myAgent = trace({ healing: true, healingConfig }, async (input: string) =>
 ### Data Flow
 
 1. The SDK's `HealingEngine` monitors spans as they execute.
-2. When a failure condition is detected, the engine applies the appropriate fix.
+2. When a failure condition is detected, the engine applies the appropriate fix (bounded to 3 retries).
 3. The intervention is recorded as a `HealingIngestRequest` and sent to `POST /v1/ingest/healing`.
 4. The API server publishes the event to NATS subject `trace.ingest.healing`.
 5. The ingest writer worker batch-writes healing events to ClickHouse.
+6. On process exit, the atexit hook flushes any remaining events.
 
 ## API Reference
 
@@ -91,7 +125,7 @@ const myAgent = trace({ healing: true, healingConfig }, async (input: string) =>
 
 ```
 POST /v1/ingest/healing
-Authorization: Bearer as_sk_your_key
+Authorization: Bearer tf_sk_your_key
 Content-Type: application/json
 ```
 
@@ -109,6 +143,7 @@ Request body (array of healing events):
     "original_state": "{\"last_tool_call\": \"search_docs\", \"repeat_count\": 3}",
     "healed_state": "{\"injected_prompt\": true, \"new_approach\": true}",
     "success": true,
+    "retry_count": 1,
     "latency_ms": 12,
     "metadata": "{}"
   }
@@ -127,6 +162,7 @@ Response (`202 Accepted`):
 **Validation rules:**
 - `session_id` is required on every event.
 - `healing_type` is required and must be one of: `loop_breaker`, `hallucination_fix`, `cost_circuit_breaker`, `timeout_handler`, `error_recovery`, `custom`.
+- `retry_count` indicates how many retries were attempted (0-3).
 - If `id` is omitted, the server generates a UUID.
 - If `created_at` is omitted, the server uses the current UTC time.
 
@@ -134,73 +170,25 @@ Response (`202 Accepted`):
 
 ```
 GET /v1/sessions/{id}/healing
-Authorization: Bearer as_sk_your_key
-```
-
-Response:
-
-```json
-{
-  "healing_events": [
-    {
-      "id": "evt_abc123",
-      "session_id": "sess_abc123",
-      "span_id": "span_def456",
-      "org_id": "org_xyz",
-      "agent_name": "customer-support-agent",
-      "healing_type": "loop_breaker",
-      "trigger_reason": "Agent repeated tool call 3 times",
-      "action_taken": "Injected corrective prompt",
-      "success": true,
-      "latency_ms": 12,
-      "created_at": "2025-01-15T10:30:00Z"
-    }
-  ]
-}
+Authorization: Bearer tf_sk_your_key
 ```
 
 ### Healing Analytics
 
 ```
-GET /v1/analytics/healing?start=2025-01-01T00:00:00Z&end=2025-01-31T23:59:59Z&interval=3600
-Authorization: Bearer as_sk_your_key
+GET /v1/analytics/healing?start=2026-01-01T00:00:00Z&end=2026-01-31T23:59:59Z&interval=3600
+Authorization: Bearer tf_sk_your_key
 ```
 
-Query parameters:
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `start` | 24 hours ago | Start of time range (RFC3339) |
-| `end` | now | End of time range (RFC3339) |
-| `interval` | 3600 | Bucket size in seconds for time-series data |
-
-Response:
-
-```json
-{
-  "total_interventions": 142,
-  "success_count": 135,
-  "success_rate": 0.9507,
-  "by_type": [
-    { "healing_type": "loop_breaker", "count": 58, "success_count": 55 },
-    { "healing_type": "timeout_handler", "count": 41, "success_count": 40 },
-    { "healing_type": "error_recovery", "count": 28, "success_count": 27 },
-    { "healing_type": "cost_circuit_breaker", "count": 15, "success_count": 13 }
-  ],
-  "over_time": [
-    { "timestamp": "2025-01-15T10:00:00Z", "total": 8, "success": 7 },
-    { "timestamp": "2025-01-15T11:00:00Z", "total": 12, "success": 12 }
-  ]
-}
-```
+Returns intervention counts, success rates, breakdown by type, and time-series data. Results are cached in Redis (30s TTL).
 
 ## Dashboard Guide
 
 The Shield dashboard is accessible at `/dashboard/healing` and provides:
 
 - **Intervention Metrics**: Total interventions, success rate, and interventions-per-session displayed as animated metric cards.
-- **Healing Over Time**: Area chart showing intervention volume and success rate over the selected time range.
+- **Healing Over Time**: Area chart showing intervention volume and success rate over the selected time range (using the global time range picker).
 - **By Type Breakdown**: Bar chart showing the distribution of healing types (loop_breaker, timeout_handler, etc.).
-- **Events Table**: Sortable table of individual healing events with session ID, type, trigger reason, success status, and latency.
+- **Events Table**: Sortable table of individual healing events with session ID, type, trigger reason, retry count, success status, and latency.
 
 Session replay at `/dashboard/sessions/{id}` shows healing intervention markers inline on the D3.js Gantt timeline, rendered with the cyan healing color (`#38bdf8`) and a pulse-glow animation.

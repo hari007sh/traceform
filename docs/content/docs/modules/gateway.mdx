@@ -1,6 +1,6 @@
 ---
 title: Route (Gateway)
-description: Route provides an OpenAI-compatible gateway proxy with model routing, provider failover, semantic caching, and load balancing.
+description: Route provides an OpenAI-compatible gateway proxy with model routing, provider failover, circuit breakers, singleflight caching, and streaming with context cancellation.
 ---
 
 # Route (Gateway)
@@ -29,27 +29,78 @@ Client Request (OpenAI format)
 1. Authenticate (X-Traceform-Org-ID header)
     |
     v
-2. Check semantic cache (Redis fast path, PostgreSQL slow path)
+2. Check circuit breaker state for target provider
+    |-- OPEN --> Try next provider or return 503
+    |
+    v (CLOSED or HALF-OPEN)
+3. Check singleflight cache (deduplicate concurrent identical requests)
+    |
+    v
+4. Check semantic cache (Redis fast path, PostgreSQL slow path)
     |-- Cache HIT --> Return cached response (X-Traceform-Cache-Hit: true)
     |
     v (Cache MISS)
-3. Match routing rules (glob pattern on model name)
+5. Match routing rules (glob pattern on model name)
     |
     v
-4. Select provider via strategy (priority / round_robin / cost)
+6. Select provider via strategy (priority / round_robin / cost)
     |
     v
-5. Forward request to provider (streaming or non-streaming)
+7. Forward request to provider (streaming or non-streaming)
+    |-- Client disconnects --> Cancel upstream request (context cancellation)
     |
     v
-6. Store response in cache (async)
+8. Record cost event with accurate token counts
     |
     v
-7. Log request via NATS (async)
+9. Store response in cache (async)
+    |
+    v
+10. Log request via NATS (async)
     |
     v
 Return response (X-Traceform-Provider / X-Traceform-Model headers)
 ```
+
+### Circuit Breakers
+
+Each provider has an independent circuit breaker that tracks consecutive failures:
+
+| State | Behavior |
+|-------|----------|
+| **Closed** | Requests flow normally. Failure counter increments on errors. |
+| **Open** | All requests are rejected immediately. Transitions to half-open after cooldown. |
+| **Half-open** | A single probe request is allowed. Success closes the circuit; failure reopens it. |
+
+Configuration:
+- **Failure threshold**: Number of consecutive failures before the circuit opens (default: 5)
+- **Cooldown period**: Duration the circuit stays open before transitioning to half-open (default: 30 seconds)
+
+When a circuit is open, the gateway automatically tries the next provider in the fallback chain or returns a `503 Service Unavailable`.
+
+### Singleflight Cache
+
+The singleflight cache deduplicates concurrent identical requests. If multiple clients send the same request (same model, messages, temperature, tools) at the same time, only one request hits the upstream provider. All other clients receive the same response.
+
+This is separate from the semantic cache -- singleflight operates on in-flight requests, while the semantic cache operates on completed responses.
+
+### Streaming with Context Cancellation
+
+When a client disconnects mid-stream (e.g., user navigates away), the gateway properly cancels the upstream request to the provider:
+
+1. Client SSE connection drops
+2. Go context is cancelled
+3. Upstream HTTP request is aborted
+4. No further tokens are consumed or billed
+
+This prevents wasted API calls and costs when users abandon streaming responses.
+
+### Cost Recording Fix
+
+The gateway accurately records token usage and cost for both streaming and non-streaming responses:
+
+- **Non-streaming**: Token counts are extracted from the `usage` field in the response
+- **Streaming**: Token counts are accumulated from `stream_options: { include_usage: true }` or estimated from chunk content length
 
 ### Routing Rules
 
@@ -93,7 +144,7 @@ Cache can be disabled per-request with the `X-Traceform-Cache: false` header.
 
 ### Fallback Chains
 
-Fallback chains define ordered lists of provider/model pairs. When the primary provider fails, the gateway automatically tries the next entry in the chain.
+Fallback chains define ordered lists of provider/model pairs. When the primary provider fails (or its circuit breaker is open), the gateway automatically tries the next entry in the chain.
 
 ```json
 {
@@ -110,7 +161,7 @@ Fallback chains define ordered lists of provider/model pairs. When the primary p
 
 ### Provider API Key Security
 
-Provider API keys are encrypted with AES-256-GCM before storage. The `ENCRYPTION_KEY` environment variable (32-byte hex string) is used for encryption and decryption at runtime. Keys are never stored in plaintext and never appear in API responses.
+Provider API keys are encrypted with AES-256-GCM before storage. The `ENCRYPTION_KEY` environment variable (32-byte hex string, 64 characters) is used for encryption and decryption at runtime. Keys are never stored in plaintext and never appear in API responses.
 
 ## API Reference
 
@@ -135,6 +186,7 @@ The response follows the standard OpenAI chat completion format. Additional head
 | `X-Traceform-Provider` | The provider that handled the request |
 | `X-Traceform-Model` | The actual model used |
 | `X-Traceform-Cache-Hit` | `true` if served from cache, `false` otherwise |
+| `X-Traceform-Circuit-State` | Circuit breaker state for the provider |
 
 Streaming is supported -- set `"stream": true` in the request body.
 
@@ -154,7 +206,7 @@ curl http://localhost:8090/v1/embeddings \
 
 ```bash
 curl -X POST http://localhost:8080/v1/gateway/providers \
-  -H "Authorization: Bearer as_sk_your_key" \
+  -H "Authorization: Bearer tf_sk_your_key" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "openai",
@@ -166,36 +218,13 @@ curl -X POST http://localhost:8080/v1/gateway/providers \
   }'
 ```
 
-Response (`201 Created`):
-
-```json
-{
-  "id": "prov_abc123",
-  "org_id": "org_xyz",
-  "name": "openai",
-  "display_name": "OpenAI",
-  "base_url": "https://api.openai.com/v1",
-  "is_enabled": true,
-  "config": {},
-  "created_at": "2025-01-15T10:00:00Z",
-  "updated_at": "2025-01-15T10:00:00Z"
-}
-```
-
 The `api_key` field is accepted on create/update but never returned in responses.
-
-### List Providers
-
-```
-GET /v1/gateway/providers
-Authorization: Bearer as_sk_your_key
-```
 
 ### Create a Route
 
 ```bash
 curl -X POST http://localhost:8080/v1/gateway/routes \
-  -H "Authorization: Bearer as_sk_your_key" \
+  -H "Authorization: Bearer tf_sk_your_key" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "GPT-4o via OpenAI",
@@ -208,29 +237,11 @@ curl -X POST http://localhost:8080/v1/gateway/routes \
   }'
 ```
 
-| Field | Required | Default |
-|-------|----------|---------|
-| `name` | Yes | -- |
-| `provider_id` | Yes | -- |
-| `target_model` | Yes | -- |
-| `model_pattern` | No | `*` (matches all) |
-| `strategy` | No | `priority` |
-| `priority` | No | `0` |
-| `weight` | No | `1.0` |
-| `enabled` | No | `true` |
-
-### List Routes
-
-```
-GET /v1/gateway/routes
-Authorization: Bearer as_sk_your_key
-```
-
 ### Create a Fallback Chain
 
 ```bash
 curl -X POST http://localhost:8080/v1/gateway/fallbacks \
-  -H "Authorization: Bearer as_sk_your_key" \
+  -H "Authorization: Bearer tf_sk_your_key" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "GPT-4 failover",
@@ -243,20 +254,11 @@ curl -X POST http://localhost:8080/v1/gateway/fallbacks \
   }'
 ```
 
-### List Fallback Chains
-
-```
-GET /v1/gateway/fallbacks
-Authorization: Bearer as_sk_your_key
-```
-
 ### Cache Management
 
-Cache stats and purge endpoints are available at:
-
 ```
-GET /v1/gateway/cache/stats
-DELETE /v1/gateway/cache
+GET /v1/gateway/cache/stats   -- Cache statistics
+POST /v1/gateway/cache/purge  -- Purge the semantic cache
 ```
 
 ## Dashboard Guide
@@ -264,12 +266,13 @@ DELETE /v1/gateway/cache
 ### Route Overview (`/dashboard/route`)
 
 Displays:
-- **Metric cards**: Total requests, cache hit rate, average latency, active providers.
-- **Requests over time**: Area chart of gateway request volume.
+- **Metric cards**: Total requests, cache hit rate, average latency, active providers (with circuit breaker states).
+- **Requests over time**: Area chart of gateway request volume (uses the global time range picker).
 - **Provider distribution**: Pie chart showing traffic split across providers.
 - **Latency distribution**: Histogram of response times.
+- **Circuit breaker status**: Visual indicator for each provider (closed/open/half-open).
 - **Recent requests table**: Latest gateway requests with model, provider, latency, cache hit, and status.
 
 ### Provider Management (`/dashboard/route/providers`)
 
-CRUD interface for managing providers. Add, edit, enable/disable, and delete providers. API keys are masked in the UI and can only be set (not read back).
+CRUD interface for managing providers. Add, edit, enable/disable, and delete providers. API keys are masked in the UI and can only be set (not read back). Circuit breaker states are displayed next to each provider.
