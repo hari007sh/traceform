@@ -13,7 +13,7 @@ var (
 	numberPattern    = regexp.MustCompile(`\b\d+\.?\d*\b`)
 	hexPattern       = regexp.MustCompile(`0x[0-9a-fA-F]+`)
 	pathPattern      = regexp.MustCompile(`/[\w\-./]+\.\w+:\d+`)
-	timestampPattern = regexp.MustCompile(`\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}`)
+	timestampPattern = regexp.MustCompile(`\d{4}-\d{2}-\d{2}[tT ]\d{2}:\d{2}:\d{2}`)
 	ipPattern        = regexp.MustCompile(`\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}`)
 	quotedPattern    = regexp.MustCompile(`"[^"]*"`)
 )
