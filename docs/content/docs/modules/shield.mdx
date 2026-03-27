@@ -5,11 +5,11 @@ description: Shield automatically detects and fixes common AI agent failures —
 
 # Shield (Self-Healing)
 
-Shield is AgentStack's self-healing module. It runs inside the SDK and automatically detects and recovers from common agent failures: infinite loops, hallucinations, cost overruns, and timeouts. When an intervention occurs, Shield reports it to the API server for analytics and session replay visualization.
+Shield is Traceform's self-healing module. It runs inside the SDK and automatically detects and recovers from common agent failures: infinite loops, hallucinations, cost overruns, and timeouts. When an intervention occurs, Shield reports it to the API server for analytics and session replay visualization.
 
 ## Overview
 
-Shield is the unique differentiator in AgentStack. No other observability platform offers automatic self-healing. The healing engine lives in the SDK (Python and TypeScript), intercepts failures at runtime, applies a fix, and logs the intervention as a healing event.
+Shield is the unique differentiator in Traceform. No other observability platform offers automatic self-healing. The healing engine lives in the SDK (Python and TypeScript), intercepts failures at runtime, applies a fix, and logs the intervention as a healing event.
 
 ## How It Works
 
@@ -28,13 +28,13 @@ Shield supports six healing types, stored as a ClickHouse `Enum8`:
 
 ### SDK Integration (Python)
 
-Shield is enabled via the `healing` parameter on the `@trace` decorator or the `agentstack.protect()` wrapper:
+Shield is enabled via the `healing` parameter on the `@trace` decorator or the `traceform.protect()` wrapper:
 
 ```python
-import agentstack
-from agentstack.healing import HealingConfig
+import traceform
+from traceform.healing import HealingConfig
 
-agentstack.init(
+traceform.init(
     api_key="as_sk_your_key",
     endpoint="http://localhost:8080"
 )
@@ -48,7 +48,7 @@ config = HealingConfig(
     enable_error_recovery=True
 )
 
-@agentstack.trace(healing=True, healing_config=config)
+@traceform.trace(healing=True, healing_config=config)
 def my_agent(input_text: str):
     # Your agent logic here
     pass
@@ -57,7 +57,7 @@ def my_agent(input_text: str):
 ### SDK Integration (TypeScript)
 
 ```typescript
-import { init, trace, HealingConfig } from 'agentstack';
+import { init, trace, HealingConfig } from 'traceform';
 
 init({
   apiKey: 'as_sk_your_key',

@@ -1,12 +1,12 @@
 ---
 title: "Python SDK"
-description: "Complete reference for the AgentStack Python SDK — tracing, self-healing, guardrails, and cost tracking for AI agents."
+description: "Complete reference for the Traceform Python SDK — tracing, self-healing, guardrails, and cost tracking for AI agents."
 ---
 
 ## Installation
 
 ```bash
-pip install agentstack
+pip install traceform
 ```
 
 The SDK requires Python 3.9+ and depends on `requests>=2.28.0`.
@@ -14,18 +14,18 @@ The SDK requires Python 3.9+ and depends on `requests>=2.28.0`.
 For auto-instrumentation support, install optional extras:
 
 ```bash
-pip install agentstack[openai]      # OpenAI auto-instrumentation
-pip install agentstack[anthropic]   # Anthropic auto-instrumentation
+pip install traceform[openai]      # OpenAI auto-instrumentation
+pip install traceform[anthropic]   # Anthropic auto-instrumentation
 ```
 
 ## Initialization
 
-Call `agentstack.init()` once at application startup before creating any sessions or using decorators:
+Call `traceform.init()` once at application startup before creating any sessions or using decorators:
 
 ```python
-import agentstack
+import traceform
 
-agentstack.init(
+traceform.init(
     api_key="as_sk_your_key_here",
     endpoint="http://localhost:8080",   # default
     batch_size=50,                      # events per batch flush (default: 50)
@@ -39,8 +39,8 @@ agentstack.init(
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `api_key` | `str` | *required* | Your AgentStack API key (format: `as_sk_...`) |
-| `endpoint` | `str` | `http://localhost:8080` | Base URL of the AgentStack API server |
+| `api_key` | `str` | *required* | Your Traceform API key (format: `as_sk_...`) |
+| `endpoint` | `str` | `http://localhost:8080` | Base URL of the Traceform API server |
 | `batch_size` | `int` | `50` | Number of events per batch flush |
 | `flush_interval` | `float` | `5.0` | Seconds between automatic batch flushes |
 | `auto_instrument` | `list[str] \| None` | `None` | Libraries to auto-instrument |
@@ -53,7 +53,7 @@ Sessions represent a single agent execution. All spans and events are grouped wi
 ### Context Manager (Recommended)
 
 ```python
-with agentstack.session(agent_name="my-agent", tags={"env": "prod"}) as session:
+with traceform.session(agent_name="my-agent", tags={"env": "prod"}) as session:
     # Create spans within the session
     with session.span("step-1", span_type="llm_call") as span:
         span.set_output("result")
@@ -64,7 +64,7 @@ with agentstack.session(agent_name="my-agent", tags={"env": "prod"}) as session:
 ### Manual Lifecycle
 
 ```python
-session = agentstack.create_session(
+session = traceform.create_session(
     agent_name="my-agent",
     metadata={"task": "summarization"},
     tags={"env": "staging"},
@@ -105,7 +105,7 @@ Spans represent individual units of work -- an LLM call, tool invocation, retrie
 
 ```python
 with session.span("generate-answer", span_type="llm_call") as span:
-    span.set_input({"prompt": "What is AgentStack?"})
+    span.set_input({"prompt": "What is Traceform?"})
     span.set_model("gpt-4o", provider="openai")
 
     result = call_my_llm(...)
@@ -163,7 +163,7 @@ with session.span("agent-run", span_type="agent") as agent_span:
 The `@trace` decorator automatically wraps functions as spans, capturing inputs, outputs, and errors:
 
 ```python
-from agentstack import trace
+from traceform import trace
 
 @trace(span_type="llm_call")
 def call_gpt(prompt: str) -> str:
@@ -213,7 +213,7 @@ Decorated functions automatically attach to the current session:
 def generate_response(prompt: str) -> str:
     return "Hello!"
 
-with agentstack.session(agent_name="assistant") as session:
+with traceform.session(agent_name="assistant") as session:
     # This call creates a span inside the session
     result = generate_response("Hi there")
 ```
@@ -227,7 +227,7 @@ Auto-instrumentation patches supported libraries to automatically create spans f
 ### Enabling at Init
 
 ```python
-agentstack.init(
+traceform.init(
     api_key="as_sk_...",
     auto_instrument=["openai", "anthropic"],
 )
@@ -236,7 +236,7 @@ agentstack.init(
 ### Enabling Manually
 
 ```python
-from agentstack.instruments import instrument
+from traceform.instruments import instrument
 
 instrumented = instrument(["openai", "anthropic", "langchain"])
 print(f"Instrumented: {instrumented}")
@@ -258,13 +258,13 @@ Once instrumented, every OpenAI call automatically creates a span:
 
 ```python
 import openai
-import agentstack
+import traceform
 
-agentstack.init(api_key="as_sk_...", auto_instrument=["openai"])
+traceform.init(api_key="as_sk_...", auto_instrument=["openai"])
 
 client = openai.OpenAI()
 
-with agentstack.session(agent_name="chatbot") as session:
+with traceform.session(agent_name="chatbot") as session:
     # This call is automatically traced — no manual span needed
     response = client.chat.completions.create(
         model="gpt-4o",
@@ -285,13 +285,13 @@ The auto-instrumentation captures:
 
 ```python
 import anthropic
-import agentstack
+import traceform
 
-agentstack.init(api_key="as_sk_...", auto_instrument=["anthropic"])
+traceform.init(api_key="as_sk_...", auto_instrument=["anthropic"])
 
 client = anthropic.Anthropic()
 
-with agentstack.session(agent_name="assistant") as session:
+with traceform.session(agent_name="assistant") as session:
     response = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=1024,
@@ -302,12 +302,12 @@ with agentstack.session(agent_name="assistant") as session:
 
 ## Shield (Self-Healing)
 
-Shield is AgentStack's self-healing engine that automatically detects and corrects agent failure modes in real-time, including loops, hallucinations, cost overruns, context overflow, and timeouts.
+Shield is Traceform's self-healing engine that automatically detects and corrects agent failure modes in real-time, including loops, hallucinations, cost overruns, context overflow, and timeouts.
 
 ### Enabling Shield
 
 ```python
-agentstack.protect({
+traceform.protect({
     "loop_threshold": 3,
     "cost_limit_cents": 500,
     "model_fallback": "gpt-4o-mini",
@@ -358,7 +358,7 @@ def run_agent(task: str) -> str:
 For advanced use cases, you can use the `HealingEngine` directly:
 
 ```python
-from agentstack.healing import HealingEngine, HealingConfig
+from traceform.healing import HealingEngine, HealingConfig
 
 config = HealingConfig(loop_threshold=3, cost_limit_cents=500)
 engine = HealingEngine(config=config, session=session)
@@ -387,9 +387,9 @@ summary = engine.get_summary()
 Track costs for individual LLM calls:
 
 ```python
-import agentstack.cost
+import traceform.cost
 
-agentstack.cost.track(
+traceform.cost.track(
     model="gpt-4o",
     input_tokens=1500,
     output_tokens=800,
@@ -402,8 +402,8 @@ agentstack.cost.track(
 Check budget status:
 
 ```python
-budget = agentstack.cost.get_budget("budget-id")
-within_budget = agentstack.cost.check_budget("budget-id", cost_cents=10)
+budget = traceform.cost.get_budget("budget-id")
+within_budget = traceform.cost.check_budget("budget-id", cost_cents=10)
 ```
 
 ## Guard Checks
@@ -411,17 +411,17 @@ within_budget = agentstack.cost.check_budget("budget-id", cost_cents=10)
 Run content through guardrails (PII detection, toxicity, prompt injection):
 
 ```python
-import agentstack.guard
+import traceform.guard
 
 # Async
-result = await agentstack.guard.check(
+result = await traceform.guard.check(
     content="User input text here",
     rules=["pii-detector", "toxicity-filter"],
     metadata={"session_id": "..."},
 )
 
 # Sync
-result = agentstack.guard.check_sync(
+result = traceform.guard.check_sync(
     content="User input text here",
     rules=["pii-detector"],
 )
@@ -446,10 +446,10 @@ The SDK batches events for efficient network usage. Events are sent when either 
 
 ```python
 # Force flush all pending events
-agentstack.flush()
+traceform.flush()
 
 # Gracefully shut down (flushes remaining events)
-agentstack.shutdown()
+traceform.shutdown()
 ```
 
 The SDK automatically registers a shutdown hook via `atexit` to flush events when the process exits.
@@ -457,18 +457,18 @@ The SDK automatically registers a shutdown hook via `atexit` to flush events whe
 ## Complete Example
 
 ```python
-import agentstack
+import traceform
 from openai import OpenAI
 
 # Initialize
-agentstack.init(
+traceform.init(
     api_key="as_sk_your_key",
     endpoint="http://localhost:8080",
     auto_instrument=["openai"],
 )
 
 # Enable Shield
-agentstack.protect({
+traceform.protect({
     "loop_threshold": 3,
     "cost_limit_cents": 1000,
     "model_fallback": "gpt-4o-mini",
@@ -476,7 +476,7 @@ agentstack.protect({
 
 client = OpenAI()
 
-with agentstack.session(
+with traceform.session(
     agent_name="research-assistant",
     tags={"env": "production"},
     user_id="user-456",

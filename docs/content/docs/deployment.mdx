@@ -1,11 +1,11 @@
 ---
 title: Deployment
-description: Deploy AgentStack locally with Docker Compose or to production with the provided Dockerfiles and production compose file.
+description: Deploy Traceform locally with Docker Compose or to production with the provided Dockerfiles and production compose file.
 ---
 
 # Deployment
 
-AgentStack can be deployed locally for development using Docker Compose, or to production using the provided multi-stage Dockerfiles and production compose file.
+Traceform can be deployed locally for development using Docker Compose, or to production using the provided multi-stage Dockerfiles and production compose file.
 
 ## Local Development (Docker Compose)
 
@@ -93,7 +93,7 @@ docker compose ps
 
 ## Production Deployment
 
-AgentStack provides three Dockerfiles and a production Docker Compose file in the `deploy/` directory.
+Traceform provides three Dockerfiles and a production Docker Compose file in the `deploy/` directory.
 
 ### Dockerfiles
 
@@ -208,7 +208,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 All infrastructure services have health checks configured:
 
-- **PostgreSQL**: `pg_isready -U agentstack`
+- **PostgreSQL**: `pg_isready -U traceform`
 - **ClickHouse**: `clickhouse-client --query "SELECT 1"`
 - **Redis**: `redis-cli -a $REDIS_PASSWORD ping`
 - **NATS**: `wget --spider -q http://localhost:8222/healthz`
@@ -229,8 +229,8 @@ Application services wait for their dependencies to be healthy before starting.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql://agentstack:agentstack_dev@localhost:5432/agentstack?sslmode=disable` | PostgreSQL connection string |
-| `CLICKHOUSE_URL` | `clickhouse://localhost:9000/agentstack` | ClickHouse native protocol URL |
+| `DATABASE_URL` | `postgresql://traceform:traceform_dev@localhost:5432/traceform?sslmode=disable` | PostgreSQL connection string |
+| `CLICKHOUSE_URL` | `clickhouse://localhost:9000/traceform` | ClickHouse native protocol URL |
 | `REDIS_URL` | `redis://localhost:6379` | Redis connection URL |
 | `NATS_URL` | `nats://localhost:4222` | NATS connection URL |
 
@@ -254,7 +254,7 @@ Application services wait for their dependencies to be healthy before starting.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SENDGRID_API_KEY` | -- | SendGrid API key for sending alert emails |
-| `FROM_EMAIL` | `alerts@agentstack.dev` | Sender email for alerts |
+| `FROM_EMAIL` | `alerts@traceform.dev` | Sender email for alerts |
 
 ### Encryption
 

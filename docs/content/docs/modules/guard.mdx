@@ -5,7 +5,7 @@ description: Guard provides real-time content safety checks — PII detection, p
 
 # Guard (Guardrails)
 
-Guard is AgentStack's guardrails module. It runs content through configurable safety checks in parallel, returning pass/block/warn decisions in milliseconds. Guards can be invoked directly via the API, through the SDK, or automatically as middleware in the Gateway Proxy pipeline.
+Guard is Traceform's guardrails module. It runs content through configurable safety checks in parallel, returning pass/block/warn decisions in milliseconds. Guards can be invoked directly via the API, through the SDK, or automatically as middleware in the Gateway Proxy pipeline.
 
 ## Overview
 
@@ -259,11 +259,11 @@ Authorization: Bearer as_sk_your_key
 ### SDK Usage (Python)
 
 ```python
-import agentstack
+import traceform
 
-agentstack.init(api_key="as_sk_your_key", endpoint="http://localhost:8080")
+traceform.init(api_key="as_sk_your_key", endpoint="http://localhost:8080")
 
-result = agentstack.guard.check(
+result = traceform.guard.check(
     content="My email is john@example.com",
     direction="input",
     session_id="sess_abc123"

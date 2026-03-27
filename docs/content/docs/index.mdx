@@ -1,11 +1,11 @@
 ---
-title: "Welcome to AgentStack"
+title: "Welcome to Traceform"
 description: "The open-source platform for AI agents in production — tracing, self-healing, guardrails, testing, routing, and cost intelligence."
 ---
 
-## What is AgentStack?
+## What is Traceform?
 
-AgentStack is an open-source AI agent production platform that replaces 5-6 separate tools with one unified system. It provides everything you need to build, monitor, and operate AI agents reliably in production.
+Traceform is an open-source AI agent production platform that replaces 5-6 separate tools with one unified system. It provides everything you need to build, monitor, and operate AI agents reliably in production.
 
 ### Six Modules
 
@@ -21,8 +21,8 @@ AgentStack is an open-source AI agent production platform that replaces 5-6 sepa
 Get up and running in under 10 minutes:
 
 ```bash
-git clone https://github.com/agentstack/agentstack.git
-cd agentstack
+git clone https://github.com/traceform/traceform.git
+cd traceform
 docker compose up -d
 make migrate && make seed
 make dev          # API server on :8080
@@ -30,13 +30,13 @@ cd web && npm run dev  # Dashboard on :3000
 ```
 
 ```python
-pip install agentstack
+pip install traceform
 
-import agentstack
+import traceform
 
-agentstack.init(api_key="as_sk_...", endpoint="http://localhost:8080")
+traceform.init(api_key="as_sk_...", endpoint="http://localhost:8080")
 
-with agentstack.session(agent_name="my-agent") as session:
+with traceform.session(agent_name="my-agent") as session:
     with session.span("llm-call", span_type="llm_call") as span:
         span.set_input({"prompt": "Hello"})
         span.set_output("Hi there!")

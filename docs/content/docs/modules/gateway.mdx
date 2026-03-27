@@ -5,7 +5,7 @@ description: Route provides an OpenAI-compatible gateway proxy with model routin
 
 # Route (Gateway)
 
-Route is AgentStack's gateway module. It provides an OpenAI-compatible proxy server (port 8090) that sits between your application and LLM providers. It handles model routing, provider failover, semantic caching, and request logging -- all with less than 5ms overhead.
+Route is Traceform's gateway module. It provides an OpenAI-compatible proxy server (port 8090) that sits between your application and LLM providers. It handles model routing, provider failover, semantic caching, and request logging -- all with less than 5ms overhead.
 
 ## Overview
 
@@ -26,11 +26,11 @@ The gateway proxy accepts standard OpenAI API format and routes requests to any 
 Client Request (OpenAI format)
     |
     v
-1. Authenticate (X-AgentStack-Org-ID header)
+1. Authenticate (X-Traceform-Org-ID header)
     |
     v
 2. Check semantic cache (Redis fast path, PostgreSQL slow path)
-    |-- Cache HIT --> Return cached response (X-AgentStack-Cache-Hit: true)
+    |-- Cache HIT --> Return cached response (X-Traceform-Cache-Hit: true)
     |
     v (Cache MISS)
 3. Match routing rules (glob pattern on model name)
@@ -48,7 +48,7 @@ Client Request (OpenAI format)
 7. Log request via NATS (async)
     |
     v
-Return response (X-AgentStack-Provider / X-AgentStack-Model headers)
+Return response (X-Traceform-Provider / X-Traceform-Model headers)
 ```
 
 ### Routing Rules
@@ -89,7 +89,7 @@ Lookups use a two-tier strategy:
 1. **Redis fast path**: In-memory lookup with configurable TTL (default: 1 hour)
 2. **PostgreSQL slow path**: Durable fallback that handles Redis restarts
 
-Cache can be disabled per-request with the `X-AgentStack-Cache: false` header.
+Cache can be disabled per-request with the `X-Traceform-Cache: false` header.
 
 ### Fallback Chains
 
@@ -119,7 +119,7 @@ Provider API keys are encrypted with AES-256-GCM before storage. The `ENCRYPTION
 ```bash
 curl http://localhost:8090/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "X-AgentStack-Org-ID: org_abc123" \
+  -H "X-Traceform-Org-ID: org_abc123" \
   -d '{
     "model": "gpt-4o",
     "messages": [
@@ -132,9 +132,9 @@ The response follows the standard OpenAI chat completion format. Additional head
 
 | Header | Description |
 |--------|-------------|
-| `X-AgentStack-Provider` | The provider that handled the request |
-| `X-AgentStack-Model` | The actual model used |
-| `X-AgentStack-Cache-Hit` | `true` if served from cache, `false` otherwise |
+| `X-Traceform-Provider` | The provider that handled the request |
+| `X-Traceform-Model` | The actual model used |
+| `X-Traceform-Cache-Hit` | `true` if served from cache, `false` otherwise |
 
 Streaming is supported -- set `"stream": true` in the request body.
 
@@ -143,7 +143,7 @@ Streaming is supported -- set `"stream": true` in the request body.
 ```bash
 curl http://localhost:8090/v1/embeddings \
   -H "Content-Type: application/json" \
-  -H "X-AgentStack-Org-ID: org_abc123" \
+  -H "X-Traceform-Org-ID: org_abc123" \
   -d '{
     "model": "text-embedding-3-small",
     "input": "The quick brown fox"

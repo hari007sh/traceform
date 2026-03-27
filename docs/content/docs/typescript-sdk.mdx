@@ -1,12 +1,12 @@
 ---
 title: "TypeScript SDK"
-description: "Complete reference for the AgentStack TypeScript SDK — tracing, self-healing, and observability for Node.js AI agents."
+description: "Complete reference for the Traceform TypeScript SDK — tracing, self-healing, and observability for Node.js AI agents."
 ---
 
 ## Installation
 
 ```bash
-npm install @agentstack/sdk
+npm install @traceform/sdk
 ```
 
 The SDK requires Node.js 18+ and has zero runtime dependencies (uses the built-in `fetch` API and `crypto` module).
@@ -16,12 +16,12 @@ The SDK requires Node.js 18+ and has zero runtime dependencies (uses the built-i
 Call `init()` once at application startup:
 
 ```typescript
-import { init } from '@agentstack/sdk';
+import { init } from '@traceform/sdk';
 
 init({
   apiKey: process.env.AGENTSTACK_API_KEY!,
   projectId: 'my-project',
-  endpoint: 'http://localhost:8080',  // default: https://api.agentstack.dev
+  endpoint: 'http://localhost:8080',  // default: https://api.traceform.dev
   batchSize: 50,                      // default: 50
   flushIntervalMs: 5000,              // default: 5000
   debug: false,
@@ -32,9 +32,9 @@ init({
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `apiKey` | `string` | *required* | Your AgentStack API key |
+| `apiKey` | `string` | *required* | Your Traceform API key |
 | `projectId` | `string` | *required* | Your project identifier |
-| `endpoint` | `string` | `https://api.agentstack.dev` | API server base URL |
+| `endpoint` | `string` | `https://api.traceform.dev` | API server base URL |
 | `batchSize` | `number` | `50` | Events per batch flush |
 | `flushIntervalMs` | `number` | `5000` | Milliseconds between flushes |
 | `maxRetries` | `number` | `3` | Max retry attempts on failure |
@@ -48,7 +48,7 @@ Sessions group related spans and events together. Each user interaction or agent
 ### Creating a Session
 
 ```typescript
-import { session, SessionStatus, SpanType } from '@agentstack/sdk';
+import { session, SessionStatus, SpanType } from '@traceform/sdk';
 
 const sess = session({
   metadata: { agentName: 'my-agent', userId: 'user-123' },
@@ -94,7 +94,7 @@ sess.end();  // or sess.end(SessionStatus.FAILED)
 For a cleaner pattern, use `protect()` which creates a session, runs your function, and ends the session:
 
 ```typescript
-import { protect } from '@agentstack/sdk';
+import { protect } from '@traceform/sdk';
 
 const result = await protect(
   { metadata: { agentName: 'summarizer' } },
@@ -118,7 +118,7 @@ Spans track individual operations within a session.
 ### SpanType Enum
 
 ```typescript
-import { SpanType } from '@agentstack/sdk';
+import { SpanType } from '@traceform/sdk';
 
 SpanType.LLM        // 'llm_call'
 SpanType.TOOL       // 'tool_call'
@@ -176,7 +176,7 @@ agentSpan.end();
 The `trace` function wraps an async operation with automatic span creation:
 
 ```typescript
-import { trace, SpanType } from '@agentstack/sdk';
+import { trace, SpanType } from '@traceform/sdk';
 
 const result = await trace(
   'generateResponse',
@@ -211,7 +211,7 @@ Wrap your OpenAI client with `instrumentOpenAI` to auto-create spans:
 
 ```typescript
 import OpenAI from 'openai';
-import { init, session, instrumentOpenAI, SpanType } from '@agentstack/sdk';
+import { init, session, instrumentOpenAI, SpanType } from '@traceform/sdk';
 
 init({ apiKey: 'as_sk_...', projectId: 'my-project' });
 
@@ -236,7 +236,7 @@ The instrumented client wraps:
 
 ```typescript
 import Anthropic from '@anthropic-ai/sdk';
-import { init, session, instrumentAnthropic } from '@agentstack/sdk';
+import { init, session, instrumentAnthropic } from '@traceform/sdk';
 
 init({ apiKey: 'as_sk_...', projectId: 'my-project' });
 
@@ -258,7 +258,7 @@ sess.end();
 Enable Shield globally during initialization or per-session:
 
 ```typescript
-import { init, HealingEngine } from '@agentstack/sdk';
+import { init, HealingEngine } from '@traceform/sdk';
 
 init({
   apiKey: 'as_sk_...',
@@ -306,7 +306,7 @@ init({
 ### Using HealingEngine Directly
 
 ```typescript
-import { HealingEngine } from '@agentstack/sdk';
+import { HealingEngine } from '@traceform/sdk';
 
 const engine = new HealingEngine({
   enabled: true,
@@ -347,8 +347,8 @@ Each healing event includes an `intervention` with:
 ## Guard Checks
 
 ```typescript
-import { runGuards, checkGuard } from '@agentstack/sdk';
-import type { GuardRule, GuardResult } from '@agentstack/sdk';
+import { runGuards, checkGuard } from '@traceform/sdk';
+import type { GuardRule, GuardResult } from '@traceform/sdk';
 
 const rules: GuardRule[] = [
   { name: 'pii-detector', enabled: true, action: 'block' },
@@ -367,7 +367,7 @@ if (!result.passed) {
 ## Cost Estimation
 
 ```typescript
-import { estimateCost, registerModelPricing } from '@agentstack/sdk';
+import { estimateCost, registerModelPricing } from '@traceform/sdk';
 
 // Estimate cost for a completion
 const estimate = estimateCost('gpt-4', 1000, 500);
@@ -386,7 +386,7 @@ registerModelPricing({
 Always shut down the SDK gracefully to flush pending events:
 
 ```typescript
-import { shutdown } from '@agentstack/sdk';
+import { shutdown } from '@traceform/sdk';
 
 // Flushes all pending events and cleans up resources
 await shutdown();
@@ -406,7 +406,7 @@ import {
   shutdown,
   SpanType,
   SessionStatus,
-} from '@agentstack/sdk';
+} from '@traceform/sdk';
 
 // Initialize with Shield enabled
 init({
@@ -477,5 +477,5 @@ import type {
   GuardViolation,
   ModelPricing,
   CostEstimate,
-} from '@agentstack/sdk';
+} from '@traceform/sdk';
 ```

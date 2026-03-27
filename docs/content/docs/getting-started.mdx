@@ -1,6 +1,6 @@
 ---
 title: "Getting Started"
-description: "Set up AgentStack locally and send your first session trace in under 10 minutes."
+description: "Set up Traceform locally and send your first session trace in under 10 minutes."
 ---
 
 ## Prerequisites
@@ -18,8 +18,8 @@ Before you begin, make sure you have the following installed:
 Clone the repository and start the infrastructure services:
 
 ```bash
-git clone https://github.com/agentstack/agentstack.git
-cd agentstack
+git clone https://github.com/traceform/traceform.git
+cd traceform
 ```
 
 Copy the environment file and configure it:
@@ -92,7 +92,7 @@ Expected response:
 
 Open [http://localhost:3000](http://localhost:3000) in your browser. Click **Sign in with GitHub** to authenticate.
 
-On first login, AgentStack automatically creates:
+On first login, Traceform automatically creates:
 - A personal **organization** for your account
 - A **default API key** for SDK access
 
@@ -119,14 +119,14 @@ curl -H "Authorization: Bearer <jwt_token>" http://localhost:8080/api/api-keys
 ## Install the Python SDK
 
 ```bash
-pip install agentstack
+pip install traceform
 ```
 
 For auto-instrumentation of specific libraries, install optional dependencies:
 
 ```bash
-pip install agentstack[openai]      # OpenAI auto-instrumentation
-pip install agentstack[anthropic]   # Anthropic auto-instrumentation
+pip install traceform[openai]      # OpenAI auto-instrumentation
+pip install traceform[anthropic]   # Anthropic auto-instrumentation
 ```
 
 ## Send Your First Session Trace
@@ -134,16 +134,16 @@ pip install agentstack[anthropic]   # Anthropic auto-instrumentation
 Create a file called `quickstart.py`:
 
 ```python
-import agentstack
+import traceform
 
 # Initialize the SDK with your API key
-agentstack.init(
+traceform.init(
     api_key="as_sk_your_key_here",
     endpoint="http://localhost:8080",
 )
 
 # Create a tracing session
-with agentstack.session(agent_name="my-first-agent") as session:
+with traceform.session(agent_name="my-first-agent") as session:
     # Create a span for an LLM call
     with session.span("generate-greeting", span_type="llm_call") as span:
         span.set_input({"prompt": "Say hello"})
@@ -158,7 +158,7 @@ with agentstack.session(agent_name="my-first-agent") as session:
 
     # Create a span for a tool call
     with session.span("search-docs", span_type="tool_call") as span:
-        span.set_input({"query": "agentstack setup"})
+        span.set_input({"query": "traceform setup"})
         span.set_output({"results": ["Getting Started guide"]})
 
 print(f"Session ID: {session.id}")

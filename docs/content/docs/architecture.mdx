@@ -1,17 +1,17 @@
 ---
 title: Architecture
-description: System architecture overview of AgentStack — components, data flow, infrastructure, and authentication model.
+description: System architecture overview of Traceform — components, data flow, infrastructure, and authentication model.
 ---
 
 # Architecture
 
-AgentStack is composed of four application components backed by four infrastructure services. This page describes how they connect, how data flows through the system, and how authentication works.
+Traceform is composed of four application components backed by four infrastructure services. This page describes how they connect, how data flows through the system, and how authentication works.
 
 ## High-Level Diagram
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│                    AgentStack SDK                       │
+│                    Traceform SDK                       │
 │          (Python + TypeScript — pip/npm install)        │
 │                                                        │
 │   ┌──────────┐  ┌──────────┐  ┌──────────┐            │
@@ -22,7 +22,7 @@ AgentStack is composed of four application components backed by four infrastruct
          │              │              │
          ▼              ▼              ▼
 ┌────────────────────────────────────────────────────────┐
-│              AgentStack API Server (Go)                 │
+│              Traceform API Server (Go)                 │
 │                   Port 8080                             │
 │                                                        │
 │   /v1/ingest/*     → Trace module (sessions, spans)    │
@@ -175,7 +175,7 @@ Configuration and CRUD data goes directly to PostgreSQL:
 
 When a request hits the gateway proxy:
 
-1. Authenticate via `X-AgentStack-Org-ID` header
+1. Authenticate via `X-Traceform-Org-ID` header
 2. Check semantic cache (Redis fast path, PostgreSQL slow path)
 3. Match routing rules (glob pattern on model name)
 4. Select provider via strategy (priority, round_robin, or cost)
@@ -198,7 +198,7 @@ The Next.js dashboard reads from all API endpoints to display data across all si
 
 ## Authentication Model
 
-AgentStack uses three authentication mechanisms:
+Traceform uses three authentication mechanisms:
 
 ### API Keys (SDK Authentication)
 
@@ -220,7 +220,7 @@ Some endpoints accept either authentication method. The middleware checks for a 
 ## Project Structure
 
 ```
-agentstack/
+traceform/
 ├── cmd/
 │   ├── server/main.go      # API server (port 8080)
 │   ├── gateway/main.go      # Gateway proxy (port 8090)
@@ -243,8 +243,8 @@ agentstack/
 │   ├── postgres/            # 6 migration pairs (up/down)
 │   └── clickhouse/          # 2 migration pairs (up/down)
 ├── sdk/
-│   ├── python/              # Python SDK (pip install agentstack)
-│   └── typescript/          # TypeScript SDK (npm install agentstack)
+│   ├── python/              # Python SDK (pip install traceform)
+│   └── typescript/          # TypeScript SDK (npm install traceform)
 ├── web/                     # Next.js dashboard
 ├── cli/                     # CLI source
 ├── seed/                    # Seed data (patterns, evaluators, pricing)

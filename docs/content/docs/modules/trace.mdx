@@ -5,7 +5,7 @@ description: Trace provides full observability for AI agents — session trackin
 
 # Trace (Observability)
 
-Trace is AgentStack's observability module. It captures every session, span, and event from your AI agents, stores them in ClickHouse for fast aggregation, and surfaces failure patterns and alert conditions.
+Trace is Traceform's observability module. It captures every session, span, and event from your AI agents, stores them in ClickHouse for fast aggregation, and surfaces failure patterns and alert conditions.
 
 ## Overview
 
@@ -46,7 +46,7 @@ Session: "Customer Support Run #1847"
 
 ### Failure Patterns
 
-AgentStack ships with 50+ pre-built failure patterns (seeded from `seed/failure_patterns.json`). The pattern matcher worker periodically scans sessions and flags matches. Examples:
+Traceform ships with 50+ pre-built failure patterns (seeded from `seed/failure_patterns.json`). The pattern matcher worker periodically scans sessions and flags matches. Examples:
 
 - Infinite loop detected (same tool called 5+ times)
 - Token budget exceeded

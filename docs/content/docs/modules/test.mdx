@@ -5,7 +5,7 @@ description: Test provides automated evaluation of AI agents with 15+ evaluators
 
 # Test (Evaluation)
 
-Test is AgentStack's evaluation module. It lets you define test suites with test cases, run them against evaluators, and gate CI/CD deploys on the results. Production trace sessions can be converted into test cases for automatic regression testing.
+Test is Traceform's evaluation module. It lets you define test suites with test cases, run them against evaluators, and gate CI/CD deploys on the results. Production trace sessions can be converted into test cases for automatic regression testing.
 
 ## Overview
 
@@ -29,7 +29,7 @@ There are three categories of evaluators:
 | `programmatic` | exact_match, contains, regex, json_valid, length, latency | Deterministic code-based checks |
 | `composite` | weighted_average, all_pass, any_pass | Combines results from multiple evaluators |
 
-AgentStack ships with 15 pre-built evaluators seeded from `seed/evaluators.json`. Built-in evaluators cannot be modified or deleted.
+Traceform ships with 15 pre-built evaluators seeded from `seed/evaluators.json`. Built-in evaluators cannot be modified or deleted.
 
 ### Available Built-in Evaluators
 
@@ -105,17 +105,17 @@ fi
 
 ### CLI Tool
 
-The `agentstack` CLI provides test commands:
+The `traceform` CLI provides test commands:
 
 ```bash
 # Run a test suite
-agentstack test run --suite suite_abc123
+traceform test run --suite suite_abc123
 
 # Check run status
-agentstack test status --run run_xyz789
+traceform test status --run run_xyz789
 
 # Gate a deploy (exits non-zero if tests fail)
-agentstack test gate --suite suite_abc123
+traceform test gate --suite suite_abc123
 ```
 
 ## API Reference
