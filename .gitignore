@@ -60,5 +60,3 @@ htmlcov/
 /gateway
 /worker
 /main
-server
-worker
