@@ -1404,7 +1404,7 @@ Result: PASS (4/4 evaluators passed)`}
                   return (
                     <div
                       key={tier.name}
-                      className={`relative rounded-xl border p-6 flex flex-col overflow-hidden ${
+                      className={`relative rounded-xl border p-6 flex flex-col ${
                         tier.highlighted
                           ? isCloud
                             ? "border-blue-500 bg-[#1a1a2e] shadow-lg shadow-blue-500/10"
