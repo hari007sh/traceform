@@ -13,8 +13,10 @@ export default function DashboardLayout({
   // Force dark mode on all dashboard pages regardless of OS preference or
   // theme toggle.  The landing page can still honour user preference.
   useEffect(() => {
+    document.documentElement.classList.remove("light");
     document.documentElement.classList.add("dark");
     document.documentElement.style.colorScheme = "dark";
+    localStorage.setItem("theme", "dark");
   }, []);
 
   return (
