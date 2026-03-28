@@ -1,0 +1,62 @@
+---
+title: "CrewAI"
+description: "Auto-instrument CrewAI crews and agent task execution with Traceform."
+---
+
+# CrewAI Integration
+
+Traceform automatically traces CrewAI `Crew.kickoff()` and individual `Agent.execute_task()` calls.
+
+## Install
+
+```bash
+pip install traceform crewai
+```
+
+## Usage
+
+```python
+import traceform
+from crewai import Crew, Agent, Task
+
+traceform.init(api_key="tf_sk_...", auto_instrument=["crewai"])
+
+agent = Agent(role="Researcher", goal="Find facts", backstory="...")
+task = Task(description="Research AI trends", agent=agent)
+crew = Crew(agents=[agent], tasks=[task])
+
+with traceform.session(agent_name="crew-agent") as session:
+    result = crew.kickoff()
+```
+
+## What Gets Traced
+
+- **Crew kickoff:** Task count, agent roles, process type, total latency
+- **Agent task execution:** Agent role, task description, expected output, tools used
+- **Output:** Full crew and per-agent outputs (truncated to 2000 chars)
+
+## Configuration
+
+```python
+traceform.init(api_key="tf_sk_...", auto_instrument=["crewai"])
+```
+
+Or instrument manually:
+
+```python
+from traceform.instruments import instrument
+instrument(libraries=["crewai"])
+```
+
+## Combined with OpenAI Tracing
+
+For full visibility into both agent orchestration and underlying LLM calls, enable both instrumentations:
+
+```python
+traceform.init(
+    api_key="tf_sk_...",
+    auto_instrument=["crewai", "openai"],
+)
+```
+
+This traces the crew and agent spans as parents, with individual OpenAI LLM calls as children.

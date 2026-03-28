@@ -1,0 +1,83 @@
+---
+title: "Gateway Integration"
+description: "Trace any LLM call by pointing it at the Traceform Gateway proxy -- zero code changes required."
+---
+
+# Gateway Integration (Zero Code)
+
+The Traceform Gateway is an OpenAI-compatible proxy that sits between your application and your LLM provider. Change your API base URL and every call is automatically traced, guarded, cached, and cost-tracked.
+
+## Quick Setup
+
+### Before
+
+```python
+from openai import OpenAI
+
+client = OpenAI(api_key="sk-...")
+```
+
+### After
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="tf_sk_your_key_here",
+    base_url="http://localhost:8090/v1",  # Traceform Gateway
+)
+```
+
+That is it. Every `chat.completions.create` call now flows through Traceform.
+
+## What Gets Traced
+
+- Model name and provider
+- Input messages and output completions
+- Token usage (prompt + completion)
+- Latency per request
+- Cost per request (auto-calculated from model pricing)
+- Guardrail checks (if configured)
+- Cache hits (if semantic caching is enabled)
+
+## Configuration Options
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `GATEWAY_PORT` | `8090` | Port the gateway listens on |
+| `TRACEFORM_API_URL` | `http://localhost:8080` | API server for logging |
+| `CACHE_ENABLED` | `false` | Enable semantic caching |
+| `GUARD_ENABLED` | `false` | Enable input/output guardrails |
+
+## n8n Integration
+
+1. In your n8n workflow, find your **OpenAI** or **Chat Model** node
+2. Open the node settings and look for **Base URL** (or custom endpoint)
+3. Set the Base URL to your Traceform Gateway: `http://your-server:8090/v1`
+4. Set the API key to your Traceform API key (`tf_sk_...`)
+5. Save and run the workflow -- all calls are now traced in the Traceform dashboard
+
+## Flowise / Langflow
+
+Same approach -- change the OpenAI base URL in your flow's LLM component configuration:
+
+1. Open your LLM component settings
+2. Set **Base Path** or **Base URL** to `http://your-server:8090/v1`
+3. Use your Traceform API key
+4. All calls are now traced
+
+## Dify
+
+1. Go to **Settings > Model Provider > OpenAI**
+2. Set the API endpoint to `http://your-server:8090/v1`
+3. Use your Traceform API key
+4. All workflows using this provider are now traced
+
+## Any OpenAI-Compatible Client
+
+The gateway works with any tool or library that supports the OpenAI API format. Set these two values:
+
+- **Base URL:** `http://your-server:8090/v1`
+- **API Key:** Your Traceform API key (`tf_sk_...`)
+
+The gateway automatically routes to the correct upstream provider based on the model name in the request.

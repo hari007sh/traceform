@@ -1,0 +1,92 @@
+---
+title: "Vercel AI SDK"
+description: "Auto-instrument Vercel AI SDK generateText and streamText calls with Traceform."
+---
+
+# Vercel AI SDK Integration
+
+Traceform automatically traces Vercel AI SDK `generateText` and `streamText` calls in TypeScript/Node.js applications.
+
+## Install
+
+```bash
+npm install @traceform/sdk ai
+```
+
+## Usage
+
+```typescript
+import { init } from '@traceform/sdk';
+import { instrumentVercelAI } from '@traceform/sdk/instruments/vercel-ai';
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// Initialize Traceform and instrument the AI SDK
+init({ apiKey: 'tf_sk_...' });
+instrumentVercelAI();
+
+// All generateText and streamText calls are now traced
+const result = await generateText({
+  model: openai('gpt-4o'),
+  prompt: 'Explain quantum computing.',
+});
+```
+
+## What Gets Traced
+
+- `generateText()` calls with full input/output capture
+- `streamText()` calls with input capture
+- Model ID from the provider
+- Token usage (prompt and completion tokens)
+- Errors and exceptions
+- Latency per call
+
+## Configuration
+
+Call `instrumentVercelAI()` once at application startup, after `init()`:
+
+```typescript
+import { init } from '@traceform/sdk';
+import { instrumentVercelAI } from '@traceform/sdk/instruments/vercel-ai';
+
+init({ apiKey: 'tf_sk_...' });
+instrumentVercelAI();
+```
+
+To remove instrumentation:
+
+```typescript
+import { uninstrumentVercelAI } from '@traceform/sdk/instruments/vercel-ai';
+uninstrumentVercelAI();
+```
+
+## Next.js API Routes
+
+For Next.js applications, call the instrumentation in a top-level module that runs once:
+
+```typescript
+// lib/traceform.ts
+import { init } from '@traceform/sdk';
+import { instrumentVercelAI } from '@traceform/sdk/instruments/vercel-ai';
+
+init({ apiKey: process.env.TRACEFORM_API_KEY! });
+instrumentVercelAI();
+```
+
+Then import it in your API route:
+
+```typescript
+// app/api/chat/route.ts
+import '../../../lib/traceform';
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+export async function POST(req: Request) {
+  const { prompt } = await req.json();
+  const result = await generateText({
+    model: openai('gpt-4o'),
+    prompt,
+  });
+  return Response.json({ text: result.text });
+}
+```

@@ -1,0 +1,63 @@
+---
+title: "LangChain"
+description: "Auto-instrument LangChain LLM calls, chains, and tool invocations with Traceform."
+---
+
+# LangChain Integration
+
+Traceform uses LangChain's callback system to automatically trace LLM calls, chain runs, and tool invocations.
+
+## Install
+
+```bash
+pip install traceform langchain-core langchain-openai
+```
+
+## Usage
+
+```python
+import traceform
+from langchain_openai import ChatOpenAI
+
+traceform.init(api_key="tf_sk_...", auto_instrument=["langchain"])
+
+with traceform.session(agent_name="langchain-agent") as session:
+    llm = ChatOpenAI(model="gpt-4o")
+    response = llm.invoke("What is the capital of France?")
+```
+
+## What Gets Traced
+
+- **LLM calls:** Model name, prompts, completions, token usage
+- **Chain runs:** Chain name, inputs, outputs, latency
+- **Tool calls:** Tool name, input arguments, output, latency
+- **Errors:** Captured on LLM, chain, and tool failures
+
+## Configuration
+
+Auto-instrumentation injects a callback handler into all LangChain invocations:
+
+```python
+traceform.init(api_key="tf_sk_...", auto_instrument=["langchain"])
+```
+
+For manual control, use the callback handler directly:
+
+```python
+from traceform.instruments.langchain import get_callback_handler
+
+handler = get_callback_handler()
+llm = ChatOpenAI(model="gpt-4o")
+response = llm.invoke("Hello", config={"callbacks": [handler]})
+```
+
+## LangGraph
+
+LangGraph has a dedicated instrumentation. See [LangChain](/docs/integrations/langchain) for chain-level tracing and use both together for full coverage:
+
+```python
+traceform.init(
+    api_key="tf_sk_...",
+    auto_instrument=["langchain", "langgraph"],
+)
+```

@@ -1,0 +1,49 @@
+---
+title: "Integrations"
+description: "Connect Traceform to your AI agent framework in minutes."
+---
+
+# Integrations
+
+Traceform works with every major AI agent framework. Choose the integration method that fits your workflow.
+
+## Auto-Instrumentation (Recommended)
+
+Add one line of code and Traceform automatically traces all LLM calls, agent steps, and tool invocations. No code changes to your agent logic.
+
+**Supported frameworks:**
+
+| Framework | Language | What Gets Traced |
+|-----------|----------|------------------|
+| [OpenAI](/docs/integrations/openai) | Python, TypeScript | `chat.completions.create`, embeddings |
+| [Anthropic](/docs/integrations/anthropic) | Python, TypeScript | `messages.create` |
+| [LangChain](/docs/integrations/langchain) | Python | LLM calls, chain runs, tool calls |
+| [CrewAI](/docs/integrations/crewai) | Python | `Crew.kickoff`, agent task execution |
+| [LlamaIndex](/docs/integrations/llamaindex) | Python | `LLM.complete`, `LLM.acomplete` |
+| [AutoGen / AG2](/docs/integrations/autogen) | Python | `ConversableAgent.generate_reply` |
+| [Haystack](/docs/integrations/haystack) | Python | `Pipeline.run` |
+| [Vercel AI SDK](/docs/integrations/vercel-ai) | TypeScript | `generateText`, `streamText` |
+
+## Gateway Proxy (Zero Code)
+
+Point your LLM API calls at the Traceform Gateway instead of directly at your provider. Every call is automatically traced, guarded, cached, and cost-tracked without any SDK changes.
+
+Works with any tool that calls OpenAI-compatible APIs: [n8n](/docs/integrations/n8n), Flowise, Langflow, Dify, and more.
+
+See the [Gateway Integration Guide](/docs/integrations/gateway) for setup instructions.
+
+## SDK Decorator
+
+For custom functions that are not covered by auto-instrumentation, use the `@traceform.trace()` decorator (Python) or `traceform.trace()` wrapper (TypeScript):
+
+```python
+import traceform
+from traceform.trace import trace
+
+@trace(name="my_custom_step", span_type="tool_call")
+def my_function(query: str) -> str:
+    # Your logic here
+    return result
+```
+
+See the [Python SDK](/docs/python-sdk) or [TypeScript SDK](/docs/typescript-sdk) docs for full decorator reference.

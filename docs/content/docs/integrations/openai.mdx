@@ -1,0 +1,87 @@
+---
+title: "OpenAI"
+description: "Auto-instrument OpenAI API calls with Traceform in Python and TypeScript."
+---
+
+# OpenAI Integration
+
+Traceform automatically traces all OpenAI `chat.completions.create` and `embeddings.create` calls.
+
+## Python
+
+### Install
+
+```bash
+pip install traceform openai
+```
+
+### Usage
+
+```python
+import traceform
+from openai import OpenAI
+
+traceform.init(api_key="tf_sk_...", auto_instrument=["openai"])
+client = OpenAI()
+
+with traceform.session(agent_name="my-agent") as session:
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": "Hello"}],
+    )
+```
+
+### What Gets Traced
+
+- `chat.completions.create` (sync and async)
+- Model name, provider, and response model
+- Token usage (prompt, completion, total)
+- Output text and tool calls
+- Estimated cost in cents
+- Latency per call
+- Finish reason
+
+### Configuration
+
+Auto-instrumentation is enabled by passing `"openai"` in the `auto_instrument` list:
+
+```python
+traceform.init(api_key="tf_sk_...", auto_instrument=["openai"])
+```
+
+Or instrument manually:
+
+```python
+from traceform.instruments import instrument
+instrument(libraries=["openai"])
+```
+
+## TypeScript
+
+### Install
+
+```bash
+npm install @traceform/sdk openai
+```
+
+### Usage
+
+```typescript
+import { init, instrumentOpenAI } from '@traceform/sdk';
+import OpenAI from 'openai';
+
+init({ apiKey: 'tf_sk_...' });
+const openai = instrumentOpenAI(new OpenAI());
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Hello' }],
+});
+```
+
+### What Gets Traced
+
+- `chat.completions.create`
+- `embeddings.create`
+- Model name and token usage
+- Full input/output capture

@@ -1,0 +1,69 @@
+---
+title: "AutoGen / AG2"
+description: "Auto-instrument AutoGen and AG2 agent conversations with Traceform."
+---
+
+# AutoGen / AG2 Integration
+
+Traceform automatically traces AutoGen's `ConversableAgent.generate_reply()` calls. Both the `autogen` (pyautogen) and `ag2` packages are supported.
+
+## Install
+
+```bash
+pip install traceform pyautogen
+# or
+pip install traceform ag2
+```
+
+## Usage
+
+```python
+import traceform
+from autogen import ConversableAgent
+
+traceform.init(api_key="tf_sk_...", auto_instrument=["autogen"])
+
+agent = ConversableAgent(name="assistant", llm_config={"model": "gpt-4o"})
+
+with traceform.session(agent_name="autogen-agent") as session:
+    reply = agent.generate_reply(
+        messages=[{"role": "user", "content": "Hello!"}]
+    )
+```
+
+## What Gets Traced
+
+- `ConversableAgent.generate_reply()` for every agent in the conversation
+- Agent name (from the `name` attribute)
+- Sender agent name
+- Message count and last message content
+- Agent reply output (truncated to 2000 chars)
+- Latency per agent turn
+
+## Configuration
+
+```python
+traceform.init(api_key="tf_sk_...", auto_instrument=["autogen"])
+```
+
+Or instrument manually:
+
+```python
+from traceform.instruments import instrument
+instrument(libraries=["autogen"])
+```
+
+## Combined with OpenAI Tracing
+
+AutoGen uses OpenAI under the hood. For full call-level visibility:
+
+```python
+traceform.init(
+    api_key="tf_sk_...",
+    auto_instrument=["autogen", "openai"],
+)
+```
+
+## AG2 Support
+
+If you use the `ag2` fork instead of `pyautogen`, the instrumentation works identically -- it automatically detects which package is installed and patches the correct module.

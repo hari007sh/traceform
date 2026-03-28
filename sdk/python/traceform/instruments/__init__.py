@@ -18,7 +18,8 @@ def instrument(libraries: Optional[List[str]] = None) -> List[str]:
     Args:
         libraries: List of library names to instrument.
                    Supported: "openai", "anthropic", "crewai",
-                   "langgraph", "langchain".
+                   "langgraph", "langchain", "llamaindex",
+                   "autogen", "haystack".
 
     Returns:
         List of successfully instrumented library names.
@@ -29,6 +30,9 @@ def instrument(libraries: Optional[List[str]] = None) -> List[str]:
         "crewai": _instrument_crewai,
         "langgraph": _instrument_langgraph,
         "langchain": _instrument_langchain,
+        "llamaindex": _instrument_llamaindex,
+        "autogen": _instrument_autogen,
+        "haystack": _instrument_haystack,
     }
 
     if libraries is None:
@@ -76,4 +80,22 @@ def _instrument_langgraph() -> None:
 def _instrument_langchain() -> None:
     """Instrument the LangChain library."""
     from traceform.instruments.langchain import instrument as _inst
+    _inst()
+
+
+def _instrument_llamaindex() -> None:
+    """Instrument the LlamaIndex library."""
+    from traceform.instruments.llamaindex import instrument as _inst
+    _inst()
+
+
+def _instrument_autogen() -> None:
+    """Instrument the AutoGen/AG2 library."""
+    from traceform.instruments.autogen import instrument as _inst
+    _inst()
+
+
+def _instrument_haystack() -> None:
+    """Instrument the Haystack library."""
+    from traceform.instruments.haystack import instrument as _inst
     _inst()

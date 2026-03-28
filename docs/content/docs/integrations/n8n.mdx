@@ -1,0 +1,80 @@
+---
+title: "n8n"
+description: "Trace all LLM calls from n8n workflows through the Traceform Gateway -- no code required."
+---
+
+# n8n Integration
+
+Trace all LLM calls from your n8n workflows by routing them through the Traceform Gateway. This is a zero-code integration that works with any n8n OpenAI or Chat Model node.
+
+## Setup
+
+### 1. Start the Traceform Gateway
+
+Make sure the Traceform Gateway is running and accessible from your n8n instance:
+
+```bash
+# If running locally with Docker
+docker compose up -d
+
+# Gateway runs on port 8090 by default
+curl http://localhost:8090/health
+```
+
+### 2. Configure n8n Nodes
+
+In your n8n workflow:
+
+1. Open your **OpenAI** node (or any Chat Model node)
+2. Under **Credentials**, create a new OpenAI credential or edit an existing one
+3. Set the **Base URL** to your Traceform Gateway: `http://your-server:8090/v1`
+4. Set the **API Key** to your Traceform API key (`tf_sk_...`)
+5. Save and test the node
+
+### 3. Verify
+
+Run your workflow and check the Traceform dashboard at `http://localhost:3000`. You should see:
+
+- Each LLM call as a traced span
+- Model name, token usage, and cost
+- Input prompts and output completions
+- Latency metrics
+
+## What Gets Traced
+
+- Every `chat/completions` call from any n8n OpenAI node
+- Every `embeddings` call
+- Model name and provider
+- Token usage and estimated cost
+- Full request/response payloads
+- Guardrail checks (if configured on the gateway)
+
+## Configuration
+
+The gateway supports these features for n8n traffic:
+
+| Feature | How to Enable |
+|---------|--------------|
+| Cost tracking | Automatic -- every request is cost-tracked |
+| Semantic caching | Set `CACHE_ENABLED=true` on the gateway |
+| Input guardrails | Configure guard rules in the Traceform dashboard |
+| Provider failover | Configure fallback providers in the Route module |
+
+## Self-Hosted n8n
+
+If you are running n8n self-hosted alongside Traceform:
+
+```yaml
+# docker-compose.yml
+services:
+  n8n:
+    image: n8nio/n8n
+    ports: ["5678:5678"]
+    environment:
+      - N8N_AI_OPENAI_API_KEY=tf_sk_your_key
+      - N8N_AI_OPENAI_BASE_URL=http://gateway:8090/v1
+    depends_on:
+      - gateway
+```
+
+Both services share the same Docker network, so n8n can reach the gateway at `http://gateway:8090`.

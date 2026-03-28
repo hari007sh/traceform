@@ -1,0 +1,15 @@
+{
+  "title": "Integrations",
+  "pages": [
+    "gateway",
+    "openai",
+    "anthropic",
+    "langchain",
+    "crewai",
+    "llamaindex",
+    "autogen",
+    "haystack",
+    "vercel-ai",
+    "n8n"
+  ]
+}

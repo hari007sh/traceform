@@ -1,0 +1,60 @@
+---
+title: "LlamaIndex"
+description: "Auto-instrument LlamaIndex LLM calls with Traceform."
+---
+
+# LlamaIndex Integration
+
+Traceform automatically traces LlamaIndex `LLM.complete()` and `LLM.acomplete()` calls.
+
+## Install
+
+```bash
+pip install traceform llama-index-core
+```
+
+## Usage
+
+```python
+import traceform
+from llama_index.core.llms import OpenAI
+
+traceform.init(api_key="tf_sk_...", auto_instrument=["llamaindex"])
+
+with traceform.session(agent_name="llamaindex-agent") as session:
+    llm = OpenAI(model="gpt-4o")
+    response = llm.complete("Explain quantum computing in one sentence.")
+```
+
+## What Gets Traced
+
+- `LLM.complete()` (synchronous)
+- `LLM.acomplete()` (asynchronous)
+- Model name and provider
+- Token usage (prompt and completion tokens from the raw response)
+- Output text (truncated to 2000 chars)
+- Latency per call
+
+## Configuration
+
+```python
+traceform.init(api_key="tf_sk_...", auto_instrument=["llamaindex"])
+```
+
+Or instrument manually:
+
+```python
+from traceform.instruments import instrument
+instrument(libraries=["llamaindex"])
+```
+
+## Combined with OpenAI Tracing
+
+LlamaIndex uses OpenAI (or other providers) under the hood. For deeper visibility, enable both:
+
+```python
+traceform.init(
+    api_key="tf_sk_...",
+    auto_instrument=["llamaindex", "openai"],
+)
+```

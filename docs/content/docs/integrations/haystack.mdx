@@ -1,0 +1,66 @@
+---
+title: "Haystack"
+description: "Auto-instrument Haystack pipeline runs with Traceform."
+---
+
+# Haystack Integration
+
+Traceform automatically traces Haystack `Pipeline.run()` calls, capturing component graph structure, inputs, and outputs.
+
+## Install
+
+```bash
+pip install traceform haystack-ai
+```
+
+## Usage
+
+```python
+import traceform
+from haystack import Pipeline
+from haystack.components.generators import OpenAIGenerator
+from haystack.components.builders.prompt_builder import PromptBuilder
+
+traceform.init(api_key="tf_sk_...", auto_instrument=["haystack"])
+
+pipe = Pipeline()
+pipe.add_component("prompt", PromptBuilder(template="Tell me about {{topic}}"))
+pipe.add_component("llm", OpenAIGenerator(model="gpt-4o"))
+pipe.connect("prompt", "llm")
+
+with traceform.session(agent_name="haystack-agent") as session:
+    result = pipe.run({"prompt": {"topic": "quantum computing"}})
+```
+
+## What Gets Traced
+
+- `Pipeline.run()` for every pipeline execution
+- Pipeline name (from metadata)
+- Component names and count in the pipeline graph
+- Input data keys and values (truncated)
+- Output data keys and values (truncated)
+- Latency per pipeline run
+
+## Configuration
+
+```python
+traceform.init(api_key="tf_sk_...", auto_instrument=["haystack"])
+```
+
+Or instrument manually:
+
+```python
+from traceform.instruments import instrument
+instrument(libraries=["haystack"])
+```
+
+## Combined with OpenAI Tracing
+
+Haystack generators use OpenAI or other providers underneath. For call-level visibility:
+
+```python
+traceform.init(
+    api_key="tf_sk_...",
+    auto_instrument=["haystack", "openai"],
+)
+```

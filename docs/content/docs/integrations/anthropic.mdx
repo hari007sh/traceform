@@ -1,0 +1,87 @@
+---
+title: "Anthropic"
+description: "Auto-instrument Anthropic Claude API calls with Traceform in Python and TypeScript."
+---
+
+# Anthropic Integration
+
+Traceform automatically traces all Anthropic `messages.create` calls.
+
+## Python
+
+### Install
+
+```bash
+pip install traceform anthropic
+```
+
+### Usage
+
+```python
+import traceform
+from anthropic import Anthropic
+
+traceform.init(api_key="tf_sk_...", auto_instrument=["anthropic"])
+client = Anthropic()
+
+with traceform.session(agent_name="my-agent") as session:
+    response = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": "Hello"}],
+    )
+```
+
+### What Gets Traced
+
+- `messages.create` (sync and async)
+- Model name and provider
+- Token usage (input and output tokens)
+- Output text and tool use blocks
+- Estimated cost in cents
+- Latency per call
+- Stop reason
+
+### Configuration
+
+```python
+traceform.init(api_key="tf_sk_...", auto_instrument=["anthropic"])
+```
+
+Or instrument manually:
+
+```python
+from traceform.instruments import instrument
+instrument(libraries=["anthropic"])
+```
+
+## TypeScript
+
+### Install
+
+```bash
+npm install @traceform/sdk @anthropic-ai/sdk
+```
+
+### Usage
+
+```typescript
+import { init, instrumentAnthropic } from '@traceform/sdk';
+import Anthropic from '@anthropic-ai/sdk';
+
+init({ apiKey: 'tf_sk_...' });
+const anthropic = instrumentAnthropic(new Anthropic());
+
+const response = await anthropic.messages.create({
+  model: 'claude-sonnet-4-20250514',
+  max_tokens: 1024,
+  messages: [{ role: 'user', content: 'Hello' }],
+});
+```
+
+### What Gets Traced
+
+- `messages.create`
+- `completions.create` (legacy API)
+- Model name and token usage
+- Full input/output capture
