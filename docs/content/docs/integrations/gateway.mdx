@@ -1,83 +1,198 @@
 ---
 title: "Gateway Integration"
-description: "Trace any LLM call by pointing it at the Traceform Gateway proxy -- zero code changes required."
+description: "Trace any LLM call by routing through the Traceform Gateway — works with n8n, Flowise, Langflow, and any OpenAI-compatible client."
 ---
 
 # Gateway Integration (Zero Code)
 
-The Traceform Gateway is an OpenAI-compatible proxy that sits between your application and your LLM provider. Change your API base URL and every call is automatically traced, guarded, cached, and cost-tracked.
+The Traceform Gateway is an OpenAI-compatible proxy. Route your LLM calls through it to get automatic tracing, guardrails, caching, cost tracking, and failover — without changing any application code.
 
-## Quick Setup
+## How It Works
 
-### Before
-
-```python
-from openai import OpenAI
-
-client = OpenAI(api_key="sk-...")
+```
+Your App / n8n / Flowise
+        │
+        │  1. Send request to Traceform Gateway
+        │     (instead of directly to OpenAI)
+        │
+        ▼
+Traceform Gateway (:8090)
+        │
+        │  2. Authenticates with your Traceform API key
+        │  3. Applies guardrails (PII, injection, toxicity)
+        │  4. Checks semantic cache
+        │  5. Routes to the right provider
+        │  6. Uses YOUR provider API key (stored encrypted in Traceform)
+        │  7. Logs the request for tracing + cost tracking
+        │
+        ▼
+OpenAI / Anthropic / Google / Local Model
 ```
 
-### After
+**Key point:** Your LLM provider API keys (OpenAI, Anthropic, etc.) are stored securely in Traceform. You add them once in the dashboard, and the gateway uses them for every request.
+
+## Setup (3 Steps)
+
+### Step 1: Add Your LLM Provider in Traceform
+
+Go to **Dashboard → Gateway → Providers** and add your LLM provider:
+
+```bash
+# Or via API:
+curl -X POST http://localhost:8080/v1/gateway/providers \
+  -H "Authorization: Bearer tf_sk_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "openai",
+    "display_name": "OpenAI",
+    "api_key": "sk-your-openai-key-here",
+    "base_url": "https://api.openai.com/v1",
+    "is_enabled": true
+  }'
+```
+
+Your OpenAI API key is encrypted (AES-256-GCM) before storage. It never appears in API responses.
+
+### Step 2: Add a Routing Rule
+
+Tell the gateway which models map to which provider:
+
+```bash
+curl -X POST http://localhost:8080/v1/gateway/routes \
+  -H "Authorization: Bearer tf_sk_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "OpenAI GPT-4",
+    "model_pattern": "gpt-*",
+    "provider_id": "PROVIDER_ID_FROM_STEP_1",
+    "target_model": "gpt-4o",
+    "priority": 10,
+    "enabled": true
+  }'
+```
+
+### Step 3: Point Your App at the Gateway
+
+Now change your application's API base URL:
 
 ```python
 from openai import OpenAI
 
 client = OpenAI(
-    api_key="tf_sk_your_key_here",
-    base_url="http://localhost:8090/v1",  # Traceform Gateway
+    api_key="tf_sk_your_traceform_key",        # Traceform API key (for auth)
+    base_url="http://localhost:8090/v1",         # Gateway URL
+    default_headers={
+        "X-Traceform-Org-ID": "your-org-id"     # Your org ID
+    }
+)
+
+# Use normally — all calls are now traced!
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Hello!"}]
 )
 ```
 
-That is it. Every `chat.completions.create` call now flows through Traceform.
-
-## What Gets Traced
-
-- Model name and provider
-- Input messages and output completions
-- Token usage (prompt + completion)
-- Latency per request
-- Cost per request (auto-calculated from model pricing)
-- Guardrail checks (if configured)
-- Cache hits (if semantic caching is enabled)
-
-## Configuration Options
-
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `GATEWAY_PORT` | `8090` | Port the gateway listens on |
-| `TRACEFORM_API_URL` | `http://localhost:8080` | API server for logging |
-| `CACHE_ENABLED` | `false` | Enable semantic caching |
-| `GUARD_ENABLED` | `false` | Enable input/output guardrails |
+That's it. Every LLM call is now traced, cost-tracked, and protected by guardrails.
 
 ## n8n Integration
 
-1. In your n8n workflow, find your **OpenAI** or **Chat Model** node
-2. Open the node settings and look for **Base URL** (or custom endpoint)
-3. Set the Base URL to your Traceform Gateway: `http://your-server:8090/v1`
-4. Set the API key to your Traceform API key (`tf_sk_...`)
-5. Save and run the workflow -- all calls are now traced in the Traceform dashboard
+1. In your n8n workflow, add or edit an **OpenAI** node
+2. In **Credentials**, create a new OpenAI credential:
+   - **API Key:** Your Traceform API key (`tf_sk_...`)
+   - **Base URL:** `http://your-traceform-server:8090/v1`
+3. In the node settings, add a header:
+   - **X-Traceform-Org-ID:** Your org ID (find it in Dashboard → Settings)
+4. All LLM calls from this node are now traced in Traceform
 
 ## Flowise / Langflow
 
-Same approach -- change the OpenAI base URL in your flow's LLM component configuration:
-
-1. Open your LLM component settings
-2. Set **Base Path** or **Base URL** to `http://your-server:8090/v1`
-3. Use your Traceform API key
-4. All calls are now traced
+1. In your flow, click on the **LLM** component (ChatOpenAI, etc.)
+2. Set **Base URL** to `http://your-traceform-server:8090/v1`
+3. Set **API Key** to your Traceform API key
+4. Add **Custom Headers:** `X-Traceform-Org-ID: your-org-id`
 
 ## Dify
 
-1. Go to **Settings > Model Provider > OpenAI**
-2. Set the API endpoint to `http://your-server:8090/v1`
-3. Use your Traceform API key
-4. All workflows using this provider are now traced
+1. Go to **Settings → Model Providers**
+2. Add a custom OpenAI-compatible provider:
+   - **API Base URL:** `http://your-traceform-server:8090/v1`
+   - **API Key:** Your Traceform API key
+3. Use this provider in your Dify apps
 
 ## Any OpenAI-Compatible Client
 
-The gateway works with any tool or library that supports the OpenAI API format. Set these two values:
+Any tool or library that supports a custom `base_url` for OpenAI works:
 
-- **Base URL:** `http://your-server:8090/v1`
-- **API Key:** Your Traceform API key (`tf_sk_...`)
+```bash
+# curl
+curl http://localhost:8090/v1/chat/completions \
+  -H "Authorization: Bearer tf_sk_your_key" \
+  -H "X-Traceform-Org-ID: your-org-id" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
+```
 
-The gateway automatically routes to the correct upstream provider based on the model name in the request.
+```typescript
+// TypeScript
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+  apiKey: 'tf_sk_your_key',
+  baseURL: 'http://localhost:8090/v1',
+  defaultHeaders: { 'X-Traceform-Org-ID': 'your-org-id' }
+});
+```
+
+```python
+# Python with requests
+import requests
+
+response = requests.post(
+    "http://localhost:8090/v1/chat/completions",
+    headers={
+        "Authorization": "Bearer tf_sk_your_key",
+        "X-Traceform-Org-ID": "your-org-id",
+    },
+    json={
+        "model": "gpt-4o",
+        "messages": [{"role": "user", "content": "Hello"}]
+    }
+)
+```
+
+## What Gets Traced
+
+When using the gateway, Traceform automatically captures:
+
+- **Request:** model, messages, parameters (temperature, max_tokens)
+- **Response:** completion text, finish reason
+- **Usage:** prompt tokens, completion tokens, total tokens
+- **Cost:** calculated from model pricing table
+- **Latency:** end-to-end request duration
+- **Provider:** which provider handled the request
+- **Cache:** whether the response came from semantic cache
+
+## Local Models (LMStudio, Ollama)
+
+You can also route through local models:
+
+```bash
+# Add LMStudio as a provider
+curl -X POST http://localhost:8080/v1/gateway/providers \
+  -H "Authorization: Bearer tf_sk_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "lmstudio",
+    "display_name": "LMStudio",
+    "api_key": "lm-studio",
+    "base_url": "http://localhost:1234/v1",
+    "is_enabled": true
+  }'
+```
+
+Then route specific models to it and all local model calls are traced alongside your cloud calls.
+
+## Playground
+
+The **Dashboard → Playground** page lets you test gateway routing interactively. Select a model, type a prompt, and see the response with timing, tokens, and cost — all routed through the gateway with your configured providers.
