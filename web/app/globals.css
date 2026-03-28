@@ -7,18 +7,18 @@
   :root {
     --radius: 0.75rem;
 
-    /* AgentStack Light Design System */
-    --bg-primary: #ffffff;
-    --bg-secondary: #f8f9fa;
-    --bg-tertiary: #f1f3f5;
+    /* Traceform Light Design System */
+    --bg-primary: #f9fafb;
+    --bg-secondary: #f3f4f6;
+    --bg-tertiary: #e5e7eb;
     --bg-elevated: #ffffff;
-    --bg-hover: #f1f3f5;
-    --bg-sidebar: #f8f9fa;
-    --border-subtle: rgba(0, 0, 0, 0.06);
-    --border-default: rgba(0, 0, 0, 0.1);
-    --text-primary: #111113;
-    --text-secondary: #6b7280;
-    --text-tertiary: #9ca3af;
+    --bg-hover: #e5e7eb;
+    --bg-sidebar: #f3f4f6;
+    --border-subtle: rgba(0, 0, 0, 0.1);
+    --border-default: rgba(0, 0, 0, 0.15);
+    --text-primary: #111827;
+    --text-secondary: #4b5563;
+    --text-tertiary: #6b7280;
     --accent-blue: #2563eb;
     --accent-green: #16a34a;
     --accent-red: #dc2626;
