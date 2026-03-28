@@ -8,7 +8,6 @@
     "python-sdk",
     "typescript-sdk",
     "---Integrations---",
-    "integrations",
     "...integrations",
     "---Modules---",
     "...modules",
