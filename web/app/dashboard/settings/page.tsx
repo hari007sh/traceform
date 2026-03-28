@@ -261,7 +261,7 @@ export default function SettingsPage() {
   return (
     <motion.div
       variants={fadeIn}
-      initial="hidden"
+      initial={false}
       animate="visible"
       className="space-y-6"
     >
@@ -275,7 +275,7 @@ export default function SettingsPage() {
 
       <motion.div
         variants={staggerContainer}
-        initial="hidden"
+        initial={false}
         animate="visible"
         className="space-y-6"
       >

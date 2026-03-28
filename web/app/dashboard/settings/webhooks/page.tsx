@@ -370,7 +370,7 @@ export default function WebhooksPage() {
   return (
     <motion.div
       variants={fadeIn}
-      initial="hidden"
+      initial={false}
       animate="visible"
       className="space-y-6"
     >
@@ -450,7 +450,7 @@ export default function WebhooksPage() {
       {!loading && !error && webhooks.length > 0 && (
         <motion.div
           variants={staggerContainer}
-          initial="hidden"
+          initial={false}
           animate="visible"
           className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] overflow-hidden"
         >
@@ -591,7 +591,7 @@ export default function WebhooksPage() {
       {!loading && !error && webhooks.length > 0 && (
         <motion.div
           variants={staggerContainer}
-          initial="hidden"
+          initial={false}
           animate="visible"
           className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] overflow-hidden"
         >

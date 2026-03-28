@@ -217,7 +217,7 @@ export default function BillingPage() {
   return (
     <motion.div
       variants={fadeIn}
-      initial="hidden"
+      initial={false}
       animate="visible"
       className="space-y-6"
     >
@@ -231,7 +231,7 @@ export default function BillingPage() {
 
       <motion.div
         variants={staggerContainer}
-        initial="hidden"
+        initial={false}
         animate="visible"
         className="space-y-6"
       >

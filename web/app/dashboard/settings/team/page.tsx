@@ -388,7 +388,7 @@ export default function TeamPage() {
   return (
     <motion.div
       variants={fadeIn}
-      initial="hidden"
+      initial={false}
       animate="visible"
       className="space-y-6"
     >
@@ -455,7 +455,7 @@ export default function TeamPage() {
       {/* Members table */}
       <motion.div
         variants={staggerContainer}
-        initial="hidden"
+        initial={false}
         animate="visible"
         className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] overflow-hidden"
       >
@@ -641,7 +641,7 @@ export default function TeamPage() {
 
           <motion.div
             variants={staggerContainer}
-            initial="hidden"
+            initial={false}
             animate="visible"
             className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] overflow-hidden"
           >
